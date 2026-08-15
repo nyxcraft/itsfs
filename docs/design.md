@@ -7,6 +7,7 @@ out of scope.
 
 ```
    cmd_*.c        front ends: info, dump, dirs, ls, cat, get, free, ...
+   cmd_check.c    ...and one that starts again from its.h, sharing none of it
    ---------------------------------------------------------------------
    structure.c    the file system: MFD, UFD, name blocks, descriptors, TUT
    its.h          every on-disk offset, transcribed from FSDEFS with a citation
@@ -45,6 +46,13 @@ becomes a value. `its_pack_bytes()` is the only place a word count becomes a byt
 count. `s5fs` learned this by open-coding a block-map ladder in four readers and
 getting it wrong in three.
 
+There is **exactly one exception**, and it is invariant 8 rather than a lapse:
+`cmd_check.c` writes the block-to-sector conversion out again. A second copy
+that must agree is the opposite of four copies nobody compares — the whole point
+is that the two can differ, and `make oracle` runs both over the same pack. A
+third copy would not be; if this ever becomes a habit rather than a pair, it has
+stopped being a check.
+
 **4. Bound every value that comes off the disk before using it as an index.**
 `MDNAMP`, `UDNAMP`, `UNDSCP`, `QFRSTB`, `QLASTB`, every descriptor opcode and
 every block number a descriptor produces. All of them are checked at the point
@@ -64,13 +72,16 @@ what keeps them from rotting.
 and "we know ITS did it this way" are different claims, and a project that stops
 distinguishing them starts quietly inventing a file system.
 
-Two more are held in reserve for code that does not exist yet:
+**8. The checker shares no code with the reader.** `cmd_check.c` includes
+neither `structure.h` nor `itsgeom.c`'s conversion; it re-derives the geometry,
+the directory arithmetic, the descriptor bytecode and the TUT from `its.h`. A
+clean check has to be evidence rather than the reader agreeing with itself, and
+it must be POSSIBLE for the two to disagree.
 
-**8. Exactly one mutation path.** When there is a writer, it is one file, and
+One is held in reserve for code that does not exist yet:
+
+**9. Exactly one mutation path.** When there is a writer, it is one file, and
 every front end calls it.
-
-**9. The checker shares no code with the reader.** A clean check has to be
-evidence rather than the reader agreeing with itself.
 
 ## What is deliberately out of scope
 

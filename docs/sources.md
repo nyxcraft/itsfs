@@ -33,11 +33,17 @@ Two other files in the same tree supplied facts that FSDEFS does not carry:
 | `src/system/disk.1228` | that a "track" is a block (line 48); `QFL2`, the MFD-slot arithmetic |
 | `src/system/rp06.defs1` and the four beside it | the drive geometry table, per drive |
 
-and two more are named on the roadmap rather than used yet:
+one is not a source but a second opinion, and it is now used:
+
+| file | what it settled |
+|---|---|
+| `src/kshack/nsalv.261` | ITS's own salvager. Run against a pack rather than read for constants — see [validation](validation.md#a-second-opinion-that-is-not-ours). Its `LTYPE` also settled the SIXBIT trap below. |
+| `src/midas/midas.458` | that MIDAS's `'X` is SIXBIT, which is what makes `LTYPE` mean what it means |
+
+and one is named on the roadmap rather than used yet:
 
 | file | what it is for |
 |---|---|
-| `src/system/salv.317`, `src/kshack/nsalv.*` | ITS's own salvager: the independent second opinion, phase 8 |
 | `src/system/dskdmp.217` | the standalone dumper and bootstrap: how a pack is written from outside the monitor |
 
 ## The licensing line, and where it sits
@@ -85,6 +91,36 @@ are the ASCII codes. The bytes on the disk are SIXBIT — **033 and 032** — an
 taking the numbers at face value finds no separator anywhere, rendering every
 link as one run-on string. The same sentence gives space as `(0)`, which *is* the
 SIXBIT value. One sentence, two encodings.
+
+Found by dumping the bytes of a link that was already "working", and settled
+empirically. **ITS's own code then confirmed it**, which is worth more than the
+measurement: `NSALV`'s link parser compares against character constants —
+
+```
+LTYPE:	MOVEI B,6
+LTYPE2:	IDPB Z,E		;Z accumulates the link.
+	ILDB A,N		;Get a byte.
+	JUMPE A,CPOPJ		;Not expecting zeros in the link.
+	CAIN A,':		;Quoting character?
+```
+
+— and MIDAS assembles `'X` as **SIXBIT**, not ASCII. From MIDAS's own source,
+`src/midas/midas.458`:
+
+```
+SQUOT9:	JSP F,QOTCON	;SIXBIT SYL
+	CAIGE A,40
+	 ETR ERRN6B	;NOT SIXBIT
+	CAIL A,140
+	 SUBI A,40	;CONVERT TO UPPER CASE
+	LSH T,6		;SHIFT OVER ACCUMULATED VALUE
+	ADDI T,-40(A)	;ADD IN SIXBIT FOR CHARACTER IN A
+```
+
+`';` is therefore 073 − 040 = **033**, and `':` is 072 − 040 = **032**: exactly
+the bytes on the disk. So FSDEFS's comment and ITS's own code disagree about this
+encoding, and the code is right — which is the general lesson worth taking, not
+just this instance.
 
 This cost an afternoon here and is written up in `its.h` beside the constants, in
 [the file system](filesystem.md#links), and in

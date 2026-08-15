@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="index.html">Overview</a>
@@ -42,17 +42,17 @@
 <p>Host tools for the <strong>ITS file system</strong> — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.</p>
 <blockquote>
-<p><strong>Status: phases 0–4 done — a complete read-only reader.</strong> The word layer is
-proven byte-for-byte against a real RP06 pack, the geometry layer finds the
-master file directory by its own check word, and the reader lists directories,
-decodes the run-length descriptors that are ITS's block maps, follows links and
-extracts files. On a real pack the space accounts for <strong>exactly</strong>: every block
-the files describe is a block the allocation table calls in use, and the blocks
-it calls locked out are precisely the directories and the tables. Every field
-offset is transcribed from <code>SYSTEM;FSDEFS 43</code> with a citation
-(<a href="../sources/index.html">sources</a>). There is <strong>no writer</strong>. See
-<a href="../roadmap/index.html">the roadmap</a>, <a href="../validation/index.html">validation</a> and
-<a href="../plan/index.html">PLAN.md</a>.</p>
+<p><strong>Status: phases 0–5a done — a read-only reader, an independent checker, and
+ITS's own salvager agreeing with it.</strong> The word layer is proven byte-for-byte
+against a real RP06 pack, the geometry layer finds the master file directory by
+its own check word, and the reader lists directories, decodes the run-length
+descriptors that are ITS's block maps, follows links and extracts files.
+<code>itsfs check</code> walks the same pack <strong>sharing no code with the reader</strong>, and
+<strong><code>NSALV</code> — MIT's own salvager, booted from tape — names exactly the same
+damaged blocks and the same files.</strong> Every field offset is transcribed from
+<code>SYSTEM;FSDEFS 43</code> with a citation (<a href="../sources/index.html">sources</a>). There is
+<strong>no writer</strong>. See <a href="../roadmap/index.html">the roadmap</a>,
+<a href="../validation/index.html">validation</a> and <a href="../plan/index.html">PLAN.md</a>.</p>
 </blockquote>
 <pre><code class="language-console">$ itsfs info rp0.dsk
 file          rp0.dsk
@@ -148,6 +148,10 @@ the same field, distinguished by one bit.</li>
 <td><code>itsfs free</code></td>
 <td>what the TUT says: free, in use, locked out, and the reference counts</td>
 </tr>
+<tr>
+<td><code>itsfs check</code></td>
+<td>check a pack — <strong>shares no code with the reader</strong></td>
+</tr>
 </tbody>
 </table>
 <p>Run any of them with no arguments for its own usage.</p>
@@ -173,10 +177,11 @@ in front asks for octal.</p>
 <h2 id="build">Build</h2>
 <pre><code class="language-console">$ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 81 checks
+$ make test             # the regression suite (sh + coreutils), 108 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
+$ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 </code></pre>
 <h2 id="what-is-proven-and-what-is-only-claimed">What is proven, and what is only claimed</h2>
 <p>Keeping those two apart is the whole discipline of this project.</p>
@@ -224,14 +229,55 @@ decoded them in the right order, <code>UNWRDC</code> gave the right length for t
 and the seven-bit extraction is right. It also found a real bug — <code>cat</code> was
 dropping NULs from the <em>middle</em> of a file, not just the padding at the end, which
 nothing the pack knows about itself could ever have caught.</p>
-<p><strong>Hostile input is bounded.</strong> 81 checks in the suite, a third of them feeding the
+<p><strong>Checked by something that shares no code with the reader.</strong> <code>itsfs check</code>
+includes neither <code>structure.c</code> nor <code>itsgeom.c</code>'s conversion: it re-derives the
+block-to-sector arithmetic, the MFD-slot formula, the descriptor bytecode and
+the TUT from <code>its.h</code> and walks the pack itself. It compares the allocation table
+against the files <strong>per block and as a count</strong>, because the TUT is a reference
+count rather than a bitmap, and it separates the four ways they can disagree — a
+block a file holds that the table calls free loses data, a block marked in use
+that no file holds only loses space, and the checker says which:</p>
+<pre><code class="language-console">$ itsfs check rp0.dsk
+no problems found (7 notes)
+
+$ itsfs check damaged.dsk          # one TUT word cleared
+  block 19992 is claimed by C;PHASE ARGS, and the TUT calls it FREE
+  block 19993 is claimed by MAINT;DEKAG SAV, and the TUT calls it FREE
+  ...
+11 problems, 7 notes
+</code></pre>
+<p>The seven notes are links pointing at files that are not there, on a pack that
+is otherwise perfect. That is an ordinary state of a live system and not damage,
+so it is counted, listed under <code>-v</code>, and never changes the exit status.</p>
+<p><strong>And ITS's own salvager agrees with it.</strong> <code>NSALV</code> was written at MIT in the
+1980s, boots standalone from a tape, and rebuilds the allocation table from the
+directories. Handed the same damaged pack, it names the same eleven blocks and
+the same eleven files:</p>
+<pre><code class="language-console">$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+   itsfs check names 11, NSALV names 11
+  ok   IDENTICAL: the same 11 blocks, each held by the same file
+
+       19992 C;PHASE ARGS
+       19993 MAINT;DEKAG SAV
+       19994 EMACS;EINIT :EJ
+       ...
+two checkers with nothing in common but the disk, agreeing block for block
+</code></pre>
+<p>This is the check that closes the gap <code>itsfs check</code> cannot: both of <em>our</em> readers
+take their constants from <code>its.h</code> and inherit any misreading in it, while <code>NSALV</code>
+predates this project by forty years. Where it agrees, the agreement is about the
+format rather than about our reading of it. It also needs no writer, which is why
+it runs now rather than in phase 8 — a pack this project has only read is enough
+to ask the question. See <a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>.</p>
+<p><strong>Hostile input is bounded.</strong> 108 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses <em>by name</em> and reads nothing
 it did not bound first.</p>
-<p><strong>What is NOT proven.</strong> There is no writer, so nothing here has been graded by
-ITS itself; <code>NSALV</code>, ITS's own salvager, has never been pointed at anything this
-produced; no ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
+<p><strong>What is NOT proven.</strong> There is no writer, so nothing this project <em>produced</em>
+has ever been graded by ITS — <code>NSALV</code> has checked its reading of a pack, which is
+a different claim. It was also asked about only one kind of damage, a cleared TUT
+word. No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
 <code>corroborated</code> rather than <code>confirmed</code> here even though <code>t10fs</code> confirmed both;
 and the reference pack is one built from source in 2026, not an artifact
 recovered from MIT. Each of those is a phase on <a href="../roadmap/index.html">the roadmap</a>,

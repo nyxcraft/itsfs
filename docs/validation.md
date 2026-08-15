@@ -15,9 +15,17 @@ Three levels of evidence, in the order they are worth anything:
 3. **Self-consistent** — round trips, and cross-checks against numbers the file
    system maintains independently of the thing being checked.
 
-Everything below is level 3, and the interesting question is how strong a level-3
-result can be made. The answer turns out to be: quite strong, if the numbers you
-check against were computed by somebody else.
+That taxonomy came from the sibling projects and it turned out to be missing an
+axis. Levels 1 and 2 both assume the thing being graded is something we *wrote*.
+But a native tool can also be asked to grade something we only **read** — point
+ITS's own salvager at a pack, ask it what is wrong, and compare its answer with
+ours. That needs no writer, and it is not self-consistency either, because the
+other opinion is MIT's.
+
+It has its own section below. Everything else here is level 3, and the
+interesting question is how strong a level-3 result can be made. The answer turns
+out to be: quite strong, if the numbers you check against were computed by
+somebody else.
 
 ## Level 3a — the word layer round-trips a real pack
 
@@ -66,6 +74,180 @@ way to know the formula is right is that the blocks it says are directories are
 exactly the blocks the TUT refuses to allocate. 500 directories, one MFD, four
 TUT blocks, 505 locked out.
 
+## Level 3c — a second implementation, over the same pack
+
+```console
+$ itsfs check rp0.dsk
+checking rp0.dsk: rp06, 38305 blocks, MFD at 19081, TUT at 19077
+
+pack           FOOBAR (number 0)
+TUT maps       0..38164
+blocks         6719 free, 30940 in use, 505 locked out
+claimed        30940 blocks, in 5657 files
+directories    247, 5657 files, 399 links (7 of them unresolved)
+
+no problems found (7 notes)
+```
+
+`cmd_check.c` includes neither `structure.h` nor `itsgeom.c`'s conversion. It
+re-derives the block-to-sector arithmetic, the MFD-slot formula, the UFD layout,
+the descriptor bytecode and the TUT from `its.h`, and walks the pack itself. The
+numbers above are the reader's numbers, arrived at separately — and `make oracle`
+runs both, one after the other, over the same copy.
+
+**Why the geometry in particular is written out twice.** It is the part of this
+format with no check word, no pointer and no redundancy: a block number resolves
+to a sector and there is nothing on the disk that says whether it was the right
+one. Every other structure announces itself somehow — the MFD has `MDCHK`, a
+directory has `UDNAME`, a file has `UDBLKS` — so for those, a second reading adds
+less than a second opinion from the pack does. For the geometry there is no
+second opinion available, so this is it.
+
+**What it checks that nothing else did.** The TUT is a *reference count*, so
+`check` compares it per block **as a count**, not as a flag, and separates the
+four ways it and the files can disagree:
+
+| disagreement | what is at risk |
+|---|---|
+| a file holds a block the TUT calls free | **data**: the allocator will hand it out again |
+| the TUT marks a block in use that no file holds | space, and nothing else |
+| the counts differ | a reference that was added or dropped without its pair |
+| a file holds a locked-out block | a directory or a table is about to be overwritten |
+
+Damaging one TUT word on a copy of the real pack — twelve blocks' worth of
+entries — produces exactly the right eleven lines, and names the file that would
+have been lost in each:
+
+```console
+  block 19992 is claimed by C;PHASE ARGS, and the TUT calls it FREE
+  block 19993 is claimed by MAINT;DEKAG SAV, and the TUT calls it FREE
+  block 19994 is claimed by EMACS;EINIT :EJ, and the TUT calls it FREE
+  ...
+11 problems, 7 notes
+```
+
+**The limit, stated rather than glossed.** Both readers take their constants from
+`its.h`, so both inherit any misreading in it. A second reading catches a wrong
+reading; it cannot catch what the source never says. That half is the fuzzer's
+job — and in `t10fs` it was indeed the fuzzer, not the second implementation,
+that found the one bug both readers shared.
+
+**And the seven notes.** Seven links on the reference pack point at files that
+are not there. That is an ordinary state of a live system rather than damage, so
+it is counted, listed under `-v`, and never changes the exit status. Getting the
+count down to seven took reading the monitor: `>` and `<` are not ordinary names.
+`QLOOK` in `disk.1228` treats them specially in either name and walks the
+directory for the best numeric part, so a link to `SYSDOC;TV >` resolves against
+whatever version is there — and eighty-eight of the ninety-five "dangling" links
+the first version reported were that, not breakage.
+
+## A second opinion that is not ours
+
+```console
+$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+1. a clean pack
+  ok   itsfs check: clean
+  ok   NSALV: salvaged and returned to DDT with nothing to say
+  ok   and left the pack byte-identical
+
+2. the same pack with one TUT word cleared
+   cleared TUT word 1682 (block 19078, offset 658): blocks 19992..20003
+  ok   itsfs check: 11 problems
+  ok   NSALV: reported the damage
+
+3. do they name the same blocks, and the same files?
+   itsfs check names 11, NSALV names 11
+  ok   IDENTICAL: the same 11 blocks, each held by the same file
+
+       19992 C;PHASE ARGS
+       19993 MAINT;DEKAG SAV
+       19994 EMACS;EINIT :EJ
+       19995 EMACS;EINIT :EJ
+       19996 EMACS;EINIT :EJ
+       19997 EMACS;EINIT :EJ
+       19998 COMLAP;MK.FAS UNFASL
+       19999 MAXDOC;TDCL FASL
+       20000 MAXDOC;TDCL FASL
+       20001 MAXDMP;RAT3B FASL
+       20002 MAXDMP;RAT3B FASL
+  ok   and NSALV's own summary agrees: 11 blocks at 1 reference, stored as 0
+
+two checkers with nothing in common but the disk, agreeing block for block
+```
+
+**`NSALV` is not a second reading of ours.** It is MIT's, written in the 1980s by
+people with the machine in front of them; it boots standalone from a tape, walks
+every directory on the pack and rebuilds the allocation table from scratch. It
+predates this project by forty years and shares nothing with it.
+
+That matters because it closes the gap `itsfs check` cannot. Both of our readers
+take their constants from `src/its.h`, so both inherit any misreading in it — a
+second reading catches a wrong reading, but it cannot catch what the source never
+says. Where `NSALV` agrees, the agreement is about **the format** rather than
+about our understanding of it.
+
+**And it needs no writer**, which is why this runs at phase 5 rather than waiting
+for phase 8. A pack this project has only read is enough to ask the question.
+
+### Why both runs are needed
+
+The clean run proves less than it looks. `NSALV` salvages and returns to DDT
+without a word, which is indistinguishable from the salvager never having run.
+(Its `NOISE` flag makes it announce every check — and also dump the RH11
+controller status after *every* disk transfer, then stop to ask whether you want
+the UNIBUS registers too. Over a 500-block walk that is thousands of lines and a
+blocked script; `SKIPE NOISE` guards both and there is no summary-only setting.)
+
+So the damaged run is what makes the clean one evidence. One TUT word cleared —
+twelve blocks' worth of entries, eleven of them held by files — and now it
+speaks, in terms that can be compared line for line:
+
+```
+File unprotected in old TUT, Block 19992. - C;PHASE ARGS  Pack 0., Unit #0
+```
+
+against ours:
+
+```
+  block 19992 is claimed by C;PHASE ARGS, and the TUT calls it FREE
+```
+
+Same category — the dangerous one, where the allocator would hand the block out
+again — same block, same file, and `NSALV` renders the name in the same
+`DIR;FN1 FN2` form this project chose from reading the format.
+
+### What the comparison actually compares
+
+The **pairs**: which block, and which file holds it. Not counts, and not "both
+reported something" — two checkers can agree that a pack is broken and disagree
+about every detail. `NSALV` reports in directory-walk order and `itsfs` in block
+order, so both are sorted before `diff`.
+
+The check is not vacuous: changing one file name in one of the two lists makes it
+fail, and if either extraction pattern stopped matching, that list would be empty
+and the comparison would fail rather than pass quietly.
+
+`TARGET=` moves the damage. At block 9000 instead of 20000 it is a different
+eight blocks and eight different files — `SYS;TS @`, `EJS;TS UPTINI`,
+`2500;ZAP FASL`, `MUNFAS;RESIDU UNFASL` — and the two agree there too. One
+matching site could be luck; two disjoint ones are the format.
+
+### What this establishes, and what it does not
+
+Agreeing about *which block, held by which file* means agreeing about the whole
+chain that produces that answer: the block-to-sector geometry, the MFD-slot
+arithmetic that finds each directory, the UFD layout, the descriptor bytecode,
+and the TUT's three-bit entries. A single wrong step anywhere in it moves a block
+number or a name.
+
+What it does **not** establish is anything `NSALV` never looks at. It rebuilds
+the allocation table, so it exercises descriptors and names; it does not care
+about `UNTIM`, `UNBYTE`, creation dates, or where a link points. Those stay in
+[the gap register](filesystem.md#gap-register).
+
+And it grades a **reading**. Nothing here has been written by this project, so it
+is not the level-2 result — that still needs a writer, and it is still phase 8.
+
 ## The one check that is not the pack agreeing with itself
 
 Everything above compares the reader against numbers ITS wrote **on the same
@@ -104,7 +286,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**81 checks** in `tests/run.sh`, of which about a third feed the reader a pack
+**108 checks** in `tests/run.sh`, of which about a third feed the reader a pack
 damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -117,14 +299,15 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 81 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 108 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 
 **`make fuzz`** damages one random word of a valid pack, in a structure the reader
-must parse, and runs every command over the result. 250 iterations × 7 commands =
-1,750 runs against damaged packs under the sanitizers, with no crash, no hang, no
-sanitizer report and no silent failure.
+must parse, and runs every command over the result. 250 iterations × 8 commands =
+2,000 runs against damaged packs under the sanitizers, with no crash, no hang, no
+sanitizer report and no silent failure. `check` is one of the eight, and it is
+the one that reaches every structure on the pack in a single run.
 
 ## Lint
 
@@ -177,7 +360,12 @@ the pack has no opinion about what a character is.
 Stated plainly, because a validation document that only lists successes is
 marketing:
 
-- **No writer**, so no level-1 or level-2 evidence exists at all.
+- **No writer**, so no level-1 or level-2 evidence exists at all. `NSALV` has
+  graded this project's *reading* of a pack, not anything it produced.
+- **`NSALV` was asked about one kind of damage.** A cleared TUT word, at two
+  sites. It has not been shown a broken descriptor, a damaged directory header or
+  a corrupt MFD — all of which `itsfs check` reports and none of which has been
+  put to ITS for a second opinion.
 - **`NSALV` has never been run against anything this produced**, because nothing
   is produced. It is the obvious second opinion and it is phase 8.
 - **One pack, one drive, one era.** Everything above is an RP06 built from source

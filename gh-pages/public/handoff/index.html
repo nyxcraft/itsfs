@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -47,8 +47,9 @@
 discipline, different file system — and ITS is genuinely different, not TOPS-10
 with other field names. See <a href="../plan/index.html#5-what-must-be-designed-fresh">PLAN.md §5</a>
 for the four places that matter.</p>
-<p>Phases 0–4 are done: word layer, geometry, cited constants, and a complete
-read-only reader. <strong>There is no writer.</strong></p>
+<p>Phases 0–5a are done: word layer, geometry, cited constants, a complete
+read-only reader, an independent checker, and ITS's own salvager agreeing with
+it. <strong>There is no writer.</strong></p>
 <h2 id="read-these-in-this-order">Read these, in this order</h2>
 <ol>
 <li><a href="../plan/index.html">PLAN.md</a> — written before any code, and still accurate.</li>
@@ -70,9 +71,18 @@ src/image.[ch]      an image, addressed in words and blocks.
 src/its.h           every on-disk offset, cited to SYSTEM;FSDEFS 43.
 src/structure.[ch]  MFD, UFD, name blocks, descriptors, links, TUT.
 src/cmd_*.c         the front ends.  cmd_dump.c depends on nothing above image.c.
-tests/run.sh        79 checks.  Builds its own ITS file system with dd.
-tests/accounting.sh the oracle's real payload: does the space add up?
+src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes the
+                    block-to-sector conversion out a second time on purpose.
+tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
+                    damages copies of it on purpose.
+tests/accounting.sh does the space add up?  The same three questions `check`
+                    asks, asked with the READER, so the two can be compared.
+tests/crosscheck.sh extracted files against the host files they were built from
+                    -- the only evidence here that is not the pack agreeing
+                    with itself.
 tests/fuzz.py       one random word damaged per iteration, every command run.
+tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
+tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
 </code></pre>
 <h2 id="things-not-to-do">Things not to do</h2>
 <p>Each of these has already cost somebody time, here or in a sibling.</p>
@@ -102,7 +112,8 @@ nothing here knows what a legitimate second reference looks like.</p>
 <h2 id="known-gaps-stated-plainly">Known gaps, stated plainly</h2>
 <ul>
 <li>No writer, therefore no level-1 or level-2 evidence of any kind.</li>
-<li><code>NSALV</code>, ITS's own salvager, has never been pointed at anything this produced.</li>
+<li><code>NSALV</code> has graded this project's READING of a pack, not anything it produced,
+and only for one kind of damage (a cleared TUT word).</li>
 <li>One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
 RM03, no multi-pack file system, no artifact recovered from MIT.</li>
 <li>No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are <code>corroborated</code>
@@ -123,17 +134,36 @@ $ cd its &amp;&amp; make EMULATOR=simh      # or klh10, or pdp10-ka
 <p><strong>Work on a copy.</strong> <code>make oracle</code> makes one itself; <code>repack</code> opens its input
 read-only either way; the rule stands regardless, because the first thing a
 writer will do is break it.</p>
-<h2 id="if-you-are-starting-phase-5">If you are starting phase 5</h2>
-<p>The checker is next, and the rule is that it shares no code with the reader —
-which means it re-derives everything from <code>its.h</code> and calls neither
-<code>structure.c</code> nor <code>image.c</code>'s block helpers.</p>
-<p>The three checks in <code>tests/accounting.sh</code> are the specification for its first
-version: they already pass on a real pack, in shell, so a <code>check</code> that does them
-in C has something to be graded against on day one. Then extend it to per-block
-reference counts, which is the thing a shell script cannot do.</p>
-<p>Start by reading <code>src/system/salv.317</code> and <code>src/kshack/nsalv.*</code> in the ITS tree.
-Not to copy — to find out what ITS itself thought was worth checking, which is a
-better list than one derived from the format alone.</p>
+<h2 id="running-nsalv">Running NSALV</h2>
+<p><code>make nsalv IMAGE=...</code> needs three things that are not in this repo:</p>
+<ul>
+<li><strong><code>expect</code></strong>;</li>
+<li><strong>an emulator with working ITS support.</strong> The <code>pdp10</code> most distributions
+package is SIMH 3.8-1, which accepts <code>set cpu its</code> and then does not work. Use
+the Open SIMH build the PDP-10/its Makefile produces at
+<code>tools/simh/BIN/pdp10</code>; that is the default;</li>
+<li><strong>a salvager tape</strong>, <code>out/simh/salv.tape</code> in the same tree.</li>
+</ul>
+<p>Budget ten minutes: two full salvage runs over a 300 MB pack.</p>
+<p><strong>The sleeps in <code>nsalv.exp</code> are load-bearing.</strong> Answering the salvager's first
+question the instant it appears makes the RH11 report the drive offline
+(<code>Error 1 = (40001) ILL-FUNC UNSAFE</code>) and the run is lost. The ITS build's own
+scripts sleep in the same places; this was rediscovered the hard way.</p>
+<h2 id="if-you-are-starting-the-next-phase">If you are starting the next phase</h2>
+<p>Phase 6 is manifest/verify and a shell; phase 7 is the writer. The writer is
+where invariant 9 in <a href="../design/index.html">docs/design.md</a> starts to matter, and where
+<code>check</code> stops being a nice-to-have: every mutating flow in the suite has to end
+with a clean check.</p>
+<p>Two cheap things are available before either, and both reuse harnesses that now
+exist:</p>
+<ul>
+<li><strong>Show <code>NSALV</code> other kinds of damage.</strong> It has seen a cleared TUT word and
+nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
+are all things <code>itsfs check</code> reports. <code>tests/nsalv.sh</code> needs a different damage
+step and nothing more.</li>
+<li><strong>A second <code>FSDEFS</code></strong> from another ITS release turns the version-span question
+from an open one into a measured one. The diff is the whole method.</li>
+</ul>
 
         </div>
       </article>

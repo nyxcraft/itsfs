@@ -204,50 +204,100 @@ chk "so an rp06 has 38164 blocks in its file area" "$out" "38164"
 
 # ------------------------------------------------------- an ITS file system
 
-# Build one.  Every number here is the value ITS itself would write; see its.h
-# for the symbol each belongs to.
+# Twelve three-bit entries to a word, most significant first.
+tutword() {
+	_w=0
+
+	for _v in "$@"; do _w=$(((_w << 3) | _v)); done
+	echo $_w
+}
+
+# The TUT is NTUTBL blocks long, so a word index runs off the end of the first
+# one; poking by (block, offset) is what poke() takes, so convert here.
+tutpoke() { # tutpoke <image> <word index within the TUT> <word>
+	poke "$1" $((TUTBLK + $2 / 1024)) $(($2 % 1024)) "$3"
+}
+
+
+#
+# THE FIXTURE, AS A FUNCTION, so that every damage case below starts from a
+# fresh one rather than from a copy.  A copy would work, but this pack is a
+# sparse 302 MB file and whether `cp` keeps the holes is a property of the
+# host's coreutils -- building it again is thirty dd invocations and no
+# assumptions.
+#
+mkfixture() {
+	# Build one.  Every number here is the value ITS itself would write; see its.h
+	# for the symbol each belongs to.
+	mkpack "$1"
+
+	# UDNAMP is 1009, so the name area holds three entries.
+	# The MFD: header, then two directory names at the top of the block.  The
+	# POSITION of a name is the address of its directory:
+	#   word 1020 -> block (1020 - 1024 + 2*500)/2 = 498
+	#   word 1022 -> block (1022 - 1024 + 2*500)/2 = 499
+	poke "$1" $MFDBLK 0 1 1020 0 0 0 0551646164416 $NUDSL
+	poke "$1" $MFDBLK 1020 "$(sb TEST)" 0 "$(sb EMPTY)" 0
+
+	# The UFD for TEST, in block 498.  UDESCP is the free pointer into the
+	# descriptor area (18 six-bit bytes are used below) and UDNAMP puts the name
+	# area at word 1009, which leaves room for three entries.  UDBLKS is the
+	# directory's own count of the blocks its files hold.
+	poke "$1" 498 0 18 1009 "$(sb TEST)" 4 0
+
+	# ...and an EMPTY one in block 499, which is a legal directory with nothing in
+	# it: no descriptors, and a name area of one unused slot.
+	poke "$1" 499 0 0 1019 "$(sb EMPTY)" 0 0
+
+	# Its descriptor area, at word 11 (UDDESC).  Six-bit bytes:
+	#   40 37 20   load address: (0<<12) | (037<<6) | 020 = block 2000
+	#   02         take 2 more, so blocks 2000, 2001, 2002
+	#   00         end
+	#   at byte 6:  a link, ".;@;DDT" in SIXBIT, ending in 0
+	#   at byte 14: 40 40 64 00, a one-block file at block 2100
+	poke "$1" 498 11 0403720020000 0163340334444 0640040406400
+
+	# Three name blocks.  HELLO TXT: descriptor at byte 0, and 3 words in the last
+	# block, so the file is 2*1024 + 3 = 2051 words.  A LINK: the link bit set, and
+	# its descriptor at byte 6.  NUL TXT: one block, one word, at byte 14.
+	poke "$1" 498 1009 "$(sb NUL)" "$(sb TXT)" $(((1 << 24) | 14)) 0 0
+	poke "$1" 498 1014 "$(sb HELLO)" "$(sb TXT)" $((3 << 24)) 0 0
+	poke "$1" 498 1019 "$(sb A)" "$(sb LINK)" $(((1 << 18) | 6)) 0 0
+
+	# Three blocks of text.  "HI" is 0110 0111 in seven-bit ASCII, five to a word.
+	poke "$1" 2000 0 $(((0110 << 29) | (0111 << 22)))
+	poke "$1" 2002 0 $(((0110 << 29) | (0111 << 22))) 0 0
+
+	# ...and one word holding  A NUL B NUL NUL, for the trailing-versus-interior
+	# question below.
+	poke "$1" 2100 0 $(((0101 << 29) | (0102 << 15)))
+
+	# The TUT: a pack name, and blocks 0..38164 mapped.  It is filled in
+	# properly rather than left blank, because `check` compares it against the
+	# files BLOCK BY BLOCK -- a fixture with an empty allocation table is not a
+	# file system, it is a file system with 505 problems.
+	poke "$1" $TUTBLK 0 0 "$(sb TESTPK)" 3102 1551 0 38164 0
+
+	# LOCKED OUT: the 500 directory blocks, the MFD, and the four TUT blocks.  The
+	# map starts at word LTIBLK (20 octal), so block b's entry is in word 16 + b/12.
+	i=0
+	while [ $i -lt 41 ]; do                     # blocks 0..491
+		tutpoke "$1" $((16 + i)) "$(tutword 7 7 7 7 7 7 7 7 7 7 7 7)"
+		i=$((i + 1))
+	done
+	tutpoke "$1" 57 "$(tutword 7 7 7 7 7 7 7 7 0 0 0 0)"   # 492..503
+	tutpoke "$1" 1605 "$(tutword 0 0 0 0 0 0 0 0 0 7 7 7)" # 19077..19079
+	tutpoke "$1" 1606 "$(tutword 7 7 0 0 0 0 0 0 0 0 0 0)" # 19080, 19081
+
+	# IN USE: the four blocks the two files hold, each referenced once.
+	tutpoke "$1" 182 "$(tutword 0 0 0 0 0 0 0 0 1 1 1 0)"  # 2000..2002
+	tutpoke "$1" 191 "$(tutword 1 0 0 0 0 0 0 0 0 0 0 0)"  # 2100
+}
+
 MFDBLK=19081
 TUTBLK=19077
 NUDSL=500
-mkpack "$T/pack.dsk"
-
-# UDNAMP is 1009, so the name area holds three entries.
-# The MFD: header, then two directory names at the top of the block.  The
-# POSITION of a name is the address of its directory:
-#   word 1020 -> block (1020 - 1024 + 2*500)/2 = 498
-#   word 1022 -> block (1022 - 1024 + 2*500)/2 = 499
-poke "$T/pack.dsk" $MFDBLK 0 1 1020 0 0 0 0551646164416 $NUDSL
-poke "$T/pack.dsk" $MFDBLK 1020 "$(sb TEST)" 0 "$(sb EMPTY)" 0
-
-# The UFD for TEST, in block 498.  UDNAMP puts the name area at word 1014,
-# which leaves room for two entries.
-poke "$T/pack.dsk" 498 0 30 1009 "$(sb TEST)" 4 0
-
-# Its descriptor area, at word 11 (UDDESC).  Six-bit bytes:
-#   40 37 20   load address: (0<<12) | (037<<6) | 020 = block 2000
-#   02         take 2 more, so blocks 2000, 2001, 2002
-#   00         end
-#   at byte 6:  a link, ".;@;DDT" in SIXBIT, ending in 0
-#   at byte 14: 40 40 64 00, a one-block file at block 2100
-poke "$T/pack.dsk" 498 11 0403720020000 0163340334444 0640040406400
-
-# Three name blocks.  HELLO TXT: descriptor at byte 0, and 3 words in the last
-# block, so the file is 2*1024 + 3 = 2051 words.  A LINK: the link bit set, and
-# its descriptor at byte 6.  NUL TXT: one block, one word, at byte 14.
-poke "$T/pack.dsk" 498 1009 "$(sb NUL)" "$(sb TXT)" $(((1 << 24) | 14)) 0 0
-poke "$T/pack.dsk" 498 1014 "$(sb HELLO)" "$(sb TXT)" $((3 << 24)) 0 0
-poke "$T/pack.dsk" 498 1019 "$(sb A)" "$(sb LINK)" $(((1 << 18) | 6)) 0 0
-
-# Three blocks of text.  "HI" is 0110 0111 in seven-bit ASCII, five to a word.
-poke "$T/pack.dsk" 2000 0 $(((0110 << 29) | (0111 << 22)))
-poke "$T/pack.dsk" 2002 0 $(((0110 << 29) | (0111 << 22))) 0 0
-
-# ...and one word holding  A NUL B NUL NUL, for the trailing-versus-interior
-# question below.
-poke "$T/pack.dsk" 2100 0 $(((0101 << 29) | (0102 << 15)))
-
-# The TUT: a pack name, and blocks 0..38164 mapped.
-poke "$T/pack.dsk" $TUTBLK 0 0 "$(sb TESTPK)" 3102 1551 0 38164 0
+mkfixture "$T/pack.dsk"
 
 out=$("$ITSFS" info "$T/pack.dsk")
 has "info identifies the drive from the size alone" "$out" "rp06"
@@ -324,7 +374,7 @@ has "...and the swap boundary" "$out" "1551"
 # "it survives" -- it is that it refuses BY NAME and does not read past the end
 # of anything.  Under `make test-san` these are the checks with teeth.
 
-cp "$T/pack.dsk" "$T/bad.dsk"
+mkfixture "$T/bad.dsk"
 poke "$T/bad.dsk" $MFDBLK 5 0123456701234
 out=$("$ITSFS" dirs "$T/bad.dsk" 2>&1); rc=$?
 chk "an MFD without its check word is refused" "$rc" "1"
@@ -332,20 +382,20 @@ has "...naming MDCHK" "$out" "not an MFD"
 out=$("$ITSFS" info "$T/bad.dsk" 2>&1)
 has "and info says so rather than pretending" "$out" "NOT |M.F.D.|"
 
-cp "$T/pack.dsk" "$T/bad2.dsk"
+mkfixture "$T/bad2.dsk"
 poke "$T/bad2.dsk" $MFDBLK 1 9999
 out=$("$ITSFS" dirs "$T/bad2.dsk" 2>&1); rc=$?
 chk "an MDNAMP outside the block is refused" "$rc" "1"
 has "...with the value" "$out" "9999"
 
-cp "$T/pack.dsk" "$T/bad3.dsk"
+mkfixture "$T/bad3.dsk"
 poke "$T/bad3.dsk" 498 1 0
 out=$("$ITSFS" ls "$T/bad3.dsk" TEST 2>&1); rc=$?
 chk "a UFD with a zero UDNAMP is refused" "$rc" "1"
 has "...as not a UFD" "$out" "not a UFD"
 
 # A descriptor that takes blocks before any load address has set one.
-cp "$T/pack.dsk" "$T/bad4.dsk"
+mkfixture "$T/bad4.dsk"
 poke "$T/bad4.dsk" 498 11 0020000000000
 out=$("$ITSFS" ls -l "$T/bad4.dsk" TEST 2>&1); rc=$?
 has "a take before any load address is refused" "$out" "take before any load address"
@@ -353,13 +403,13 @@ has "a take before any load address is refused" "$out" "take before any load add
 
 # A load address pointing past the end of the drive.  077 77 77 is block 131071;
 # an rp06 has 38305.
-cp "$T/pack.dsk" "$T/bad5.dsk"
+mkfixture "$T/bad5.dsk"
 poke "$T/bad5.dsk" 498 11 0777777000000
 out=$("$ITSFS" ls -l "$T/bad5.dsk" TEST 2>&1)
 has "a block past the end of the drive is refused" "$out" "past the end of the drive"
 
 # A descriptor with no terminating zero: every byte a "take 1".
-cp "$T/pack.dsk" "$T/bad6.dsk"
+mkfixture "$T/bad6.dsk"
 w=0
 i=0
 while [ $i -lt 6 ]; do w=$((w * 64 + 1)); i=$((i + 1)); done
@@ -371,16 +421,133 @@ out=$(cd "$T" && "$ITSFS" ls -l bad6.dsk TEST 2>&1); rc=$?
 
 # A TUT whose QLASTB is before its QFRSTB, and one that maps more blocks than
 # its own table can hold.
-cp "$T/pack.dsk" "$T/bad7.dsk"
+mkfixture "$T/bad7.dsk"
 poke "$T/bad7.dsk" $TUTBLK 4 100 50
 out=$("$ITSFS" free "$T/bad7.dsk" 2>&1); rc=$?
 chk "a TUT that ends before it begins is refused" "$rc" "1"
 
-cp "$T/pack.dsk" "$T/bad8.dsk"
+mkfixture "$T/bad8.dsk"
 poke "$T/bad8.dsk" $TUTBLK 5 9999999
 out=$("$ITSFS" free "$T/bad8.dsk" 2>&1); rc=$?
 chk "a TUT mapping more blocks than it has room for is refused" "$rc" "1"
 has "...saying so" "$out" "does not fit"
+
+# ------------------------------------------------------ the checker
+#
+# `check` shares no code with the reader: it re-derives the geometry, the
+# directory-slot arithmetic, the descriptor bytecode and the TUT from its.h.  So
+# these are not the same checks again with a different command name -- a bug in
+# structure.c that the reader tests miss is one of the things they are for.
+#
+# The bar for each damage case is that it is named.  "Problems: 1" would pass a
+# check that reported the wrong thing.
+
+out=$("$ITSFS" check "$T/pack.dsk"); rc=$?
+chk "an undamaged pack checks clean" "$rc" "0"
+has "...saying so" "$out" "no problems found"
+has "...and accounting for the space" "$out" "claimed        4 blocks, in 2 files"
+has "...and the locked-out blocks" "$out" "505 locked out"
+
+# A LINK THAT DOES NOT RESOLVE IS A NOTE, NOT A PROBLEM.  The fixture's link
+# points at .;@ DDT, which is not there -- exactly like the seven on the
+# reference pack.  A live file system has broken links in it; a checker that
+# calls that damage is one people learn to ignore.
+has "an unresolved link is counted as a note" "$out" "1 links (1 of them unresolved)"
+out=$("$ITSFS" check -v "$T/pack.dsk")
+has "...and -v says which link and where it pointed" "$out" "TEST;A LINK is a link to .;@ DDT"
+
+mkfixture "$T/k1.dsk"
+poke "$T/k1.dsk" $MFDBLK 5 0123456701234
+out=$("$ITSFS" check "$T/k1.dsk" 2>&1); rc=$?
+chk "an MFD without its check word fails the check" "$rc" "1"
+has "...naming MDCHK" "$out" "not an MFD"
+has "...and refusing to report anything under it" "$out" "nothing below it could be checked"
+
+mkfixture "$T/k2.dsk"
+poke "$T/k2.dsk" $MFDBLK 6 9999
+out=$("$ITSFS" check "$T/k2.dsk" 2>&1); rc=$?
+chk "an MDNUDS that cannot fit in the MFD is refused" "$rc" "1"
+has "...citing the assertion FSDEFS makes about it" "$out" "does not fit in a 1024-word MFD"
+
+mkfixture "$T/k3.dsk"
+poke "$T/k3.dsk" $MFDBLK 1022 "$(sb TEST)"
+out=$("$ITSFS" check "$T/k3.dsk" 2>&1); rc=$?
+chk "two MFD slots naming one directory is a problem" "$rc" "1"
+has "...naming it" "$out" "two MFD slots name the directory |TEST|"
+
+mkfixture "$T/k4.dsk"
+poke "$T/k4.dsk" 498 2 "$(sb OTHER)"
+out=$("$ITSFS" check "$T/k4.dsk" 2>&1)
+has "a UDNAME that disagrees with the MFD is a problem" "$out" \
+	"reached as |TEST| but its UDNAME is |OTHER|"
+
+mkfixture "$T/k5.dsk"
+poke "$T/k5.dsk" 498 0 7000
+out=$("$ITSFS" check "$T/k5.dsk" 2>&1)
+has "a descriptor area that has reached the name area is a problem" "$out" \
+	"has overrun the name area"
+
+mkfixture "$T/k6.dsk"
+poke "$T/k6.dsk" 498 1011 $(((3 << 24) | 20))
+out=$("$ITSFS" check "$T/k6.dsk" 2>&1)
+has "a UNDSCP past the free pointer is a problem" "$out" "at or past the free pointer"
+
+mkfixture "$T/k7.dsk"
+poke "$T/k7.dsk" 498 3 9
+out=$("$ITSFS" check "$T/k7.dsk" 2>&1); rc=$?
+chk "a UDBLKS that disagrees with the descriptors is a problem" "$rc" "1"
+has "...with both numbers" "$out" "descriptors name 4 blocks, but UDBLKS says 9"
+
+# THE FOUR WAYS THE TUT AND THE FILES CAN DISAGREE.  They are different
+# problems: one loses data, one only loses space, and the checker says which.
+mkfixture "$T/k8.dsk"
+tutpoke "$T/k8.dsk" 191 0
+out=$("$ITSFS" check "$T/k8.dsk" 2>&1); rc=$?
+chk "a block a file holds that the TUT calls free is a problem" "$rc" "1"
+has "...naming the file that would be overwritten" "$out" \
+	"block 2100 is claimed by TEST;NUL TXT, and the TUT calls it FREE"
+
+mkfixture "$T/k9.dsk"
+tutpoke "$T/k9.dsk" 266 "$(tutword 1 0 0 0 0 0 0 0 0 0 0 0)"
+out=$("$ITSFS" check "$T/k9.dsk" 2>&1)
+has "a block in use that no file claims is a problem" "$out" \
+	"block 3000 is marked in use (1 references) and no file claims it"
+
+mkfixture "$T/k10.dsk"
+tutpoke "$T/k10.dsk" 191 "$(tutword 3 0 0 0 0 0 0 0 0 0 0 0)"
+out=$("$ITSFS" check "$T/k10.dsk" 2>&1)
+has "a reference COUNT that disagrees is a problem, not just a flag" "$out" \
+	"block 2100: the TUT says 3 references, the files make 1"
+
+mkfixture "$T/k11.dsk"
+poke "$T/k11.dsk" 498 13 0640040000500
+out=$("$ITSFS" check "$T/k11.dsk" 2>&1)
+has "a file holding a locked-out block is a problem" "$out" "the TUT has it LOCKED OUT"
+
+mkfixture "$T/k12.dsk"
+tutpoke "$T/k12.dsk" 16 0
+out=$("$ITSFS" check "$T/k12.dsk" 2>&1)
+has "a directory block the TUT does not lock out is a problem" "$out" \
+	"block 0 is a directory and the TUT does not lock it out"
+
+mkfixture "$T/k13.dsk"
+tutpoke "$T/k13.dsk" 266 "$(tutword 7 0 0 0 0 0 0 0 0 0 0 0)"
+out=$("$ITSFS" check "$T/k13.dsk" 2>&1)
+has "a locked-out block that is not a directory or a table is a problem" "$out" \
+	"block 3000 is locked out and is not a directory, the MFD or the TUT"
+
+# Two files holding the same block.  The format ALLOWS it -- the TUT is a
+# reference count -- so the checker reports it and names both, rather than
+# calling it corruption on its own authority.
+mkfixture "$T/k14.dsk"
+poke "$T/k14.dsk" 498 13 0640040372000
+out=$("$ITSFS" check "$T/k14.dsk" 2>&1)
+has "two files holding one block are both named" "$out" \
+	"block 2000 is claimed by TEST;HELLO TXT and already by TEST;NUL TXT"
+
+# And the checker is a parser like any other: it gets the fuzzer's input too.
+out=$("$ITSFS" check "$T/rand.img" 2>&1); rc=$?
+chk "check on an image of no known drive is refused" "$rc" "2"
 
 # ------------------------------------------------------------ command lines
 

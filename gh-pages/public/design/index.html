@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -54,6 +54,7 @@
 out of scope.</p>
 <h2 id="the-layers">The layers</h2>
 <pre><code>   cmd_*.c        front ends: info, dump, dirs, ls, cat, get, free, ...
+   cmd_check.c    ...and one that starts again from its.h, sharing none of it
    ---------------------------------------------------------------------
    structure.c    the file system: MFD, UFD, name blocks, descriptors, TUT
    its.h          every on-disk offset, transcribed from FSDEFS with a citation
@@ -84,6 +85,12 @@ place a block becomes a sector. <code>ITS_FIELD()</code> is the only place a byt
 becomes a value. <code>its_pack_bytes()</code> is the only place a word count becomes a byte
 count. <code>s5fs</code> learned this by open-coding a block-map ladder in four readers and
 getting it wrong in three.</p>
+<p>There is <strong>exactly one exception</strong>, and it is invariant 8 rather than a lapse:
+<code>cmd_check.c</code> writes the block-to-sector conversion out again. A second copy
+that must agree is the opposite of four copies nobody compares — the whole point
+is that the two can differ, and <code>make oracle</code> runs both over the same pack. A
+third copy would not be; if this ever becomes a habit rather than a pair, it has
+stopped being a check.</p>
 <p><strong>4. Bound every value that comes off the disk before using it as an index.</strong>
 <code>MDNAMP</code>, <code>UDNAMP</code>, <code>UNDSCP</code>, <code>QFRSTB</code>, <code>QLASTB</code>, every descriptor opcode and
 every block number a descriptor produces. All of them are checked at the point
@@ -98,11 +105,14 @@ what keeps them from rotting.</p>
 <code>confirmed</code> or <code>corroborated</code>; a field says <code>[v]</code> or <code>[s]</code>. &quot;We implemented it&quot;
 and &quot;we know ITS did it this way&quot; are different claims, and a project that stops
 distinguishing them starts quietly inventing a file system.</p>
-<p>Two more are held in reserve for code that does not exist yet:</p>
-<p><strong>8. Exactly one mutation path.</strong> When there is a writer, it is one file, and
+<p><strong>8. The checker shares no code with the reader.</strong> <code>cmd_check.c</code> includes
+neither <code>structure.h</code> nor <code>itsgeom.c</code>'s conversion; it re-derives the geometry,
+the directory arithmetic, the descriptor bytecode and the TUT from <code>its.h</code>. A
+clean check has to be evidence rather than the reader agreeing with itself, and
+it must be POSSIBLE for the two to disagree.</p>
+<p>One is held in reserve for code that does not exist yet:</p>
+<p><strong>9. Exactly one mutation path.</strong> When there is a writer, it is one file, and
 every front end calls it.</p>
-<p><strong>9. The checker shares no code with the reader.</strong> A clean check has to be
-evidence rather than the reader agreeing with itself.</p>
 <h2 id="what-is-deliberately-out-of-scope">What is deliberately out of scope</h2>
 <ul>
 <li><strong>Anything that is not ITS.</strong> TOPS-10 is <code>t10fs</code>; TOPS-20 is neither.</li>

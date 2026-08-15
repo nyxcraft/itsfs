@@ -3,7 +3,7 @@
 Where each phase ends, and what has to be true before it can be called done.
 [PLAN.md](../PLAN.md) has the same table; this is the detail.
 
-Phases 0–4 are done. What follows them is written here so that the next person
+Phases 0–5a are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.
 
@@ -53,36 +53,56 @@ the TUT.
 exactly, three ways, against numbers this project did not compute. See
 [validation](validation.md#level-3b--the-space-on-a-real-pack-accounts-for-exactly).
 
+### Phase 5 — `itsfs check`
+
+An independent checker: it shares no code with the reader. `cmd_check.c`
+includes neither `structure.h` nor `itsgeom.c`'s conversion, and re-derives the
+block-to-sector arithmetic, the MFD-slot formula, the UFD layout, the descriptor
+bytecode and the TUT from `its.h`.
+
+It counts references **per block**, because the TUT is a reference count rather
+than a bitmap, and reports the four kinds of disagreement separately; it checks
+each UFD's `UDBLKS` against its own descriptors, that the two areas in a
+directory have not overrun each other, and that the locked-out set is exactly
+the directories, the MFD and the TUT.
+
+**Ended by:** clean on a real pack, with the same numbers the reader gets;
+naming the right blocks and the right files on a pack damaged on purpose; and
+`tests/accounting.sh`'s three checks now being things it does in C rather than
+things a shell script does with the reader. Both still run in `make oracle`,
+because two implementations agreeing is the point and either alone is one
+opinion.
+
+One thing it deliberately does **not** call damage: a link pointing at a file
+that is not there. Seven on the reference pack do, and a live system is like
+that. They are notes, they are listed under `-v`, and they do not change the
+exit status.
+
+### Phase 5a — `NSALV`, out of order and on purpose
+
+**This needed no writer**, which is why it ran before phase 6 rather than as part
+of phase 8. `NSALV` is ITS's own salvager: it boots standalone from a tape, walks
+every directory on a pack, rebuilds the allocation table from scratch and reports
+what disagrees. Pointing it at a pack this project has only *read* asks the one
+question `itsfs check` cannot answer about itself.
+
+Two runs, because the clean one proves less than it looks: `NSALV` finishes
+silently on a good pack, which is indistinguishable from its never having run.
+The damaged run is what makes the clean one evidence.
+
+**Ended by:** both checkers naming exactly the same blocks and the same files on
+a pack with one TUT word cleared — 11 at one damage site, 8 at another, sorted
+and compared as pairs rather than as counts. `make nsalv` does it; see
+[validation](validation.md#a-second-opinion-that-is-not-ours).
+
+It also settled a format question as a side effect. `NSALV`'s link parser
+compares against `':` and `';`, and MIDAS assembles `'X` as SIXBIT — so ITS's own
+code confirms the encoding that FSDEFS's *comment* gets wrong. See
+[sources](sources.md#two-traps).
+
 ---
 
 ## Next
-
-### Phase 5 — `itsfs check`
-
-An independent checker: **it must share no code with the reader**. That rule is
-what makes a clean check evidence rather than the reader agreeing with itself,
-and it caught real bugs in both sibling projects.
-
-For ITS the checker's shape is different from either sibling's, because the TUT
-is a reference count rather than a bitmap or a chain. The job is:
-
-- walk every directory, decode every descriptor, and **count references per
-  block**, not merely mark them used;
-- compare that count against the TUT's, per block, and report the three kinds of
-  disagreement separately: a block files reference that the TUT calls free, a
-  block the TUT calls used that no file references, and a count that differs;
-- check that the locked-out set is exactly the directories and the tables;
-- check each UFD's `UDBLKS` against its own descriptors;
-- check that the two areas in each UFD have not overrun each other.
-
-**Ends when:** it is clean on a real pack, and names the right block on a pack
-damaged on purpose — and when `tests/accounting.sh`'s three checks are things it
-does rather than things a shell script does.
-
-An honest limit to state now: `check` and the reader will share `its.h`, and both
-will inherit any misreading in it. `t10fs` documents the same limit and found its
-one real instance with the fuzzer rather than the second implementation. A second
-reading catches a wrong reading; it cannot catch what the source never says.
 
 ### Phase 6 — manifest, verify, and a shell
 
@@ -117,10 +137,13 @@ Two ITS-specific things to get right, neither of which has an analogue in
 The point of the whole exercise, and ITS makes it unusually approachable because
 it builds from source.
 
-- **`NSALV`** — ITS's own salvager, a standalone program that walks the file
-  system and reports what is wrong with it. It is `DSKRAT`'s counterpart in
-  `t10fs`, and `make prove` there is the template: hand it a pack we wrote, and a
-  pack we damaged, and require it to agree with `itsfs check` about both.
+- **`NSALV` against a pack we WROTE.** Phase 5a already runs it against one we
+  only read, and the harness is there — `tests/nsalv.sh` needs a different pack
+  and nothing else. This is `DSKRAT`'s role in `t10fs`, where `make prove` is the
+  template.
+- **`NSALV` on other kinds of damage.** It has been shown a cleared TUT word and
+  nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
+  are all things `itsfs check` reports and none has been put to ITS.
 - **The monitor** — boot ITS on a pack we wrote to, and have it read the file, and
   copy it, and let us read the copy back.
 - **A pack built from nothing** — `mkfs`, then `DSKDMP` or the monitor booting on

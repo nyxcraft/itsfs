@@ -13,7 +13,7 @@ CPPFLAGS += -D_FILE_OFFSET_BITS=64
 BIN := bin
 SRC := src
 
-BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c \
+BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c \
         util.c image.c structure.c itspack.c itsgeom.c itstext.c
 HDRS := $(SRC)/cmds.h $(SRC)/util.h $(SRC)/image.h $(SRC)/itspack.h $(SRC)/itsgeom.h \
         $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h
@@ -133,6 +133,15 @@ oracle: $(BIN)/itsfs
 	 test "$$n" -gt 0 || { echo "no directories found -- the MFD read failed"; exit 1; }
 	@sh tests/accounting.sh $(BIN)/itsfs $(ORACLE_TMP)/ref.dsk
 	@echo
+	@# THE SAME THREE QUESTIONS, ASKED BY CODE THAT SHARES NOTHING WITH THE
+	@# READER.  accounting.sh above drives ls/dirs/free, so it is the reader's
+	@# answer in a shell loop; `check` re-derives the geometry, the directory
+	@# arithmetic, the descriptor bytecode and the TUT from its.h and walks the
+	@# pack itself.  Two implementations agreeing on 30,940 is the point --
+	@# either alone is one opinion.
+	@echo "and again, with the checker that shares no code with the reader ..."
+	@$(BIN)/itsfs check $(ORACLE_TMP)/ref.dsk
+	@echo
 	@# ...and the one check here that is not the pack agreeing with itself.
 	@# Extract files and compare them to the host files in the ITS source tree
 	@# that they were built from -- something no part of this project has ever
@@ -151,6 +160,36 @@ oracle: $(BIN)/itsfs
 ITSSRC ?= $(HOME)/its/src
 CROSSDIRS ?= kshack syseng sysen1 klh mrc lars gls
 
+#
+# `make nsalv` -- hand a pack to ITS'S OWN SALVAGER and compare it with ours.
+#
+# The one piece of evidence here that is not this project agreeing with itself.
+# `itsfs check` and the reader both take their constants from src/its.h, so both
+# inherit any misreading in it; NSALV is MIT's, from the 1980s, and knows this
+# format because it was there.  Where the two agree, the agreement is about the
+# format rather than about our reading of it.
+#
+# IT NEEDS NO WRITER.  A pack this project has only READ is enough to ask the
+# question, which is why this runs at phase 5 rather than waiting for phase 8.
+#
+# Needs `expect`, an ITS salvager tape and an emulator with ITS support -- Open
+# SIMH's pdp10, which the PDP-10/its Makefile builds at tools/simh/BIN/pdp10.
+# The 3.8-1 pdp10 packaged by most distributions is NOT it: `set cpu its` is
+# accepted but the KS10 paging ITS needs is not there.
+#
+# It works on copies and answers "no" to every offer NSALV makes to write, and
+# then CHECKS that the pack came back byte-identical -- a salvager that quietly
+# repaired the pack would destroy the evidence of what was wrong with it.
+#
+# Budget ten minutes: two full salvage runs over a 300 MB pack.
+#
+NSALV_PDP10 ?= $(HOME)/its/tools/simh/BIN/pdp10
+NSALV_TAPE  ?= $(HOME)/its/out/simh/salv.tape
+NSALV_TMP   ?= /tmp/itsfs-nsalv
+nsalv: $(BIN)/itsfs
+	@test -f "$(IMAGE)" || { echo "no image at $(IMAGE) -- set IMAGE=<path>"; exit 2; }
+	@sh tests/nsalv.sh $(BIN)/itsfs "$(IMAGE)" "$(NSALV_PDP10)" "$(NSALV_TAPE)" $(NSALV_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -163,4 +202,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>itsfs | Tools for the TOPS-10 disk file structure</title>
-  <meta name="description" content="Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.">
+  <meta name="description" content="Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, a checker that shares no code with the reader, and a documented refusal to write a field offset that has not been checked against a source.">
   <link rel="stylesheet" href="assets/site.css">
 </head>
 <body class="site-home">
@@ -13,7 +13,7 @@
     <header class="site-header">
       <a class="brand" href="index.html">
         <img class="brand__icon" src="assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="overview/index.html">Overview</a>
@@ -28,7 +28,7 @@
         <div class="hero__copy">
           <h1>Thirty-six bits, on the machine you have.</h1>
           <div class="hero__attr"><p>Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p></div>
-          <p class="hero__lede">Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.</p>
+          <p class="hero__lede">Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, a checker that shares no code with the reader, and a documented refusal to write a field offset that has not been checked against a source.</p>
           <div class="hero__actions">
             <a class="button button--primary" href="overview/index.html">Start here</a>
             <a class="button" href="design/index.html">How it works</a>
@@ -78,17 +78,17 @@
           <article class="tool-card">
             <h4><a href="overview/index.html">Overview</a></h4>
             <p class="tool-card__tagline">What it is, and every command</p>
-            <p>The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven and what is only claimed.</p>
+            <p>The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven — including by ITS itself — and what is only claimed.</p>
           </article>
           <article class="tool-card">
             <h4><a href="design/index.html">Design</a></h4>
             <p class="tool-card__tagline">The layers and the invariants</p>
-            <p>The layer cake — including the one neither sibling project needs — the seven rules that each cost somebody a bug once, the two held in reserve for code that does not exist yet, and what is deliberately out of scope.</p>
+            <p>The layer cake — including the one neither sibling project needs — the eight rules that each cost somebody a bug once, the single deliberate exception to one of them, and what is deliberately out of scope.</p>
           </article>
           <article class="tool-card">
             <h4><a href="roadmap/index.html">Roadmap</a></h4>
-            <p class="tool-card__tagline">Five phases done, five to go</p>
-            <p>What ended each finished phase, what the next five have to prove, and the open questions — a pack recovered from MIT, a second FSDEFS — that would reorder the whole list.</p>
+            <p class="tool-card__tagline">Seven phases done, four to go</p>
+            <p>What ended each finished phase — including the one taken out of order, because ITS&#x27;s own salvager turned out to need no writer — and the open questions, a pack recovered from MIT or a second FSDEFS, that would reorder the rest.</p>
           </article>
         </div>
       </section>
@@ -123,12 +123,12 @@
           <article class="tool-card">
             <h4><a href="sources/index.html">Sources</a></h4>
             <p class="tool-card__tagline">Where every constant comes from</p>
-            <p>The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT.</p>
+            <p>The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT, which ITS&#x27;s own code then contradicts.</p>
           </article>
           <article class="tool-card">
             <h4><a href="validation/index.html">Validation</a></h4>
             <p class="tool-card__tagline">How correctness is established</p>
-            <p>The three levels of evidence, the 39,641,600-word round trip, the three-way accounting that comes out exact on a real pack, 1,750 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.</p>
+            <p>The levels of evidence and the axis the taxonomy was missing, the 39,641,600-word round trip, the three-way accounting that comes out exact, MIT&#x27;s own salvager naming the same damaged blocks and the same files as ours, 2,000 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.</p>
           </article>
         </div>
       </section>

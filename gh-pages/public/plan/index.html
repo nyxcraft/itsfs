@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -108,8 +108,9 @@ booted by the <a href="https://github.com/PDP-10/its">PDP-10/its</a> Makefile.</
 </tr>
 </tbody>
 </table>
-<p>That is enough to have written the word layer, the geometry layer and a
-read-only reader — which is what exists today. See <a href="../validation/index.html">validation</a>.</p>
+<p>That is enough to have written the word layer, the geometry layer, a read-only
+reader and an independent checker — which is what exists today. See
+<a href="../validation/index.html">validation</a>.</p>
 <hr />
 <h2 id="3-what-is-still-assumption">3. What is still assumption</h2>
 <p>Everything below is read in the source and <strong>not yet exercised against a pack</strong>,
@@ -292,8 +293,14 @@ validated.</p>
 <tr>
 <td><strong>5</strong></td>
 <td><code>itsfs check</code> — an independent checker</td>
-<td>clean on a real pack; flags injected corruption</td>
-<td>next</td>
+<td>clean on a real pack, agreeing with the reader block for block; names the right file on a damaged one</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>5a</strong></td>
+<td>ITS's own salvager, against a pack we only READ</td>
+<td><code>NSALV</code> names the same blocks and files as <code>itsfs check</code>, at two damage sites</td>
+<td><strong>done</strong></td>
 </tr>
 <tr>
 <td><strong>6</strong></td>
@@ -321,6 +328,11 @@ validated.</p>
 </tr>
 </tbody>
 </table>
+<p>Phase 5a was added after the fact, and the lesson is worth keeping: the original
+phasing assumed native-tool evidence had to wait for a writer, because levels 1
+and 2 of the oracle both grade something we PRODUCED. They do not have to. A
+native tool can grade a pack we only read, and doing that at phase 5 rather than
+phase 8 cost one afternoon and produced the strongest result in the project.</p>
 <p>Phases 1–6 are entirely read-only and carry no risk to a reference pack.
 <strong>Work on a copy regardless.</strong></p>
 <hr />

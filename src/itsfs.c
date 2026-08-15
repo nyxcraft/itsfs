@@ -23,6 +23,7 @@
  *   itsfs cat       print a file
  *   itsfs get       copy a file out to the host
  *   itsfs free      what the TUT says about the pack
+ *   itsfs check     check a pack -- shares no code with the reader
  */
 
 #include "cmds.h"
@@ -47,6 +48,7 @@ static const struct subcmd {
 	{ "cat",      cmd_cat,      "print a file as text"                      },
 	{ "get",      cmd_get,      "copy a file out to the host"               },
 	{ "free",     cmd_free,     "what the TUT says about the pack"          },
+	{ "check",    cmd_check,    "check a pack (shares no code with the reader)" },
 };
 
 /* clang-format on */

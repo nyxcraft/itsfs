@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -40,8 +40,9 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-2-geometry">Phase 2 — geometry</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-3-the-constants">Phase 3 — the constants</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-4-the-reader">Phase 4 — the reader</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-5-itsfs-check">Phase 5 — `itsfs check`</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-5a-nsalv-out-of-order-and-on-purpose">Phase 5a — `NSALV`, out of order and on purpose</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-7-the-writer">Phase 7 — the writer</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop">Phase 8 — native-tool interop</a></li>
@@ -62,7 +63,7 @@
         <div class="prose">
 <p>Where each phase ends, and what has to be true before it can be called done.
 <a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
-<p>Phases 0–4 are done. What follows them is written here so that the next person
+<p>Phases 0–5a are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.</p>
 <hr />
@@ -94,31 +95,45 @@ the TUT.</p>
 <p><strong>Ended by:</strong> <code>tests/accounting.sh</code> — the space on a real pack accounting for
 exactly, three ways, against numbers this project did not compute. See
 <a href="../validation/index.html#level-3b--the-space-on-a-real-pack-accounts-for-exactly">validation</a>.</p>
+<h3 id="phase-5-itsfs-check">Phase 5 — <code>itsfs check</code></h3>
+<p>An independent checker: it shares no code with the reader. <code>cmd_check.c</code>
+includes neither <code>structure.h</code> nor <code>itsgeom.c</code>'s conversion, and re-derives the
+block-to-sector arithmetic, the MFD-slot formula, the UFD layout, the descriptor
+bytecode and the TUT from <code>its.h</code>.</p>
+<p>It counts references <strong>per block</strong>, because the TUT is a reference count rather
+than a bitmap, and reports the four kinds of disagreement separately; it checks
+each UFD's <code>UDBLKS</code> against its own descriptors, that the two areas in a
+directory have not overrun each other, and that the locked-out set is exactly
+the directories, the MFD and the TUT.</p>
+<p><strong>Ended by:</strong> clean on a real pack, with the same numbers the reader gets;
+naming the right blocks and the right files on a pack damaged on purpose; and
+<code>tests/accounting.sh</code>'s three checks now being things it does in C rather than
+things a shell script does with the reader. Both still run in <code>make oracle</code>,
+because two implementations agreeing is the point and either alone is one
+opinion.</p>
+<p>One thing it deliberately does <strong>not</strong> call damage: a link pointing at a file
+that is not there. Seven on the reference pack do, and a live system is like
+that. They are notes, they are listed under <code>-v</code>, and they do not change the
+exit status.</p>
+<h3 id="phase-5a-nsalv-out-of-order-and-on-purpose">Phase 5a — <code>NSALV</code>, out of order and on purpose</h3>
+<p><strong>This needed no writer</strong>, which is why it ran before phase 6 rather than as part
+of phase 8. <code>NSALV</code> is ITS's own salvager: it boots standalone from a tape, walks
+every directory on a pack, rebuilds the allocation table from scratch and reports
+what disagrees. Pointing it at a pack this project has only <em>read</em> asks the one
+question <code>itsfs check</code> cannot answer about itself.</p>
+<p>Two runs, because the clean one proves less than it looks: <code>NSALV</code> finishes
+silently on a good pack, which is indistinguishable from its never having run.
+The damaged run is what makes the clean one evidence.</p>
+<p><strong>Ended by:</strong> both checkers naming exactly the same blocks and the same files on
+a pack with one TUT word cleared — 11 at one damage site, 8 at another, sorted
+and compared as pairs rather than as counts. <code>make nsalv</code> does it; see
+<a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>.</p>
+<p>It also settled a format question as a side effect. <code>NSALV</code>'s link parser
+compares against <code>':</code> and <code>';</code>, and MIDAS assembles <code>'X</code> as SIXBIT — so ITS's own
+code confirms the encoding that FSDEFS's <em>comment</em> gets wrong. See
+<a href="../sources/index.html#two-traps">sources</a>.</p>
 <hr />
 <h2 id="next">Next</h2>
-<h3 id="phase-5-itsfs-check">Phase 5 — <code>itsfs check</code></h3>
-<p>An independent checker: <strong>it must share no code with the reader</strong>. That rule is
-what makes a clean check evidence rather than the reader agreeing with itself,
-and it caught real bugs in both sibling projects.</p>
-<p>For ITS the checker's shape is different from either sibling's, because the TUT
-is a reference count rather than a bitmap or a chain. The job is:</p>
-<ul>
-<li>walk every directory, decode every descriptor, and <strong>count references per
-block</strong>, not merely mark them used;</li>
-<li>compare that count against the TUT's, per block, and report the three kinds of
-disagreement separately: a block files reference that the TUT calls free, a
-block the TUT calls used that no file references, and a count that differs;</li>
-<li>check that the locked-out set is exactly the directories and the tables;</li>
-<li>check each UFD's <code>UDBLKS</code> against its own descriptors;</li>
-<li>check that the two areas in each UFD have not overrun each other.</li>
-</ul>
-<p><strong>Ends when:</strong> it is clean on a real pack, and names the right block on a pack
-damaged on purpose — and when <code>tests/accounting.sh</code>'s three checks are things it
-does rather than things a shell script does.</p>
-<p>An honest limit to state now: <code>check</code> and the reader will share <code>its.h</code>, and both
-will inherit any misreading in it. <code>t10fs</code> documents the same limit and found its
-one real instance with the fuzzer rather than the second implementation. A second
-reading catches a wrong reading; it cannot catch what the source never says.</p>
 <h3 id="phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</h3>
 <p><code>manifest</code> fingerprints a pack — one line per file, with a checksum over <strong>words</strong>
 rather than bytes, so that a manifest taken from an <code>le64</code> image verifies against
@@ -145,10 +160,13 @@ answer for rather than discover.</li>
 <p>The point of the whole exercise, and ITS makes it unusually approachable because
 it builds from source.</p>
 <ul>
-<li><strong><code>NSALV</code></strong> — ITS's own salvager, a standalone program that walks the file
-system and reports what is wrong with it. It is <code>DSKRAT</code>'s counterpart in
-<code>t10fs</code>, and <code>make prove</code> there is the template: hand it a pack we wrote, and a
-pack we damaged, and require it to agree with <code>itsfs check</code> about both.</li>
+<li><strong><code>NSALV</code> against a pack we WROTE.</strong> Phase 5a already runs it against one we
+only read, and the harness is there — <code>tests/nsalv.sh</code> needs a different pack
+and nothing else. This is <code>DSKRAT</code>'s role in <code>t10fs</code>, where <code>make prove</code> is the
+template.</li>
+<li><strong><code>NSALV</code> on other kinds of damage.</strong> It has been shown a cleared TUT word and
+nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
+are all things <code>itsfs check</code> reports and none has been put to ITS.</li>
 <li><strong>The monitor</strong> — boot ITS on a pack we wrote to, and have it read the file, and
 copy it, and let us read the copy back.</li>
 <li><strong>A pack built from nothing</strong> — <code>mkfs</code>, then <code>DSKDMP</code> or the monitor booting on

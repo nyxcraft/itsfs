@@ -11,8 +11,9 @@ discipline, different file system — and ITS is genuinely different, not TOPS-1
 with other field names. See [PLAN.md §5](PLAN.md#5-what-must-be-designed-fresh)
 for the four places that matter.
 
-Phases 0–4 are done: word layer, geometry, cited constants, and a complete
-read-only reader. **There is no writer.**
+Phases 0–5a are done: word layer, geometry, cited constants, a complete
+read-only reader, an independent checker, and ITS's own salvager agreeing with
+it. **There is no writer.**
 
 ## Read these, in this order
 
@@ -37,9 +38,18 @@ src/image.[ch]      an image, addressed in words and blocks.
 src/its.h           every on-disk offset, cited to SYSTEM;FSDEFS 43.
 src/structure.[ch]  MFD, UFD, name blocks, descriptors, links, TUT.
 src/cmd_*.c         the front ends.  cmd_dump.c depends on nothing above image.c.
-tests/run.sh        79 checks.  Builds its own ITS file system with dd.
-tests/accounting.sh the oracle's real payload: does the space add up?
+src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes the
+                    block-to-sector conversion out a second time on purpose.
+tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
+                    damages copies of it on purpose.
+tests/accounting.sh does the space add up?  The same three questions `check`
+                    asks, asked with the READER, so the two can be compared.
+tests/crosscheck.sh extracted files against the host files they were built from
+                    -- the only evidence here that is not the pack agreeing
+                    with itself.
 tests/fuzz.py       one random word damaged per iteration, every command run.
+tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
+tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
 ```
 
 ## Things not to do
@@ -79,7 +89,8 @@ nothing here knows what a legitimate second reference looks like.
 ## Known gaps, stated plainly
 
 - No writer, therefore no level-1 or level-2 evidence of any kind.
-- `NSALV`, ITS's own salvager, has never been pointed at anything this produced.
+- `NSALV` has graded this project's READING of a pack, not anything it produced,
+  and only for one kind of damage (a cleared TUT word).
 - One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
   RM03, no multi-pack file system, no artifact recovered from MIT.
 - No ITS magtape has been read, which is why `core` and `dbd9` are `corroborated`
@@ -107,17 +118,37 @@ $ make oracle IMAGE=~/its/out/simh/rp0.dsk
 read-only either way; the rule stands regardless, because the first thing a
 writer will do is break it.
 
-## If you are starting phase 5
+## Running NSALV
 
-The checker is next, and the rule is that it shares no code with the reader —
-which means it re-derives everything from `its.h` and calls neither
-`structure.c` nor `image.c`'s block helpers.
+`make nsalv IMAGE=...` needs three things that are not in this repo:
 
-The three checks in `tests/accounting.sh` are the specification for its first
-version: they already pass on a real pack, in shell, so a `check` that does them
-in C has something to be graded against on day one. Then extend it to per-block
-reference counts, which is the thing a shell script cannot do.
+- **`expect`**;
+- **an emulator with working ITS support.** The `pdp10` most distributions
+  package is SIMH 3.8-1, which accepts `set cpu its` and then does not work. Use
+  the Open SIMH build the PDP-10/its Makefile produces at
+  `tools/simh/BIN/pdp10`; that is the default;
+- **a salvager tape**, `out/simh/salv.tape` in the same tree.
 
-Start by reading `src/system/salv.317` and `src/kshack/nsalv.*` in the ITS tree.
-Not to copy — to find out what ITS itself thought was worth checking, which is a
-better list than one derived from the format alone.
+Budget ten minutes: two full salvage runs over a 300 MB pack.
+
+**The sleeps in `nsalv.exp` are load-bearing.** Answering the salvager's first
+question the instant it appears makes the RH11 report the drive offline
+(`Error 1 = (40001) ILL-FUNC UNSAFE`) and the run is lost. The ITS build's own
+scripts sleep in the same places; this was rediscovered the hard way.
+
+## If you are starting the next phase
+
+Phase 6 is manifest/verify and a shell; phase 7 is the writer. The writer is
+where invariant 9 in [docs/design.md](docs/design.md) starts to matter, and where
+`check` stops being a nice-to-have: every mutating flow in the suite has to end
+with a clean check.
+
+Two cheap things are available before either, and both reuse harnesses that now
+exist:
+
+- **Show `NSALV` other kinds of damage.** It has seen a cleared TUT word and
+  nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
+  are all things `itsfs check` reports. `tests/nsalv.sh` needs a different damage
+  step and nothing more.
+- **A second `FSDEFS`** from another ITS release turns the version-span question
+  from an open one into a measured one. The diff is the whole method.

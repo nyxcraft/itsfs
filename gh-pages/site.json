@@ -1,12 +1,12 @@
 {
   "site_name": "itsfs",
   "site_tagline": "Host tools for the ITS file system.",
-  "site_description": "Read the disk MIT's Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.",
+  "site_description": "Read the disk MIT's Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, a checker that shares no code with the reader, and a documented refusal to write a field offset that has not been checked against a source.",
   "github_href": "https://github.com/nyxcraft/itsfs",
   "branch": "main",
   "copyright": "Nicholas J. Kisseberth",
   "copyright_year": "2026",
-  "status": "phases 0-4 done: a complete read-only reader",
+  "status": "phases 0-5a done: two checkers agreeing, one of them MIT's",
   "attribution": [
     "Software Architecture, Design & Engineering by Nicholas J. Kisseberth."
   ],
@@ -22,19 +22,19 @@
     { "slug": "overview", "source": "README.md", "template": "page", "group": "start",
       "title": "Overview",
       "tagline": "What it is, and every command",
-      "blurb": "The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven and what is only claimed.",
+      "blurb": "The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven — including by ITS itself — and what is only claimed.",
       "featured": true },
 
     { "slug": "design", "source": "docs/design.md", "group": "start",
       "title": "Design",
       "tagline": "The layers and the invariants",
-      "blurb": "The layer cake — including the one neither sibling project needs — the seven rules that each cost somebody a bug once, the two held in reserve for code that does not exist yet, and what is deliberately out of scope.",
+      "blurb": "The layer cake — including the one neither sibling project needs — the eight rules that each cost somebody a bug once, the single deliberate exception to one of them, and what is deliberately out of scope.",
       "featured": true },
 
     { "slug": "roadmap", "source": "docs/roadmap.md", "group": "start",
       "title": "Roadmap",
-      "tagline": "Five phases done, five to go",
-      "blurb": "What ended each finished phase, what the next five have to prove, and the open questions — a pack recovered from MIT, a second FSDEFS — that would reorder the whole list.",
+      "tagline": "Seven phases done, four to go",
+      "blurb": "What ended each finished phase — including the one taken out of order, because ITS's own salvager turned out to need no writer — and the open questions, a pack recovered from MIT or a second FSDEFS, that would reorder the rest.",
       "featured": true },
 
     { "slug": "geometry", "source": "docs/geometry.md", "group": "format",
@@ -60,12 +60,12 @@
     { "slug": "sources", "source": "docs/sources.md", "group": "evidence",
       "title": "Sources",
       "tagline": "Where every constant comes from",
-      "blurb": "The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT.",
+      "blurb": "The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT, which ITS's own code then contradicts.",
       "featured": true },
 
     { "slug": "validation", "source": "docs/validation.md", "group": "evidence",
       "tagline": "How correctness is established",
-      "blurb": "The three levels of evidence, the 39,641,600-word round trip, the three-way accounting that comes out exact on a real pack, 1,750 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.",
+      "blurb": "The levels of evidence and the axis the taxonomy was missing, the 39,641,600-word round trip, the three-way accounting that comes out exact, MIT's own salvager naming the same damaged blocks and the same files as ours, 2,000 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.",
       "featured": true },
 
     { "slug": "plan", "source": "PLAN.md", "template": "page", "group": "reference",

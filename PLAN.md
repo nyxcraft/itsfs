@@ -45,8 +45,9 @@ booted by the [PDP-10/its](https://github.com/PDP-10/its) Makefile.
 | The **TUT is a 3-bit reference count per block**, not a bitmap | 30,940 blocks in use — the same number the descriptors account for — and 505 locked out |
 | Those 505 are **500 UFDs + 1 MFD + 4 TUT blocks** | `MDNUDS` says 500, `NTUTBL` says 4 |
 
-That is enough to have written the word layer, the geometry layer and a
-read-only reader — which is what exists today. See [validation](docs/validation.md).
+That is enough to have written the word layer, the geometry layer, a read-only
+reader and an independent checker — which is what exists today. See
+[validation](docs/validation.md).
 
 ---
 
@@ -223,11 +224,18 @@ validated.
 | **2** | the geometry layer | the MFD is found where the formula says, by its own check word | **done** |
 | **3** | structure constants from **FSDEFS**, cited per field | the MFD, a UFD and the TUT decode | **done** |
 | **4** | read-only reader: directories, descriptors, links, files | `make oracle`: the space on a real pack accounts for exactly | **done** |
-| **5** | `itsfs check` — an independent checker | clean on a real pack; flags injected corruption | next |
+| **5** | `itsfs check` — an independent checker | clean on a real pack, agreeing with the reader block for block; names the right file on a damaged one | **done** |
+| **5a** | ITS's own salvager, against a pack we only READ | `NSALV` names the same blocks and files as `itsfs check`, at two damage sites | **done** |
 | **6** | manifest / verify, and an interactive shell | a manifest survives a repacking | |
 | **7** | writer core, then the mutation engine | every mutating flow ends `check` clean | |
 | **8** | native-tool interop: `NSALV`, then the monitor | ITS mounts and reads what we wrote | |
 | **9** | tapes: DUMP save sets, and `.tape` containers | round-trips compare bytes | |
+
+Phase 5a was added after the fact, and the lesson is worth keeping: the original
+phasing assumed native-tool evidence had to wait for a writer, because levels 1
+and 2 of the oracle both grade something we PRODUCED. They do not have to. A
+native tool can grade a pack we only read, and doing that at phase 5 rather than
+phase 8 cost one afternoon and produced the strongest result in the project.
 
 Phases 1–6 are entirely read-only and carry no risk to a reference pack.
 **Work on a copy regardless.**

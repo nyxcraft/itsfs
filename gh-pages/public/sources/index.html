@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -87,7 +87,26 @@ this reader covers. See the version-drift entry in
 </tr>
 </tbody>
 </table>
-<p>and two more are named on the roadmap rather than used yet:</p>
+<p>one is not a source but a second opinion, and it is now used:</p>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>what it settled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/kshack/nsalv.261</code></td>
+<td>ITS's own salvager. Run against a pack rather than read for constants — see <a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>. Its <code>LTYPE</code> also settled the SIXBIT trap below.</td>
+</tr>
+<tr>
+<td><code>src/midas/midas.458</code></td>
+<td>that MIDAS's <code>'X</code> is SIXBIT, which is what makes <code>LTYPE</code> mean what it means</td>
+</tr>
+</tbody>
+</table>
+<p>and one is named on the roadmap rather than used yet:</p>
 <table>
 <thead>
 <tr>
@@ -96,10 +115,6 @@ this reader covers. See the version-drift entry in
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>src/system/salv.317</code>, <code>src/kshack/nsalv.*</code></td>
-<td>ITS's own salvager: the independent second opinion, phase 8</td>
-</tr>
 <tr>
 <td><code>src/system/dskdmp.217</code></td>
 <td>the standalone dumper and bootstrap: how a pack is written from outside the monitor</td>
@@ -141,6 +156,29 @@ are the ASCII codes. The bytes on the disk are SIXBIT — <strong>033 and 032</s
 taking the numbers at face value finds no separator anywhere, rendering every
 link as one run-on string. The same sentence gives space as <code>(0)</code>, which <em>is</em> the
 SIXBIT value. One sentence, two encodings.</p>
+<p>Found by dumping the bytes of a link that was already &quot;working&quot;, and settled
+empirically. <strong>ITS's own code then confirmed it</strong>, which is worth more than the
+measurement: <code>NSALV</code>'s link parser compares against character constants —</p>
+<pre><code>LTYPE:	MOVEI B,6
+LTYPE2:	IDPB Z,E		;Z accumulates the link.
+	ILDB A,N		;Get a byte.
+	JUMPE A,CPOPJ		;Not expecting zeros in the link.
+	CAIN A,':		;Quoting character?
+</code></pre>
+<p>— and MIDAS assembles <code>'X</code> as <strong>SIXBIT</strong>, not ASCII. From MIDAS's own source,
+<code>src/midas/midas.458</code>:</p>
+<pre><code>SQUOT9:	JSP F,QOTCON	;SIXBIT SYL
+	CAIGE A,40
+	 ETR ERRN6B	;NOT SIXBIT
+	CAIL A,140
+	 SUBI A,40	;CONVERT TO UPPER CASE
+	LSH T,6		;SHIFT OVER ACCUMULATED VALUE
+	ADDI T,-40(A)	;ADD IN SIXBIT FOR CHARACTER IN A
+</code></pre>
+<p><code>';</code> is therefore 073 − 040 = <strong>033</strong>, and <code>':</code> is 072 − 040 = <strong>032</strong>: exactly
+the bytes on the disk. So FSDEFS's comment and ITS's own code disagree about this
+encoding, and the code is right — which is the general lesson worth taking, not
+just this instance.</p>
 <p>This cost an afternoon here and is written up in <code>its.h</code> beside the constants, in
 <a href="../filesystem/index.html#links">the file system</a>, and in
 <a href="../validation/index.html#what-has-been-found-so-far">validation</a>.</p>

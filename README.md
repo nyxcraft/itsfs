@@ -3,17 +3,17 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–4 done — a complete read-only reader.** The word layer is
-> proven byte-for-byte against a real RP06 pack, the geometry layer finds the
-> master file directory by its own check word, and the reader lists directories,
-> decodes the run-length descriptors that are ITS's block maps, follows links and
-> extracts files. On a real pack the space accounts for **exactly**: every block
-> the files describe is a block the allocation table calls in use, and the blocks
-> it calls locked out are precisely the directories and the tables. Every field
-> offset is transcribed from `SYSTEM;FSDEFS 43` with a citation
-> ([sources](docs/sources.md)). There is **no writer**. See
-> [the roadmap](docs/roadmap.md), [validation](docs/validation.md) and
-> [PLAN.md](PLAN.md).
+> **Status: phases 0–5a done — a read-only reader, an independent checker, and
+> ITS's own salvager agreeing with it.** The word layer is proven byte-for-byte
+> against a real RP06 pack, the geometry layer finds the master file directory by
+> its own check word, and the reader lists directories, decodes the run-length
+> descriptors that are ITS's block maps, follows links and extracts files.
+> `itsfs check` walks the same pack **sharing no code with the reader**, and
+> **`NSALV` — MIT's own salvager, booted from tape — names exactly the same
+> damaged blocks and the same files.** Every field offset is transcribed from
+> `SYSTEM;FSDEFS 43` with a citation ([sources](docs/sources.md)). There is
+> **no writer**. See [the roadmap](docs/roadmap.md),
+> [validation](docs/validation.md) and [PLAN.md](PLAN.md).
 
 ```console
 $ itsfs info rp0.dsk
@@ -74,6 +74,7 @@ the design rather than fitting inside it:
 | `itsfs cat` | print a file as text |
 | `itsfs get` | copy a file out to the host — text, or `-w` for its 36-bit words |
 | `itsfs free` | what the TUT says: free, in use, locked out, and the reference counts |
+| `itsfs check` | check a pack — **shares no code with the reader** |
 
 Run any of them with no arguments for its own usage.
 
@@ -108,10 +109,11 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 81 checks
+$ make test             # the regression suite (sh + coreutils), 108 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
+$ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 ```
 
 ## What is proven, and what is only claimed
@@ -176,15 +178,64 @@ and the seven-bit extraction is right. It also found a real bug — `cat` was
 dropping NULs from the *middle* of a file, not just the padding at the end, which
 nothing the pack knows about itself could ever have caught.
 
-**Hostile input is bounded.** 81 checks in the suite, a third of them feeding the
+**Checked by something that shares no code with the reader.** `itsfs check`
+includes neither `structure.c` nor `itsgeom.c`'s conversion: it re-derives the
+block-to-sector arithmetic, the MFD-slot formula, the descriptor bytecode and
+the TUT from `its.h` and walks the pack itself. It compares the allocation table
+against the files **per block and as a count**, because the TUT is a reference
+count rather than a bitmap, and it separates the four ways they can disagree — a
+block a file holds that the table calls free loses data, a block marked in use
+that no file holds only loses space, and the checker says which:
+
+```console
+$ itsfs check rp0.dsk
+no problems found (7 notes)
+
+$ itsfs check damaged.dsk          # one TUT word cleared
+  block 19992 is claimed by C;PHASE ARGS, and the TUT calls it FREE
+  block 19993 is claimed by MAINT;DEKAG SAV, and the TUT calls it FREE
+  ...
+11 problems, 7 notes
+```
+
+The seven notes are links pointing at files that are not there, on a pack that
+is otherwise perfect. That is an ordinary state of a live system and not damage,
+so it is counted, listed under `-v`, and never changes the exit status.
+
+**And ITS's own salvager agrees with it.** `NSALV` was written at MIT in the
+1980s, boots standalone from a tape, and rebuilds the allocation table from the
+directories. Handed the same damaged pack, it names the same eleven blocks and
+the same eleven files:
+
+```console
+$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+   itsfs check names 11, NSALV names 11
+  ok   IDENTICAL: the same 11 blocks, each held by the same file
+
+       19992 C;PHASE ARGS
+       19993 MAINT;DEKAG SAV
+       19994 EMACS;EINIT :EJ
+       ...
+two checkers with nothing in common but the disk, agreeing block for block
+```
+
+This is the check that closes the gap `itsfs check` cannot: both of *our* readers
+take their constants from `its.h` and inherit any misreading in it, while `NSALV`
+predates this project by forty years. Where it agrees, the agreement is about the
+format rather than about our reading of it. It also needs no writer, which is why
+it runs now rather than in phase 8 — a pack this project has only read is enough
+to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
+
+**Hostile input is bounded.** 108 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
 it did not bound first.
 
-**What is NOT proven.** There is no writer, so nothing here has been graded by
-ITS itself; `NSALV`, ITS's own salvager, has never been pointed at anything this
-produced; no ITS magtape has been read, which is why `core` and `dbd9` are
+**What is NOT proven.** There is no writer, so nothing this project *produced*
+has ever been graded by ITS — `NSALV` has checked its reading of a pack, which is
+a different claim. It was also asked about only one kind of damage, a cleared TUT
+word. No ITS magtape has been read, which is why `core` and `dbd9` are
 `corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
 and the reference pack is one built from source in 2026, not an artifact
 recovered from MIT. Each of those is a phase on [the roadmap](docs/roadmap.md),

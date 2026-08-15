@@ -1,0 +1,158 @@
+#!/usr/bin/expect -f
+#
+# nsalv.exp -- run NSALV, ITS's own salvager, over a pack.
+#
+# This is the second opinion that is not ours.  NSALV boots standalone from a
+# tape, rebuilds the allocation table from the directories, compares it with the
+# one on the pack, and offers to write its version.  Everything it knows about
+# this format it got from MIT in the 1980s; everything `itsfs check` knows it got
+# from reading FSDEFS in 2026.  They have the disk in common and nothing else.
+#
+# Driven by tests/nsalv.sh, which is where the comparison happens.  Environment:
+#
+#   NSALV_PDP10   the emulator (Open SIMH's pdp10, built with ITS support)
+#   NSALV_TAPE    the salvager tape, out/<emulator>/salv.tape in the ITS tree
+#   NSALV_IMAGE   THE PACK -- A COPY.  The salvager writes to it if it decides to.
+#   NSALV_LOG     where to put the console transcript
+#
+# IT ANSWERS "NO" TO EVERY OFFER TO WRITE.  The point is to find out what ITS
+# thinks, not to have ITS repair anything: a salvager that rewrote the pack would
+# destroy the evidence of what was wrong with it.  The one thing it cannot
+# decline is the TUT rebuild NSALV does in core before comparing, which is
+# exactly the computation being compared.
+#
+# THE SLEEPS ARE NOT DECORATION.  Answering the first question the instant it
+# appears makes the RH11 report the drive offline ("Error 1 = (40001) ILL-FUNC
+# UNSAFE") and the run is lost; the ITS build's own scripts sleep in the same
+# places.
+
+set pdp10 $env(NSALV_PDP10)
+set tape  $env(NSALV_TAPE)
+set image $env(NSALV_IMAGE)
+set log   $env(NSALV_LOG)
+set esc   "\034"
+
+set timeout 1800
+log_file -noappend $log
+
+# A one-off SIMH init file, so the tape and the pack are this run's.
+set ini "$image.ini"
+set f [open $ini w]
+puts $f "set console wru=034"
+puts $f "set cpu its"
+puts $f "set tim y2k"
+puts $f "at tu1 $tape"
+puts $f "set rp0 rp06"
+puts $f "at rp0 $image"
+close $f
+
+spawn $pdp10 $ini
+expect {
+	"sim>" {}
+	timeout { puts "\nNSALV: the emulator never reached its prompt"; exit 2 }
+}
+
+send "b tu1\r"
+expect {
+	"MTBOOT" {}
+	timeout { puts "\nNSALV: the salvager tape did not boot"; exit 2 }
+}
+sleep 2
+
+# NSALV IS RUN AT ITS DEFAULT NOISE LEVEL, WHICH IS SILENT ON SUCCESS.
+#
+# Its NOISE flag can be set from DDT -- `NOISE/ -1` -- and then it announces
+# every check.  It also dumps the RH11 controller status after EVERY disk
+# transfer and stops to ask whether you want the UNIBUS registers as well, which
+# over a 500-block walk is thousands of lines and a blocked script.  There is no
+# summary-only setting: `SKIPE NOISE` guards both.
+#
+# So silence is what a clean pack produces, and silence on its own is not
+# evidence -- it is indistinguishable from the salvager never running.  What
+# makes it evidence is the DAMAGED run beside it: tests/nsalv.sh does both, and
+# the damaged one has to make NSALV speak.  That is the same rule the test suite
+# follows for its own checks.
+send "chkr\033g"
+
+expect {
+	"Active unit numbers?" {}
+	timeout { puts "\nNSALV: CHKR never started"; exit 2 }
+}
+sleep 1
+send "0\r"
+
+expect {
+	"Use MFD from unit:" {}
+	"is losing" { puts "\nNSALV: the drive went offline -- see the log"; exit 2 }
+	timeout { puts "\nNSALV: no MFD question"; exit 2 }
+}
+sleep 1
+send "0"
+
+expect {
+	-re "Read all blocks of all files\\?"     { sleep 1; send "n" }
+	-re "Check files for clobbered blocks\\?" { sleep 1; send "n" }
+	timeout { puts "\nNSALV: no read-all-blocks question"; exit 2 }
+}
+
+expect {
+	"Get user dirs from unit:" {}
+	timeout { puts "\nNSALV: no user-dirs question"; exit 2 }
+}
+sleep 1
+send "0"
+
+# And then it salvages.  Three ways out, and the script has to survive all of
+# them, because which one happens IS the result:
+#
+#   "Done Salvaging N user directories."   nothing was wrong
+#   "TUT #0 ..." / "need updating - Write" it disagrees with the pack
+#   "Tracking down shared blocks."         two files hold one block
+#
+set verdict "unknown"
+expect {
+	-re "Done Salvaging *(\[0-9\]+)\. user directories" {
+		set verdict "clean: $expect_out(1,string) directories"
+		exp_continue
+	}
+	-re "Print\\?" {
+		set verdict "disagrees with the pack"
+		sleep 1
+		send "y"
+		exp_continue
+	}
+	-re "need updating - Write" {
+		# NO.  See the header: we are asking what it thinks, not asking
+		# it to repair anything.
+		set verdict "disagrees with the pack"
+		sleep 1
+		send "n"
+		exp_continue
+	}
+	-re "Tracking down shared blocks" {
+		set verdict "found shared blocks"
+		exp_continue
+	}
+	-re "Do you want to see all the UNIBUS registers" {
+		# Only asked after a controller error.  No -- the log already
+		# has the drive status, which is the part worth keeping.
+		sleep 1
+		send "n"
+		exp_continue
+	}
+	-re "\r\nDDT" {
+		# Back at the debugger: the salvager has finished.
+	}
+	timeout {
+		puts "\nNSALV: the salvager did not finish"
+		exit 2
+	}
+}
+
+puts "\nNSALV VERDICT: $verdict"
+sleep 2
+send $esc
+expect "sim>"
+send "q\r"
+expect eof
+exit 0
