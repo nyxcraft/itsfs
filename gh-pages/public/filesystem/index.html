@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The file system | itsfs</title>
+  <meta name="description" content="The format itself: what is known, how it was established, and — at the end — a register of what is still not known.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">The file system</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#vocabulary">Vocabulary</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-master-file-directory">The master file directory</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-user-file-directory">A user file directory</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-name-block">A name block</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#descriptors-a-file-s-block-list-is-a-program">Descriptors — a file&#x27;s block list is a program</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#links">Links</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-tut">The TUT</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#reading-a-file">Reading a file</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#gap-register">Gap register</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>The file system</h1>
+          <p class="docs-article__summary">The format itself: what is known, how it was established, and — at the end — a register of what is still not known.</p>
+          <p class="docs-article__source">The ITS file system</p>
+        </header>
+        <div class="prose">
+<p>The format itself: what is known, how it was established, and — at the end — a
+register of what is still not known.</p>
+<p>Every offset named here is in <a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> with its ITS symbol and
+its evidence marker. This document is the prose; that file is the transcription.</p>
+<h2 id="vocabulary">Vocabulary</h2>
+<table>
+<thead>
+<tr>
+<th>ITS calls it</th>
+<th>it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a <strong>track</strong></td>
+<td>a block. <code>disk.1228</code>: <code>TUT   TRACK (BLOCK) UTILIZATION TABLE</code></td>
+</tr>
+<tr>
+<td>a <strong>block</strong></td>
+<td>8 sectors, 1024 words, 2000 octal words</td>
+</tr>
+<tr>
+<td>the <strong>MFD</strong></td>
+<td>the master file directory: one block listing every user directory</td>
+</tr>
+<tr>
+<td>a <strong>UFD</strong></td>
+<td>a user file directory: one block, one per directory</td>
+</tr>
+<tr>
+<td>a <strong>descriptor</strong></td>
+<td>a file's block list, run-length coded in six-bit bytes</td>
+</tr>
+<tr>
+<td>the <strong>TUT</strong></td>
+<td>the allocation table: three bits per block of the pack</td>
+</tr>
+<tr>
+<td>a <strong>name block</strong></td>
+<td>a directory entry: five words</td>
+</tr>
+</tbody>
+</table>
+<p>A file is <code>DIR;FN1 FN2</code> — three SIXBIT names of at most six characters. There is
+no extension in the DEC sense (<code>FN2</code> is used like one by convention and is not
+one), and there is no nesting: the path depth is exactly one.</p>
+<h2 id="the-master-file-directory">The master file directory</h2>
+<p>One block, at <code>NBLKS/2-1</code> — the middle of the file area, which is a seek-time
+decision from when that mattered a great deal.</p>
+<pre><code>word 0  MDNUM    an ascending directory number
+     1  MDNAMP   where the name area starts
+     2  MDYEAR   the current year
+     3  MPDOFF   the de-Coriolis clock offset
+     4  MPDWDK   preferred writing disk
+     5  MDCHK    SIXBIT &quot;M.F.D.&quot;, and it must be
+     6  MDNUDS   how many directories this MFD has room for
+</code></pre>
+<p>From <code>MDNAMP</code> to the end of the block are two-word entries: a SIXBIT directory
+name, and a zero. (FSDEFS notes that the second word being zero is depended on by
+a &quot;kludge&quot; in <code>DECUUO</code>, and asks to be told before anyone changes it.)</p>
+<p><strong>There are no pointers.</strong> The <em>position</em> of an entry is the address of the
+directory it names:</p>
+<pre><code>block = (A - 2000 + LMNBLK*NUDSL) / 2
+</code></pre>
+<p>with <code>A</code> the word index of the entry, 2000 octal the block size, <code>LMNBLK</code> 2 and
+<code>NUDSL</code> the value in <code>MDNUDS</code>. <code>disk.1228</code> does it in two instructions:</p>
+<pre><code>QFL2:	SUBI J,2000-LMNBLK*NUDSL	;J &lt;= TRACK ADDR OF USER DIR
+	LSH J,-1
+</code></pre>
+<p>So the directories occupy blocks 0 through <code>NUDSL-1</code> at the very start of the
+pack, and the name area is filled downward from the end of the MFD block: the
+last slot is the highest-numbered directory. On the reference pack <code>MDNAMP</code> is
+1022 octal (530), <code>MDNUDS</code> is 500, and 247 directories exist in the room for 500.</p>
+<p>The MFD is a directory of directories only. It has no descriptors and no files —
+but there is a directory <em>named</em> <code>.</code> (block 499), which is where the system's own
+files live.</p>
+<h2 id="a-user-file-directory">A user file directory</h2>
+<p>One block, in the block the arithmetic above gives.</p>
+<pre><code>word 0  UDESCP   free pointer into the descriptor area
+     1  UDNAMP   where the name area starts
+     2  UDNAME   the directory's own name, for checking
+     3  UDBLKS   lh: space allocated;  rh: blocks used
+     4  UDALLO   lh: disk number;  rh: allocation
+    11  UDDESC   the first word a descriptor may occupy
+</code></pre>
+<p>and then <strong>two areas growing towards each other</strong>: descriptor bytes up from word
+11, five-word name blocks down from the end of the block, with <code>UDNAMP</code> marking
+where the names currently start.</p>
+<p><strong>A directory is one block and that is the whole capacity.</strong> No growth, no
+chaining, no continuation. 1013 words hold both areas, and the directory is full
+when they meet. <code>t10fs</code> spends real effort growing a TOPS-10 UFD by a cluster and
+matching DEC's convention for it; there is nothing here to match.</p>
+<p><code>UDBLKS</code>'s right half is a running total ITS maintains as files are written, and
+it is the single most useful number on the pack for grading a reader: it is
+computed by the monitor, stored separately from the descriptors, and can be
+compared against what the descriptors decode to. On the reference pack all 247
+directories agree exactly.</p>
+<h2 id="a-name-block">A name block</h2>
+<p>Five words, and every one of them is packed.</p>
+<pre><code>word 0  UNFN1    first name, SIXBIT
+     1  UNFN2    second name, SIXBIT
+     2  UNRNDM   &quot;all kinds of random info&quot;
+     3  UNDATE   creation date and time
+     4  UNREF    reference date, author, byte size
+</code></pre>
+<p><code>UNRNDM</code> is where the work is. FSDEFS gives each field as a PDP-10 byte pointer,
+whose left half is <code>&lt;position,,size&gt;</code>:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>pointer</th>
+<th>bits</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UNDSCP</code></td>
+<td><code>1500,,</code></td>
+<td>0–12</td>
+<td>where this entry's descriptor starts</td>
+</tr>
+<tr>
+<td><code>UNPKN</code></td>
+<td><code>150500,,</code></td>
+<td>13–17</td>
+<td>pack number</td>
+</tr>
+<tr>
+<td><code>UNLNKB</code></td>
+<td><code>220100,,</code></td>
+<td>18</td>
+<td>this entry is a link</td>
+</tr>
+<tr>
+<td><code>UNWRDC</code></td>
+<td><code>301200,,</code></td>
+<td>24–33</td>
+<td>words in the last block, <strong>mod 2000 octal</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>UNWRDC</code> being modular is what makes a file's length computable: a file of <em>n</em>
+blocks has at least <code>(n-1)*1024</code> words, so a last block that is exactly full
+recording zero is unambiguous.</p>
+<p><code>UNDATE</code> carries the year less 1900, the month and the day in its left half and a
+&quot;compacted time&quot; in its right. The dates decode: files on the reference pack are
+dated 1985 and 1986 where they came off MIT tapes, and 2026 where the build
+wrote them.</p>
+<h2 id="descriptors-a-file-s-block-list-is-a-program">Descriptors — a file's block list is a program</h2>
+<p><code>UNDSCP</code> is an offset <strong>in six-bit bytes from word <code>UDDESC</code></strong> of the directory
+block — not from word 0. That distinction is worth a paragraph because getting it
+wrong is silent: 66 bytes early, in a well-formed directory, is zero, and zero
+means &quot;end of description&quot;, so every file appears to be empty and nothing
+complains.</p>
+<p>The bytecode, with <code>B</code> the current block number, undefined until loaded:</p>
+<table>
+<thead>
+<tr>
+<th>byte</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>end of the description</td>
+</tr>
+<tr>
+<td><code>1</code>–<code>UDTKMX</code> (12)</td>
+<td>take N blocks: <code>B</code> … <code>B+N-1</code>, then <code>B += N</code></td>
+</tr>
+<tr>
+<td><code>13</code>–<code>30</code></td>
+<td>skip <code>N-UDTKMX</code> blocks and take one</td>
+</tr>
+<tr>
+<td><code>UDWPH</code> (31)</td>
+<td>write place holder: a no-op</td>
+</tr>
+<tr>
+<td><code>040</code>–<code>077</code></td>
+<td>load address: <code>B = (N&amp;037)&lt;&lt;12 | N2&lt;&lt;6 | N3</code>, take <code>B</code>, <code>B += 1</code></td>
+</tr>
+</tbody>
+</table>
+<p>A load address is three bytes and carries <strong>17 bits</strong> of block number — 131,072
+blocks, against an RP07's 108,360. A zero-length file is <code>UDWPH</code> then <code>0</code>, and a
+legal description must load an address before it may use anything else.</p>
+<p>Two things FSDEFS says about its own format that are worth repeating:</p>
+<ul>
+<li>The skip codes have been unreachable for years: <em>&quot;ITS has been broken for years
+such that it never uses this UFD descriptor code!&quot;</em> They are implemented
+anyway. A reader's job is to read what is there rather than what the writer
+meant.</li>
+<li>The &quot;funny&quot; bit that used to sit in a load address was removed on 19 August
+1990 to make room for RP07 block numbers, and FSDEFS says outright that any
+program interpreting descriptors <em>&quot;needs to be fixed to not mask that bit out
+(as most of them currently do)&quot;</em>. Nothing here masks it.</li>
+</ul>
+<h2 id="links">Links</h2>
+<p>The same <code>UNDSCP</code> field, with the link bit set, points at the target's name
+instead of a block list: three SIXBIT components — directory, first name, second
+name — ended by a zero byte. A component shorter than six characters is ended by
+<code>;</code>, and <code>;</code>, <code>:</code> and space are each quoted by a preceding <code>:</code>.</p>
+<p>FSDEFS's own examples are the test cases, and it observes that the encoding
+admits a lot of illegal or wasteful spellings of the same name, &quot;which is
+surprising since somebody was clearly trying to compress them into as few bytes
+as possible&quot;.</p>
+<p><strong>The trap:</strong> FSDEFS writes those characters as <code>&quot;;&quot; (73)</code> and <code>&quot;:&quot; (72)</code>, which
+are their <strong>ASCII</strong> codes, while the bytes on the disk are <strong>SIXBIT</strong> — 033 and
+032. Taking the numbers at face value finds no separator anywhere and renders
+every link as one run-on string. The real bytes, from a real pack:</p>
+<pre><code>16 33 40 33 44 44 64 00      &quot;.;@;DDT&quot;  -&gt;  the file  .;@ DDT
+</code></pre>
+<p>Note that the same sentence in FSDEFS gives space as <code>(0)</code>, which <em>is</em> its SIXBIT
+value. One sentence, two encodings.</p>
+<h2 id="the-tut">The TUT</h2>
+<p><code>NTUTBL</code> blocks ending just below the MFD — so the two things a salvager needs
+first are next to each other.</p>
+<pre><code>word 0  QPKNUM   pack number
+     1  QPAKID   SIXBIT pack ID
+     2  QTUTP    free-space search pointer
+     3  QSWAPA   first block of the non-swapping area
+     4  QFRSTB   first block mapped
+     5  QLASTB   last block mapped
+     6  QTRSRV   -1: only allocated directories may have files here;
+                 otherwise the SIXBIT name of a &quot;secondary&quot; pack
+    20  LTIBLK   (octal) where the map itself begins
+</code></pre>
+<p>Then <strong>three bits per block</strong>, twelve to a word, most significant first:</p>
+<table>
+<thead>
+<tr>
+<th>value</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>free</td>
+</tr>
+<tr>
+<td>1 … <code>TUTMNY</code>-1 (5)</td>
+<td>that many references</td>
+</tr>
+<tr>
+<td><code>TUTMNY</code> (6)</td>
+<td>many or more references</td>
+</tr>
+<tr>
+<td><code>TUTLK</code> (7)</td>
+<td>locked out</td>
+</tr>
+</tbody>
+</table>
+<p>It is a <strong>reference count, not a bitmap</strong>, which is a different thing to check:
+the question is not &quot;is this block allocated&quot; but &quot;is it referenced as many times
+as something says&quot;. FSDEFS notes the entry used to be four bits (<code>;9/5/79 - tut format changed!</code>), which is one of the two dated format changes in the file.</p>
+<p>On the reference pack the counts are 0, 1 and 7 and nothing else — no block is
+referenced twice — and the 505 locked-out blocks are exactly the 500 UFD blocks,
+the MFD and the four TUT blocks.</p>
+<h2 id="reading-a-file">Reading a file</h2>
+<p>Decode the descriptor to a block list; the length in words is
+<code>(n-1) * 1024 + (UNWRDC ? UNWRDC : 1024)</code>. Text is five seven-bit characters to a
+word, most significant first, with bit 35 left over. ITS text uses CRLF line
+endings; <code>itsfs cat</code> does not translate them, or anything else.</p>
+<hr />
+<h2 id="gap-register">Gap register</h2>
+<p>What is not known. Each is <code>[s]</code> in <code>its.h</code>, and none of it is guessed at in code.</p>
+<p><strong><code>UNTIM</code>, the compacted creation time.</strong> 18 bits. The values seen are too large
+for seconds since midnight (132,288 on one file); half-seconds fits every sample,
+and that is a guess. <code>itsfs</code> prints the raw number and no time of day.</p>
+<p><strong><code>UNBYTE</code>, byte size and odd-byte count.</strong> FSDEFS gives four encodings by range:</p>
+<pre><code>400+100xS+C    S=1 to 3      C=0 to 35.
+200+20xS+C     S=4 to 7      C=0 to 8
+44+4xS+C       S=8 to 18.    C=0 to 3
+44-S           S=19. to 36.  C=0
+</code></pre>
+<p>with <code>UNBYTE==0</code> meaning 36-bit bytes, and the note that &quot;old files have
+UNBYTE=0&quot;. Every file on the reference pack has zero, so three of the four
+encodings have never been exercised and the field is read but not decoded.</p>
+<p><strong><code>UNDUMP</code>.</strong> FSDEFS gives it as <code>400000</code>, which does not sit where the other
+flags in that word sit. Not implemented, and not guessed at.</p>
+<p><strong>The width of the flag field.</strong> <code>UNLINK</code>, <code>UNREAP</code>, <code>UNWRIT</code>, <code>UNMARK</code> and
+<code>UNCDEL</code> are given as values relative to the bit <code>UNLNKB</code> addresses. Their width
+is not stated anywhere; six bits is what the values need and does not collide
+with <code>UNWRDC</code> above them. Deduced, and marked as deduced.</p>
+<p><strong><code>UNAUTH</code>, the author.</strong> &quot;MFD index of author, all 1 =&gt; no directory&quot;. Every
+entry on the reference pack is all ones, so the index has never been resolved
+against the MFD and the direction of the indexing is untested.</p>
+<p><strong>Multi-pack file systems.</strong> <code>UNPKN</code> is a pack number in every name block, and
+<code>QTRSRV</code> names a secondary pack. Clearly provided for; entirely unexercised here.
+<code>t10fs</code> found two real bugs the first time it read a genuinely multi-unit
+structure, and there is no reason to expect better.</p>
+<p><strong>Version drift.</strong> <code>FSDEFS 43</code> is one version of one file, carrying two dated
+format changes in its own comments. Which ITS releases this reader covers is
+unestablished. <code>t10fs</code> settled the equivalent question by diffing four monitor
+releases and reporting that 82 of 84 symbols were identical; the same exercise is
+owed here.</p>
+<p><strong>The <code>DM</code> disks.</strong> FSDEFS's removed &quot;funny&quot; bit was conditional on <code>DMDSK</code>, a
+disk type this project has never seen. Whether such a pack would read is unknown.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Handoff | itsfs</title>
+  <meta name="description" content="For whoever picks this up next, including me in six months.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Handoff</span>
+    </nav>
+
+    <!-- Simple full-width page (no left rail, no section viewer) -- used for the long
+         reference pages that read as one continuous document. -->
+    <main id="main-content" class="page-main" tabindex="-1">
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Handoff</h1>
+          <p class="docs-article__summary">For whoever picks this up next, including me in six months.</p>
+        </header>
+        <div class="prose">
+<p>For whoever picks this up next, including me in six months.</p>
+<h2 id="what-this-is">What this is</h2>
+<p>A read-only toolkit for the ITS file system, third in a family with
+<a href="https://github.com/nyxcraft/s5fs"><code>s5fs</code></a> (UNIX V7/2.xBSD) and
+<a href="https://github.com/nyxcraft/t10fs"><code>t10fs</code></a> (TOPS-10). Same architecture, same
+discipline, different file system — and ITS is genuinely different, not TOPS-10
+with other field names. See <a href="../plan/index.html#5-what-must-be-designed-fresh">PLAN.md §5</a>
+for the four places that matter.</p>
+<p>Phases 0–4 are done: word layer, geometry, cited constants, and a complete
+read-only reader. <strong>There is no writer.</strong></p>
+<h2 id="read-these-in-this-order">Read these, in this order</h2>
+<ol>
+<li><a href="../plan/index.html">PLAN.md</a> — written before any code, and still accurate.</li>
+<li><a href="../geometry/index.html">docs/geometry.md</a> — the one layer that is not in either
+sibling. If you read nothing else, read this: block numbers are not offsets,
+and being wrong about it is not subtle.</li>
+<li><a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> — the transcription. Every constant, its ITS symbol,
+its base, and whether it has been seen to work.</li>
+<li><a href="../filesystem/index.html">docs/filesystem.md</a> — the format in prose, with the gap
+register at the end.</li>
+<li><a href="../validation/index.html">docs/validation.md</a> — what is actually established, and
+what is not.</li>
+</ol>
+<h2 id="the-shape-of-the-tree">The shape of the tree</h2>
+<pre><code>src/itspack.[ch]    36-bit words in 8-bit bytes.  Four packings.
+src/itsgeom.[ch]    where a block is.  The drive table.
+src/itstext.[ch]    SIXBIT, seven-bit ASCII, six-bit bytes.
+src/image.[ch]      an image, addressed in words and blocks.
+src/its.h           every on-disk offset, cited to SYSTEM;FSDEFS 43.
+src/structure.[ch]  MFD, UFD, name blocks, descriptors, links, TUT.
+src/cmd_*.c         the front ends.  cmd_dump.c depends on nothing above image.c.
+tests/run.sh        79 checks.  Builds its own ITS file system with dd.
+tests/accounting.sh the oracle's real payload: does the space add up?
+tests/fuzz.py       one random word damaged per iteration, every command run.
+</code></pre>
+<h2 id="things-not-to-do">Things not to do</h2>
+<p>Each of these has already cost somebody time, here or in a sibling.</p>
+<p><strong>Do not treat a block number as an offset.</strong> <code>blk * 1024</code> words is wrong from the
+second cylinder onward. There is exactly one conversion, <code>its_blk_sector()</code>.</p>
+<p><strong>Do not read <code>UNDSCP</code> from word 0 of the directory.</strong> It counts six-bit bytes
+from <code>UDDESC</code>, word 11. Getting this wrong is <em>silent</em>: it lands on zero, zero
+means &quot;end of description&quot;, and every file decodes to zero blocks with no error.
+The only thing that catches it is <code>UDBLKS</code>.</p>
+<p><strong>Do not believe FSDEFS about the base of a character.</strong> It says the link
+separator is <code>&quot;;&quot; (73)</code>; the disk holds 033. It gives ASCII codes for two
+characters and the SIXBIT value for a third, in one sentence.</p>
+<p><strong>Do not add a constant to <code>its.h</code> without a citation and a marker.</strong> <code>[v]</code> means
+you have watched it decode correctly on a real pack. <code>[s]</code> means you have only
+read it. Writing <code>[v]</code> because you are confident is how the markers stop meaning
+anything.</p>
+<p><strong>Do not case-fold or truncate a name.</strong> SIXBIT has no lower case. Refusing is
+correct; <code>HELLO</code> and <code>hello</code> are not the same file, and silently making them so
+produced duplicate directory entries in <code>s5fs</code> on an image its checker called
+clean.</p>
+<p><strong>Do not let the test suite build its fixtures with a future writer.</strong> The suite
+pokes words in with <code>dd</code> on purpose. A fixture built by the writer asks the
+reader to agree with the writer rather than with ITS.</p>
+<p><strong>Do not assume a second reference to a block is corruption.</strong> The TUT is a
+reference count. On the reference pack nothing is referenced twice, which means
+nothing here knows what a legitimate second reference looks like.</p>
+<h2 id="known-gaps-stated-plainly">Known gaps, stated plainly</h2>
+<ul>
+<li>No writer, therefore no level-1 or level-2 evidence of any kind.</li>
+<li><code>NSALV</code>, ITS's own salvager, has never been pointed at anything this produced.</li>
+<li>One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
+RM03, no multi-pack file system, no artifact recovered from MIT.</li>
+<li>No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are <code>corroborated</code>
+here and <code>confirmed</code> in <code>t10fs</code>.</li>
+<li><code>UNTIM</code>'s unit, <code>UNBYTE</code>'s other three encodings, <code>UNDUMP</code>'s position and the
+flag field's width are all unknown. See
+<a href="../filesystem/index.html#gap-register">the gap register</a>.</li>
+<li>The ITS checkout used is shallow, so this project cannot say when <code>FSDEFS</code>
+itself last changed — and therefore cannot say which ITS releases it covers.</li>
+</ul>
+<h2 id="how-to-get-a-pack-to-test-against">How to get a pack to test against</h2>
+<pre><code class="language-console">$ git clone https://github.com/PDP-10/its
+$ cd its &amp;&amp; make EMULATOR=simh      # or klh10, or pdp10-ka
+</code></pre>
+<p>which leaves an RP06 at <code>out/simh/rp0.dsk</code>. Then:</p>
+<pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
+</code></pre>
+<p><strong>Work on a copy.</strong> <code>make oracle</code> makes one itself; <code>repack</code> opens its input
+read-only either way; the rule stands regardless, because the first thing a
+writer will do is break it.</p>
+<h2 id="if-you-are-starting-phase-5">If you are starting phase 5</h2>
+<p>The checker is next, and the rule is that it shares no code with the reader —
+which means it re-derives everything from <code>its.h</code> and calls neither
+<code>structure.c</code> nor <code>image.c</code>'s block helpers.</p>
+<p>The three checks in <code>tests/accounting.sh</code> are the specification for its first
+version: they already pass on a real pack, in shell, so a <code>check</code> that does them
+in C has something to be graded against on day one. Then extend it to per-block
+reference counts, which is the thing a shell script cannot do.</p>
+<p>Start by reading <code>src/system/salv.317</code> and <code>src/kshack/nsalv.*</code> in the ITS tree.
+Not to copy — to find out what ITS itself thought was worth checking, which is a
+better list than one derived from the format alone.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roadmap | itsfs</title>
+  <meta name="description" content="Where each phase ends, and what has to be true before it can be called done. PLAN.md has the same table; this is the detail.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Roadmap</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#done">Done</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-0-the-repository">Phase 0 — the repository</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-1-the-word-layer">Phase 1 — the word layer</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-2-geometry">Phase 2 — geometry</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-3-the-constants">Phase 3 — the constants</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-4-the-reader">Phase 4 — the reader</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-5-itsfs-check">Phase 5 — `itsfs check`</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-7-the-writer">Phase 7 — the writer</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop">Phase 8 — native-tool interop</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-9-tapes">Phase 9 — tapes</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#not-on-the-roadmap">Not on the roadmap</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#open-questions-that-could-reorder-this">Open questions that could reorder this</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Roadmap</h1>
+          <p class="docs-article__summary">Where each phase ends, and what has to be true before it can be called done. PLAN.md has the same table; this is the detail.</p>
+          <p class="docs-article__source">Roadmap</p>
+        </header>
+        <div class="prose">
+<p>Where each phase ends, and what has to be true before it can be called done.
+<a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
+<p>Phases 0–4 are done. What follows them is written here so that the next person
+does not have to re-derive the order — and the order matters, because each phase
+is validated by something the previous one built.</p>
+<hr />
+<h2 id="done">Done</h2>
+<h3 id="phase-0-the-repository">Phase 0 — the repository</h3>
+<p><code>.clang-format</code>, CI, the docs site, a <code>make test</code> skeleton. Lifted from <code>t10fs</code>
+and stripped, which is the correct amount of originality for a build system.</p>
+<p><strong>Ended by:</strong> CI green.</p>
+<h3 id="phase-1-the-word-layer">Phase 1 — the word layer</h3>
+<p>Four packings behind one group-based interface, and SIXBIT one layer above it.</p>
+<p><strong>Ended by:</strong> every word of a real 300 MB pack round-tripping byte-for-byte,
+including through a packing with a different stride and one that shares a byte
+between two words.</p>
+<h3 id="phase-2-geometry">Phase 2 — geometry</h3>
+<p>The layer neither sibling project needs: block numbers are cylinder-major and the
+blocks-per-cylinder division truncates.</p>
+<p><strong>Ended by:</strong> the MFD being found where the formula says it is, and identifying
+itself with its own check word. Also by <code>itsfs dump -s</code>, which addresses raw
+sectors and lets the two be compared.</p>
+<h3 id="phase-3-the-constants">Phase 3 — the constants</h3>
+<p><code>its.h</code>, transcribed from <code>SYSTEM;FSDEFS 43</code> with a citation and an evidence
+marker per field.</p>
+<p><strong>Ended by:</strong> the MFD, a UFD and the TUT all decoding into values that are sane
+in more than one way at once — dates in two plausible eras, names that match
+between the MFD and each UFD's own header.</p>
+<h3 id="phase-4-the-reader">Phase 4 — the reader</h3>
+<p>Directories, name blocks, the descriptor bytecode, links, file extraction, and
+the TUT.</p>
+<p><strong>Ended by:</strong> <code>tests/accounting.sh</code> — the space on a real pack accounting for
+exactly, three ways, against numbers this project did not compute. See
+<a href="../validation/index.html#level-3b--the-space-on-a-real-pack-accounts-for-exactly">validation</a>.</p>
+<hr />
+<h2 id="next">Next</h2>
+<h3 id="phase-5-itsfs-check">Phase 5 — <code>itsfs check</code></h3>
+<p>An independent checker: <strong>it must share no code with the reader</strong>. That rule is
+what makes a clean check evidence rather than the reader agreeing with itself,
+and it caught real bugs in both sibling projects.</p>
+<p>For ITS the checker's shape is different from either sibling's, because the TUT
+is a reference count rather than a bitmap or a chain. The job is:</p>
+<ul>
+<li>walk every directory, decode every descriptor, and <strong>count references per
+block</strong>, not merely mark them used;</li>
+<li>compare that count against the TUT's, per block, and report the three kinds of
+disagreement separately: a block files reference that the TUT calls free, a
+block the TUT calls used that no file references, and a count that differs;</li>
+<li>check that the locked-out set is exactly the directories and the tables;</li>
+<li>check each UFD's <code>UDBLKS</code> against its own descriptors;</li>
+<li>check that the two areas in each UFD have not overrun each other.</li>
+</ul>
+<p><strong>Ends when:</strong> it is clean on a real pack, and names the right block on a pack
+damaged on purpose — and when <code>tests/accounting.sh</code>'s three checks are things it
+does rather than things a shell script does.</p>
+<p>An honest limit to state now: <code>check</code> and the reader will share <code>its.h</code>, and both
+will inherit any misreading in it. <code>t10fs</code> documents the same limit and found its
+one real instance with the fuzzer rather than the second implementation. A second
+reading catches a wrong reading; it cannot catch what the source never says.</p>
+<h3 id="phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</h3>
+<p><code>manifest</code> fingerprints a pack — one line per file, with a checksum over <strong>words</strong>
+rather than bytes, so that a manifest taken from an <code>le64</code> image verifies against
+the same pack in <code>dbd9</code>. <code>verify</code> diffs a pack against one. A shell makes
+exploring a pack you do not trust a read-only activity by default.</p>
+<p><strong>Ends when:</strong> a manifest survives a repacking, and <code>diff</code> on two manifests is a
+useful description of what a monitor did to a pack while it was running.</p>
+<h3 id="phase-7-the-writer">Phase 7 — the writer</h3>
+<p>One file, one mutation path, every front end calling it. In order:
+<code>put</code>, <code>del</code>, <code>mkdir</code>, <code>mkfs</code>.</p>
+<p>Two ITS-specific things to get right, neither of which has an analogue in
+<code>t10fs</code>:</p>
+<ul>
+<li><strong>A directory is one block, so it can be full</strong>, and full is a refusal rather
+than an allocation problem. The failure mode is <code>directory full</code>, stated with
+the number it refused at, and the directory left exactly as it was.</li>
+<li><strong>The TUT is a reference count</strong>, so allocation is increment and free is
+decrement — and a block at <code>TUTMNY</code> (&quot;many or more&quot;) cannot be decremented
+correctly at all, which is a property of the format the writer has to have an
+answer for rather than discover.</li>
+</ul>
+<p><strong>Ends when:</strong> every mutating flow in the suite ends with <code>check</code> clean.</p>
+<h3 id="phase-8-native-tool-interop">Phase 8 — native-tool interop</h3>
+<p>The point of the whole exercise, and ITS makes it unusually approachable because
+it builds from source.</p>
+<ul>
+<li><strong><code>NSALV</code></strong> — ITS's own salvager, a standalone program that walks the file
+system and reports what is wrong with it. It is <code>DSKRAT</code>'s counterpart in
+<code>t10fs</code>, and <code>make prove</code> there is the template: hand it a pack we wrote, and a
+pack we damaged, and require it to agree with <code>itsfs check</code> about both.</li>
+<li><strong>The monitor</strong> — boot ITS on a pack we wrote to, and have it read the file, and
+copy it, and let us read the copy back.</li>
+<li><strong>A pack built from nothing</strong> — <code>mkfs</code>, then <code>DSKDMP</code> or the monitor booting on
+it.</li>
+</ul>
+<p><strong>Ends when:</strong> ITS reads what we wrote and <code>NSALV</code> finds nothing wrong with it.</p>
+<h3 id="phase-9-tapes">Phase 9 — tapes</h3>
+<p>The container (SIMH <code>.tap</code> framing, or ITS's own), and the archive above it (DUMP
+save sets, which <code>itstar</code> also reads). This is where <code>core</code> gets promoted from
+<code>corroborated</code> to <code>confirmed</code>, because it is where an ITS artifact stored in it
+finally gets decoded.</p>
+<p><strong>Ends when:</strong> a tape this project writes and a tape ITS wrote are the same
+records.</p>
+<hr />
+<h2 id="not-on-the-roadmap">Not on the roadmap</h2>
+<ul>
+<li><strong>Repair.</strong> A checker that can also fix things is two programs, and the second
+is written after the first is trusted.</li>
+<li><strong>FUSE, or any kind of mount.</strong> <code>tools/mldev</code> in the ITS tree mounts an ITS file
+system over the <em>network</em> protocol; that is a different problem and it is
+already solved.</li>
+<li><strong>DECtape.</strong></li>
+<li><strong>Anything that is not ITS.</strong></li>
+</ul>
+<h2 id="open-questions-that-could-reorder-this">Open questions that could reorder this</h2>
+<ul>
+<li><strong>A pack recovered from MIT</strong> would be worth more than any two phases here, and
+would immediately exercise <code>UNBYTE</code> encodings that nothing has written since the
+1980s. If one turns up, read it before writing anything.</li>
+<li><strong>A second <code>FSDEFS</code></strong> from another ITS release turns the version-span question
+from an open one into a measured one, and it is cheap: the diff is the whole
+method.</li>
+<li><strong>A multi-pack file system.</strong> <code>UNPKN</code> and <code>QTRSRV</code> are read and ignored today.
+<code>t10fs</code> found two real bugs the first time it met a genuinely multi-unit
+structure.</li>
+</ul>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

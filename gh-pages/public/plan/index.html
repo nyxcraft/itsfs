@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The plan | itsfs</title>
+  <meta name="description" content="A host-side toolkit for the ITS file system, in the shape of `s5fs` and `t10fs`: one dependency-free C99 binary, git-style subcommands, one mutation path, an independent checker, and a byte-fidelity correctness bar.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">The plan</span>
+    </nav>
+
+    <!-- Simple full-width page (no left rail, no section viewer) -- used for the long
+         reference pages that read as one continuous document. -->
+    <main id="main-content" class="page-main" tabindex="-1">
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>The plan</h1>
+          <p class="docs-article__summary">A host-side toolkit for the ITS file system, in the shape of `s5fs` and `t10fs`: one dependency-free C99 binary, git-style subcommands, one mutation path, an independent checker, and a byte-fidelity correctness bar.</p>
+        </header>
+        <div class="prose">
+<p>A host-side toolkit for the <strong>ITS file system</strong>, in the shape of
+<a href="https://github.com/nyxcraft/s5fs"><code>s5fs</code></a> and
+<a href="https://github.com/nyxcraft/t10fs"><code>t10fs</code></a>: one dependency-free C99 binary,
+git-style subcommands, one mutation path, an independent checker, and a
+byte-fidelity correctness bar.</p>
+<p>This is the planning document. It records what has already been <strong>measured on a
+real ITS pack</strong>, what is still assumption, what the two sibling projects give us
+for free, and — most importantly — the four places where ITS differs enough that
+copying <code>t10fs</code> would be a mistake.</p>
+<hr />
+<h2 id="1-the-name">1. The name</h2>
+<p><code>itsfs</code>. Short prefix + <code>fs</code>, matching <code>s5fs</code> and <code>t10fs</code>.</p>
+<p>ITS had no name for its file system; it was simply <em>the disk</em>, and the monitor
+source calls the pieces by their initials — MFD, UFD, TUT. There is no period
+short name to inherit, so this is a coinage in the same way <code>t10fs</code> is.</p>
+<p>The distinction from <code>t10fs</code> is not cosmetic. ITS and TOPS-10 ran on the same
+hardware, addressed the same drives, and share the 36-bit word and SIXBIT — and
+below that they have almost nothing in common. Directories, allocation, block
+addressing and file identity are different designs, not dialects.</p>
+<hr />
+<h2 id="2-what-is-already-confirmed">2. What is already confirmed</h2>
+<p>Not assumed — <strong>measured</strong>, against <code>~/its/out/simh/rp0.dsk</code>, an RP06 built and
+booted by the <a href="https://github.com/PDP-10/its">PDP-10/its</a> Makefile.</p>
+<table>
+<thead>
+<tr>
+<th>fact</th>
+<th>evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Words are <strong>36-bit</strong>, one per <strong>8-byte little-endian</strong> container</td>
+<td>all 39,641,600 words round-trip byte-for-byte; nothing on the pack sets a bit above 36</td>
+</tr>
+<tr>
+<td>A sector is <strong>128 words</strong>; an ITS <strong>block is 8 sectors = 1024 words</strong></td>
+<td><code>SECBLK==8</code>, and <code>UNWRDC</code> is the last block's word count <em>mod 2000 octal</em> = 1024</td>
+</tr>
+<tr>
+<td>Blocks are numbered <strong>within a cylinder</strong>, 47 to an RP06 cylinder</td>
+<td><code>NBLKSC==NHEDS*NSECS/SECBLK</code> = 47.5 <strong>truncated</strong>; four sectors of every cylinder are unreachable</td>
+</tr>
+<tr>
+<td>The <strong>MFD is at <code>NBLKS/2-1</code></strong> = block 19081</td>
+<td>word 5 of it is SIXBIT <code>M.F.D.</code>, which is exactly what <code>MDCHK</code> is for</td>
+</tr>
+<tr>
+<td>A directory's <strong>block is the position of its MFD entry</strong></td>
+<td><code>(A - 2000 + 2*NUDSL)/2</code>; 247 directories resolve, and each one's <code>UDNAME</code> matches the name in the MFD</td>
+</tr>
+<tr>
+<td>A <strong>UFD is one block</strong>: header, descriptors up from word 11, five-word name blocks down from the end</td>
+<td>reading it that way lists 3,000+ files whose names, dates and lengths are sane</td>
+</tr>
+<tr>
+<td>A file's blocks are a <strong>run-length program in six-bit bytes</strong></td>
+<td>decoding it gives, for every one of 247 directories, exactly the block count <code>UDBLKS</code> independently records</td>
+</tr>
+<tr>
+<td>The <strong>TUT is a 3-bit reference count per block</strong>, not a bitmap</td>
+<td>30,940 blocks in use — the same number the descriptors account for — and 505 locked out</td>
+</tr>
+<tr>
+<td>Those 505 are <strong>500 UFDs + 1 MFD + 4 TUT blocks</strong></td>
+<td><code>MDNUDS</code> says 500, <code>NTUTBL</code> says 4</td>
+</tr>
+</tbody>
+</table>
+<p>That is enough to have written the word layer, the geometry layer and a
+read-only reader — which is what exists today. See <a href="../validation/index.html">validation</a>.</p>
+<hr />
+<h2 id="3-what-is-still-assumption">3. What is still assumption</h2>
+<p>Everything below is read in the source and <strong>not yet exercised against a pack</strong>,
+or read and not understood. Each is marked <code>[s]</code> in <a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> and
+listed in the gap register in <a href="../filesystem/index.html">the file system</a>.</p>
+<ul>
+<li><strong><code>UNTIM</code></strong>, the &quot;compacted time of creation&quot;. 18 bits, and the values seen are
+too large for seconds since midnight. Half-seconds fits; that is a guess and is
+not implemented as anything but a raw number.</li>
+<li><strong><code>UNBYTE</code></strong>, the byte size and odd-byte count. FSDEFS gives four ranges with
+different encodings, and every file on the reference pack has zero (which means
+36-bit bytes), so nothing has ever exercised the other three.</li>
+<li><strong><code>UNDUMP</code></strong> — FSDEFS gives it as <code>400000</code>, which does not sit where the other
+flags in that word sit. Not implemented.</li>
+<li><strong>The width of the flag field</strong> holding <code>UNLINK</code>/<code>UNREAP</code>/<code>UNWRIT</code>/<code>UNMARK</code>/
+<code>UNCDEL</code>. Six bits is deduced from the values, not transcribed.</li>
+<li><strong><code>UNAUTH</code></strong>, &quot;MFD index of author&quot;. The reference pack has all-ones (no
+directory) everywhere, so the index has never been resolved to a name.</li>
+<li><strong>Multi-pack file systems.</strong> <code>UNPKN</code> is a pack number in every name block and
+<code>QTRSRV</code> names a &quot;secondary&quot; pack, so a file system spanning several drives is
+clearly provided for. One pack is all that has been read.</li>
+<li><strong>Version drift.</strong> <code>FSDEFS 43</code> is one version of one file. ITS ran from 1967 to
+1990 and the file itself is dated in two places (<code>9/5/79 - tut format changed!</code>
+and <code>8/19/90 - DM &quot;funny&quot; bit flushed</code>), so the format demonstrably moved.
+Establishing the span this covers is a research task, not a footnote — the same
+discipline <code>t10fs</code> applied across four monitor releases.</li>
+</ul>
+<p><strong>Do not extend <code>its.h</code> from this document.</strong> Extend it from the source, and cite
+the source per constant.</p>
+<hr />
+<h2 id="4-what-ports-over-unchanged">4. What ports over unchanged</h2>
+<p>Most of the value of the two siblings is architecture, and it transfers:</p>
+<ul>
+<li><strong>Exactly one mutation path</strong>, when there is one. One writer core, every
+front-end calling it. This is the rule that keeps front-ends from inventing
+subtly different file systems.</li>
+<li><strong>An independent checker.</strong> A checker sharing no logic with the reader is what
+makes &quot;clean&quot; evidence instead of a tautology. ITS has its own — <code>SALV</code>, and
+the KS10-era <code>NSALV</code> — which raises the bar further: there is a second opinion
+that is not ours.</li>
+<li><strong>Structure/encoding split.</strong> Field offsets in one header that knows nothing
+about encoding; encoding in one module that knows nothing about file systems.</li>
+<li><strong>The test discipline.</strong> Self-contained fixtures, <code>sh</code>+coreutils only, every
+mutating flow ending in a clean check, a regression test per bug <strong>verified to
+fail against the code before the fix</strong>, <code>make test-san</code> because an
+out-of-bounds read does not fault on a normal build, and a corruption fuzzer.</li>
+<li><strong>CI shape.</strong> gcc + clang + macOS + sanitizers, <code>-Werror</code>, and the docs site.</li>
+<li><strong>Front-end families.</strong> <code>ls/cat/get/put/cp/mv/rm</code>, a shell, a manifest/verify
+pair, analysis tools.</li>
+<li><strong>The evidence markers.</strong> <code>confirmed</code> / <code>corroborated</code> / <code>structural</code> /
+<code>unverified</code> on packings, <code>[v]</code> / <code>[s]</code> on fields. Both were lifted verbatim,
+and both immediately earned their place: <code>core</code> and <code>dbd9</code> are <code>corroborated</code>
+here where <code>t10fs</code> has them <code>confirmed</code>, because no <em>ITS</em> artifact in either
+packing has been read yet.</li>
+</ul>
+<p><code>.clang-format</code>, the workflow files and <code>gh-pages/</code> were lifted essentially
+as-is.</p>
+<hr />
+<h2 id="5-what-must-be-designed-fresh">5. What must be designed fresh</h2>
+<p>Four differences are deep enough that copying <code>t10fs</code> would produce something
+wrong. The first has no analogue in either sibling.</p>
+<h3 id="5-1-block-numbers-are-not-offsets-there-is-a-geometry-layer">5.1 Block numbers are not offsets — there is a geometry layer</h3>
+<p><code>t10fs</code> needs no such layer: a TOPS-10 block is <code>n * 128</code> words into the image
+and the pack's geometry is bookkeeping the monitor keeps but the addressing does
+not use.</p>
+<p>ITS numbers blocks <strong>within a cylinder</strong>:</p>
+<pre><code>NBLKSC == NHEDS * NSECS / SECBLK      ; MIDAS integer division
+</code></pre>
+<p>For an RP06 that is <code>19*20/8 = 47.5</code>, truncated to <strong>47</strong>. A cylinder holds 380
+sectors, ITS reaches 376, and <strong>four sectors per cylinder are addressable by the
+hardware and reachable by no block number</strong> — 3,260 sectors, 3.2 MB, on a 300 MB
+pack. On an RM03 it is six sectors per cylinder; on an RP07 the division is exact
+and there is no remainder at all.</p>
+<p>So there is a third layer between the packing and the structure, and it is not
+optional: linear block numbering puts the MFD 3,244 sectors from where it is.
+See <a href="https://github.com/nyxcraft/itsfs/blob/main/src/itsgeom.h"><code>src/itsgeom.h</code></a> and <a href="../geometry/index.html">docs/geometry.md</a>.</p>
+<h3 id="5-2-free-space-is-a-reference-count-not-a-bitmap-or-a-chain">5.2 Free space is a reference count, not a bitmap or a chain</h3>
+<p>The TUT is <strong>three bits per block</strong>: 0 free, 1 through 5 that many references, 6
+&quot;many or more&quot;, 7 locked out.</p>
+<ul>
+<li>The checker's job is to compare a computed count against a stored one, per
+block — a stronger statement than &quot;allocated or not&quot;, and the reason the
+accounting on a real pack comes out exact rather than approximately.</li>
+<li>A block can legitimately be referenced twice. Do <strong>not</strong> design a checker that
+treats a second reference as corruption until it is known what makes one.</li>
+<li>Locked-out blocks are a third category, and on a real pack they are exactly the
+directories and the tables. That is a checkable invariant and
+<code>tests/accounting.sh</code> checks it.</li>
+</ul>
+<h3 id="5-3-a-directory-is-one-block-and-that-is-the-whole-capacity">5.3 A directory is one block, and that is the whole capacity</h3>
+<p>No growth, no chaining, no second cluster. 1013 words hold <strong>both</strong> the
+descriptor area (growing up from word 11) and the five-word name blocks (growing
+down from the end), and the directory is full when they meet.</p>
+<p><code>t10fs</code> spends real effort growing a UFD by a cluster and matching TOPS-10's
+convention for doing so. Here there is nothing to match: the capacity is fixed
+when the block is, and a writer's failure mode is <code>directory full</code>, which is a
+refusal rather than an allocation problem.</p>
+<h3 id="5-4-a-file-s-block-list-is-a-program-and-a-link-s-is-a-string">5.4 A file's block list is a program, and a link's is a string</h3>
+<p>The same 13-bit <code>UNDSCP</code> field points at either, and one bit in the name block
+says which. The block list is run-length coded with a load-address escape; the
+link is the target's name in SIXBIT with its own quoting rules. Consequences:</p>
+<ul>
+<li><strong>Every descriptor is untrusted input in the most literal way</strong>: it is a
+bytecode read out of a forty-year-old disk, and the interpreter must bound the
+opcode, the block number and the number of steps. It does.</li>
+<li>The two decoders share their byte reader and nothing else.</li>
+<li>File identity is <code>DIR;FN1 FN2</code> — three SIXBIT names, no extension in the DEC
+sense, and no <code>namei</code>-style path walk. Depth is exactly one.</li>
+<li><strong>Refuse a name the format cannot represent; never truncate.</strong> Silent
+truncation in <code>s5fs</code> produced duplicate directory entries on an image <code>fsck</code>
+called clean. SIXBIT has no lower case, so this bites immediately.</li>
+</ul>
+<hr />
+<h2 id="6-the-oracle">6. The oracle</h2>
+<p>Better than either sibling had at this stage, because ITS builds from source.</p>
+<p><a href="https://github.com/PDP-10/its">PDP-10/its</a> assembles the monitor, boots it under
+SIMH, KLH10 or <code>pdp10-ka</code>, and leaves a working RP06. That gives all three levels
+of evidence:</p>
+<ol>
+<li><strong>Byte-identical</strong> — build a file system with <code>itsfs</code>, build the same one under
+the real monitor, <code>cmp</code>.</li>
+<li><strong>Accepted by native tools</strong> — hand what we write to <code>SALV</code>/<code>NSALV</code>, ITS's own
+salvager, and to the monitor itself.</li>
+<li><strong>Self-consistent</strong> — round trips, and an internal check.</li>
+</ol>
+<p>Level 3 and a read-only reader can be validated against a real pack <em>today</em>, and
+have been. Level 2 has a specific target: <code>NSALV</code> is a standalone program that
+walks the whole file system and reports what is wrong with it, which is exactly
+<code>DSKRAT</code>'s role in <code>t10fs</code> — and <code>make prove</code> there is the template for what to
+do with it.</p>
+<p><strong>Copyright:</strong> the ITS source tree is GPL and is never vendored, copied or
+committed here. What is taken from it is what a file format <em>is</em> — offsets,
+widths and opcodes — which is the same thing <code>t10fs</code> takes from DEC's
+<code>COMMOD.MAC</code>. <code>itsfs</code> is clean, original C. Fixtures are built by the test suite,
+never copied off a pack. See <a href="../sources/index.html">docs/sources.md</a>.</p>
+<hr />
+<h2 id="7-phasing">7. Phasing</h2>
+<p>Each phase ends somewhere useful, and nothing is written before it can be
+validated.</p>
+<table>
+<thead>
+<tr>
+<th>phase</th>
+<th>deliverable</th>
+<th>validated by</th>
+<th>state</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0</strong></td>
+<td>repo, <code>.clang-format</code>, CI, docs site, <code>make test</code> skeleton</td>
+<td>CI green</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>1</strong></td>
+<td>word packing + SIXBIT</td>
+<td>round-trip every word of a real pack byte-for-byte</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>the geometry layer</td>
+<td>the MFD is found where the formula says, by its own check word</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td>structure constants from <strong>FSDEFS</strong>, cited per field</td>
+<td>the MFD, a UFD and the TUT decode</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td>read-only reader: directories, descriptors, links, files</td>
+<td><code>make oracle</code>: the space on a real pack accounts for exactly</td>
+<td><strong>done</strong></td>
+</tr>
+<tr>
+<td><strong>5</strong></td>
+<td><code>itsfs check</code> — an independent checker</td>
+<td>clean on a real pack; flags injected corruption</td>
+<td>next</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td>manifest / verify, and an interactive shell</td>
+<td>a manifest survives a repacking</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>7</strong></td>
+<td>writer core, then the mutation engine</td>
+<td>every mutating flow ends <code>check</code> clean</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>8</strong></td>
+<td>native-tool interop: <code>NSALV</code>, then the monitor</td>
+<td>ITS mounts and reads what we wrote</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>9</strong></td>
+<td>tapes: DUMP save sets, and <code>.tape</code> containers</td>
+<td>round-trips compare bytes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Phases 1–6 are entirely read-only and carry no risk to a reference pack.
+<strong>Work on a copy regardless.</strong></p>
+<hr />
+<h2 id="8-scope-boundaries-decide-now-revisit-never">8. Scope boundaries (decide now, revisit never)</h2>
+<ul>
+<li><strong>ITS only.</strong> TOPS-10 is <code>t10fs</code> and TOPS-20 is neither.</li>
+<li><strong>Disk packs</strong>, not DECtape and not tape archives — those are front-ends to add
+in phase 9, not the core.</li>
+<li><strong>One pack per image to begin with.</strong> Multi-pack file systems are clearly
+provided for by <code>UNPKN</code> and <code>QTRSRV</code>; defer deliberately, and say so.</li>
+<li><strong>The version span is an open question</strong> (§3), not an assumed &quot;covers
+everything&quot;.</li>
+</ul>
+<hr />
+<h2 id="9-first-moves">9. First moves</h2>
+<p>Done, and recorded here because the order mattered:</p>
+<ol>
+<li><code>git init</code>; lift <code>.clang-format</code>, <code>.github/workflows/</code>, <code>gh-pages/</code> from
+<code>t10fs</code> and strip them to a skeleton.</li>
+<li>Write the word layer and prove it: read every word of a <strong>copy</strong> of a real
+pack, re-encode, <code>cmp</code>. If that is not byte-identical, nothing above it can be
+trusted. (<code>make oracle</code>.)</li>
+<li>Write <code>dump</code>, the tool every later phase is debugged with.</li>
+<li><em>Then</em> read FSDEFS, and only then write <code>its.h</code>.</li>
+</ol>
+<p>Step 2 found nothing, which is the point of doing it first. Step 4 found the
+geometry — which is to say, step 4 is where this project stopped being a copy of
+<code>t10fs</code>.</p>
+<hr />
+<h2 id="10-the-lessons-worth-carrying-not-just-the-code">10. The lessons worth carrying, not just the code</h2>
+<p>From the review history of both siblings — every one of these was a real bug,
+found late:</p>
+<ul>
+<li><strong>Refuse what the format cannot represent.</strong> Never truncate a name, a path or a
+count. Truncation produced duplicate entries, unreachable files, and a &quot;clean&quot;
+checker.</li>
+<li><strong>Bound every value that comes off the disk before using it as an index.</strong> Here
+that is <code>MDNAMP</code>, <code>UDNAMP</code>, <code>UNDSCP</code>, <code>QFRSTB</code>, <code>QLASTB</code> and every descriptor
+opcode — all of which are bounded, and all of which the fuzzer attacks.</li>
+<li><strong>One definition of any layout arithmetic.</strong> The block-map ladder in <code>s5fs</code> was
+open-coded in four readers and three had it wrong. <code>its_blk_sector()</code> is the
+only place a block becomes a sector, and <code>ITS_FIELD()</code> the only place a byte
+pointer becomes a value.</li>
+<li><strong>A tool that reports success while destroying data is worse than one that
+crashes.</strong></li>
+<li><strong>Verify a test against the broken code</strong>, or it is decoration.</li>
+<li><strong>An out-of-bounds read does not fault on a normal build.</strong> Sanitizers are not
+optional for a parser of untrusted input.</li>
+<li><strong>Re-check a source you wrote off.</strong> <code>t10fs</code> promoted a whole packing from
+<code>corroborated</code> to <code>confirmed</code> by re-opening a scan it had recorded as
+unreadable. The equivalent here is FSDEFS's own prose: it says the skip opcodes
+have been unreachable &quot;for years&quot;, and it says <code>&quot;;&quot; (73)</code> when the byte on the
+disk is <code>033</code>. Read the comments, then check them.</li>
+</ul>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+</body>
+</html>

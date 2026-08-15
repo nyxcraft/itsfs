@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>itsfs | Tools for the TOPS-10 disk file structure</title>
+  <meta name="description" content="Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body class="site-home">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="brand" href="index.html">
+        <img class="brand__icon" src="assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="overview/index.html">Overview</a>
+        <a href="design/index.html">Design</a>
+        <a href="roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main-content" tabindex="-1">
+      <section class="hero">
+        <div class="hero__copy">
+          <h1>Thirty-six bits, on the machine you have.</h1>
+          <div class="hero__attr"><p>Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p></div>
+          <p class="hero__lede">Read the disk MIT&#x27;s Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.</p>
+          <div class="hero__actions">
+            <a class="button button--primary" href="overview/index.html">Start here</a>
+            <a class="button" href="design/index.html">How it works</a>
+          </div>
+        </div>
+        <div class="hero__visual" role="img" aria-label="A disk image enters as bytes, passes through a pluggable word-packing layer that turns it into 36-bit words, and every tool above that layer sees words rather than bytes. The structure layer above it is not written yet, on purpose.">
+          <div class="flow">
+            <div class="flow__node flow__node--hub"><span>a SIMH image, a tape, a container</span><strong>bytes</strong></div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__fan">
+              <span>le64</span><span>be64</span><span>core</span><span>…</span>
+            </div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__node"><span>one packing layer, masked to 36 bits</span><strong>words</strong></div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__fan">
+              <span>info</span><span>dump</span><span>repack</span><span>sixbit</span><span>poke</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-strip" aria-label="Core ideas">
+        <article>
+          <h2>A word is 36 bits, and does not tile onto bytes</h2>
+          <p>So the bottom layer is <em>word packing</em>, not byte order — a bigger abstraction than a byte-addressed filesystem needs, and the first thing built. No host integer is ever laid over image bytes: every word enters through <code>get()</code> and leaves through <code>put()</code>, masked to 36 bits.</p>
+        </article>
+        <article>
+          <h2>Proven against a real structure, not a fixture</h2>
+          <p>All 39,398,400 words of a 300 MB RP06 decode and re-encode byte-for-byte, and again through a packing with a different stride. Because <code>put()</code> masks, that identity also measures — over the whole image — that nothing sets the 28 bits outside the word.</p>
+        </article>
+        <article>
+          <h2>What is not known says so</h2>
+          <p>There is no structure header in this repo, and that is the design. Field offsets get written from sources with a citation each, never from recollection — and every packing carries its own provenance, so a layout nobody has checked against an artifact is labelled <code>unverified</code> by the tool itself.</p>
+        </article>
+      </section>
+
+      <section class="docs-panel">
+        <div class="section-heading">
+          <p class="eyebrow">The documentation</p>
+          <h2>One binary, and the reasoning behind it.</h2>
+        </div>
+        <div class="tool-catalog">
+      <section class="tool-group">
+        <h3 class="tool-group__title">Start here</h3>
+        <div class="tool-grid">
+          <article class="tool-card">
+            <h4><a href="overview/index.html">Overview</a></h4>
+            <p class="tool-card__tagline">What it is, and every command</p>
+            <p>The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven and what is only claimed.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="design/index.html">Design</a></h4>
+            <p class="tool-card__tagline">The layers and the invariants</p>
+            <p>The layer cake — including the one neither sibling project needs — the seven rules that each cost somebody a bug once, the two held in reserve for code that does not exist yet, and what is deliberately out of scope.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="roadmap/index.html">Roadmap</a></h4>
+            <p class="tool-card__tagline">Five phases done, five to go</p>
+            <p>What ended each finished phase, what the next five have to prove, and the open questions — a pack recovered from MIT, a second FSDEFS — that would reorder the whole list.</p>
+          </article>
+        </div>
+      </section>
+      <section class="tool-group">
+        <h3 class="tool-group__title">The format</h3>
+        <div class="tool-grid">
+          <article class="tool-card">
+            <h4><a href="geometry/index.html">Geometry</a></h4>
+            <p class="tool-card__tagline">A block number is not an offset</p>
+            <p>ITS numbers blocks within a cylinder, and the division truncates — so four sectors of every RP06 cylinder are reachable by no block number at all. The layer that has no counterpart in t10fs or s5fs, and the arithmetic that finds the master file directory 3,244 sectors from where linear numbering puts it.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="filesystem/index.html">The file system</a></h4>
+            <p class="tool-card__tagline">The format itself, and what is still unknown</p>
+            <p>The MFD whose entry positions are its pointers, one-block directories with two areas growing towards each other, a block list that is a bytecode, links stored as strings in the same field — and a gap register naming every question still open.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="word-packing/index.html">Word packing — not a byte-order codec</a></h4>
+            <p class="tool-card__tagline">Not a byte-order codec</p>
+            <p>Thirty-six bits do not tile onto eight, so the bottom layer is word packing rather than byte order. The four packings, DEC&#x27;s bit numbering, why SIXBIT is deliberately somewhere else, and why two packings are `corroborated` here that a sibling project calls `confirmed`.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="on-disk-format/index.html">On-disk format — confirmed, observed, sourced</a></h4>
+            <p class="tool-card__tagline">Confirmed, observed, sourced</p>
+            <p>Kept scrupulously apart: what has been measured on a real pack, what was observed before any theory existed, what the monitor source states, and — field by field — which of it has actually been exercised.</p>
+          </article>
+        </div>
+      </section>
+      <section class="tool-group">
+        <h3 class="tool-group__title">The evidence</h3>
+        <div class="tool-grid">
+          <article class="tool-card">
+            <h4><a href="sources/index.html">Sources</a></h4>
+            <p class="tool-card__tagline">Where every constant comes from</p>
+            <p>The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="validation/index.html">Validation</a></h4>
+            <p class="tool-card__tagline">How correctness is established</p>
+            <p>The three levels of evidence, the 39,641,600-word round trip, the three-way accounting that comes out exact on a real pack, 1,750 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.</p>
+          </article>
+        </div>
+      </section>
+      <section class="tool-group">
+        <h3 class="tool-group__title">Reference</h3>
+        <div class="tool-grid">
+          <article class="tool-card">
+            <h4><a href="plan/index.html">The plan</a></h4>
+            <p class="tool-card__tagline">Written before any code</p>
+            <p>The planning document this project is being built to: what was measured on a real pack before anything was written, what is still assumption, and the four places where copying t10fs would have been a mistake.</p>
+          </article>
+          <article class="tool-card">
+            <h4><a href="handoff/index.html">Handoff</a></h4>
+            <p class="tool-card__tagline">For the next maintainer</p>
+            <p>What to read in what order, the shape of the tree, the things not to do — one of which is silent when you get it wrong — and the known gaps stated plainly.</p>
+          </article>
+        </div>
+      </section>
+        </div>
+      </section>
+
+      <section class="docs-panel">
+        <div class="section-heading">
+          <p class="eyebrow">Documentation</p>
+          <h2>Start here.</h2>
+        </div>
+        <div class="doc-grid">
+<article class="doc-card">
+  <h3><a href="overview/index.html">Overview</a></h3>
+  <p>Host tools for the ITS file system — the disk MIT&#x27;s Incompatible Timesharing System ran, read on a machine that has never heard of a 36-bit word.</p>
+  <a class="doc-card__link" href="overview/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="design/index.html">Design</a></h3>
+  <p>What the layers are, which rules are not negotiable, and what is deliberately out of scope.</p>
+  <a class="doc-card__link" href="design/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="roadmap/index.html">Roadmap</a></h3>
+  <p>Where each phase ends, and what has to be true before it can be called done. PLAN.md has the same table; this is the detail.</p>
+  <a class="doc-card__link" href="roadmap/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="geometry/index.html">Geometry</a></h3>
+  <p>This layer has no counterpart in t10fs or s5fs, and it is the first place ITS turns out not to be TOPS-10 with different field names.</p>
+  <a class="doc-card__link" href="geometry/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="filesystem/index.html">The file system</a></h3>
+  <p>The format itself: what is known, how it was established, and — at the end — a register of what is still not known.</p>
+  <a class="doc-card__link" href="filesystem/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="sources/index.html">Sources</a></h3>
+  <p>Where every constant comes from, what has been checked against a real pack, and two traps worth knowing about before reading the ITS sources yourself.</p>
+  <a class="doc-card__link" href="sources/index.html">Open</a>
+</article>
+<article class="doc-card">
+  <h3><a href="validation/index.html">Validation</a></h3>
+  <p>How correctness is established here, what has actually been established, and what has been found by trying.</p>
+  <a class="doc-card__link" href="validation/index.html">Open</a>
+</article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+</body>
+</html>

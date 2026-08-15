@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geometry | itsfs</title>
+  <meta name="description" content="This layer has no counterpart in t10fs or s5fs, and it is the first place ITS turns out not to be TOPS-10 with different field names.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Geometry</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#the-arithmetic">The arithmetic</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#block-to-sector">Block to sector</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#how-this-was-found-and-how-it-is-checked">How this was found, and how it is checked</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-track-in-its-source-is-a-block">A &quot;track&quot; in ITS source is a block</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-drive-table">The drive table</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Geometry</h1>
+          <p class="docs-article__summary">This layer has no counterpart in t10fs or s5fs, and it is the first place ITS turns out not to be TOPS-10 with different field names.</p>
+          <p class="docs-article__source">Geometry — why a block number is not an offset</p>
+        </header>
+        <div class="prose">
+<p>This layer has no counterpart in <code>t10fs</code> or <code>s5fs</code>, and it is the first place ITS
+turns out not to be TOPS-10 with different field names.</p>
+<h2 id="the-arithmetic">The arithmetic</h2>
+<p>A sector is 128 words on every drive ITS supported. An ITS <strong>block</strong> is <code>SECBLK</code>
+consecutive sectors, and <code>SECBLK</code> is 8 everywhere. So far, so ordinary.</p>
+<p>The blocks are then numbered <strong>within a cylinder</strong>:</p>
+<pre><code>NBLKSC == NHEDS * NSECS / SECBLK        ; MIDAS integer division
+NBLKS  == NCYLS * NBLKSC
+</code></pre>
+<p>MIDAS truncates. For an RP06, <code>19 * 20 / 8</code> is 47.5 and <code>NBLKSC</code> is <strong>47</strong>: the
+cylinder has 380 sectors, ITS reaches 376, and the last four are addressable by
+the hardware and reachable by no block number. Over 815 cylinders that is 3,260
+sectors — 3.2 MB of a 300 MB pack that the file system cannot name.</p>
+<p><code>itsfs drives</code> prints the remainder for each drive, because it is not the same
+everywhere:</p>
+<pre><code>  rp04   4 sectors per cylinder unused -- 1644 sectors, 1644 KB, on the pack
+  rp06   4 sectors per cylinder unused -- 3260 sectors, 3260 KB, on the pack
+  rp07   0 sectors per cylinder unused
+  rm03   6 sectors per cylinder unused -- 4938 sectors, 4938 KB, on the pack
+  rm80   4 sectors per cylinder unused -- 2236 sectors, 2236 KB, on the pack
+</code></pre>
+<p>The RP07 divides exactly (<code>32 * 43 / 8 == 172</code>), which is worth knowing: a reader
+tested only on an RP07 would never notice this layer was needed.</p>
+<h2 id="block-to-sector">Block to sector</h2>
+<p>FSDEFS writes the conversion out for the one block whose address is a constant,
+the MFD:</p>
+<pre><code>MFDCYL==MFDBLK/NBLKSC
+MFDSRF==&lt;MFDBLK-MFDCYL*NBLKSC&gt;*SECBLK/NSECS
+MFDSEC==&lt;MFDBLK-MFDCYL*NBLKSC&gt;*SECBLK-MFDSRF*NSECS
+</code></pre>
+<p>A SIMH or KLH10 image stores sectors in <code>(cylinder, surface, sector)</code> order, so
+the linear sector is <code>(cyl * NHEDS + srf) * NSECS + sec</code>. That is
+<code>its_blk_sector()</code>, and it is the only place in the project where a block becomes
+a sector.</p>
+<h2 id="how-this-was-found-and-how-it-is-checked">How this was found, and how it is checked</h2>
+<p>The MFD is at <code>NBLKS/2-1</code>, which for an RP06 is block <strong>19081</strong>. Reading that as
+a linear block number — 19081 × 1024 words — lands in the middle of a mail file.
+Running it through the formula gives cylinder 405, surface 18, sector 8, which is
+linear sector <strong>154268</strong>, and word 5 of that sector is SIXBIT <code>M.F.D.</code> — the check
+word <code>MDCHK</code> exists precisely so that a program can ask this question and get an
+answer.</p>
+<p>The two numbers differ by 3,244 sectors. There is no way to be <em>slightly</em> wrong
+about this: either you have the geometry or you have somebody's mail.</p>
+<p>The test suite computes block 19081's sector <strong>a second time</strong>, in shell, from the
+drive constants — deliberately not by asking <code>itsfs</code>, because a wrong mapping
+would otherwise agree with itself — and then checks that dumping the block and
+dumping that raw sector give the same words. <code>itsfs dump -s</code> exists for exactly
+that: it addresses sectors and skips this layer entirely.</p>
+<h2 id="a-track-in-its-source-is-a-block">A &quot;track&quot; in ITS source is a block</h2>
+<p><code>disk.1228</code> line 48:</p>
+<pre><code>;	TUT	TRACK (BLOCK) UTILIZATION TABLE
+</code></pre>
+<p>and the file system code uses the two words interchangeably from there on. The
+MFD-slot arithmetic in <code>QFL2</code> is commented <code>J &lt;= TRACK ADDR OF USER DIR</code> and
+produces a block number. It is not a surface track, and nothing in the file
+system addresses a surface track.</p>
+<p>This confuses every reader of the ITS sources once. It is written down here, and
+in <code>itsgeom.h</code>, so that it confuses the next one less.</p>
+<h2 id="the-drive-table">The drive table</h2>
+<p>Every constant is transcribed from that drive's own parameter file in the ITS
+source; the derived quantities are computed rather than transcribed, so a drive
+added later cannot get the truncation subtly wrong by hand.</p>
+<table>
+<thead>
+<tr>
+<th>drive</th>
+<th>cyls</th>
+<th>spare</th>
+<th>surfaces</th>
+<th>sectors/track</th>
+<th>blocks/cyl</th>
+<th>blocks</th>
+<th>TUT blocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rp04</td>
+<td>406</td>
+<td>5</td>
+<td>19</td>
+<td>20</td>
+<td>47</td>
+<td>19082</td>
+<td>2</td>
+</tr>
+<tr>
+<td>rp06</td>
+<td>812</td>
+<td>3</td>
+<td>19</td>
+<td>20</td>
+<td>47</td>
+<td>38164</td>
+<td>4</td>
+</tr>
+<tr>
+<td>rp07</td>
+<td>627</td>
+<td>3</td>
+<td>32</td>
+<td>43</td>
+<td>172</td>
+<td>107844</td>
+<td>9</td>
+</tr>
+<tr>
+<td>rm03</td>
+<td>820</td>
+<td>3</td>
+<td>5</td>
+<td>30</td>
+<td>18</td>
+<td>14760</td>
+<td>2</td>
+</tr>
+<tr>
+<td>rm80</td>
+<td>556</td>
+<td>3</td>
+<td>14</td>
+<td>30</td>
+<td>52</td>
+<td>28912</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<p>The spare cylinders are <code>XCYLS</code>, &quot;extra cylinders for spares, hacks, etc.&quot; — they
+are inside the image and outside <code>NBLKS</code>, which is why <code>info</code> reports both totals
+and why the MFD, at <code>NBLKS/2-1</code>, is not in the middle of the <em>file</em>.</p>
+<p>The size of a full image identifies the drive on its own: no two of these are the
+same number of sectors. That is how <code>itsfs info</code> names a drive with nothing but
+the file, and why <code>-d</code> exists for an image that is not a whole pack.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

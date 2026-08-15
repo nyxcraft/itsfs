@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site_name }} | Tools for the TOPS-10 disk file structure</title>
+  <meta name="description" content="{{ site_description }}">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body class="site-home">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="brand" href="index.html">
+        <img class="brand__icon" src="{{ logo_href }}" alt="" aria-hidden="true">
+        <span class="brand__name">{{ site_name }}</span>{{ status_badge }}
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+{{ top_nav }}
+        <a href="{{ github_href }}">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main-content" tabindex="-1">
+      <section class="hero">
+        <div class="hero__copy">
+          <h1>Thirty-six bits, on the machine you have.</h1>
+          {{ attribution_hero }}
+          <p class="hero__lede">{{ site_description }}</p>
+          <div class="hero__actions">
+            <a class="button button--primary" href="{{ primary_href }}">Start here</a>
+            <a class="button" href="{{ secondary_href }}">How it works</a>
+          </div>
+        </div>
+        <div class="hero__visual" role="img" aria-label="A disk image enters as bytes, passes through a pluggable word-packing layer that turns it into 36-bit words, and every tool above that layer sees words rather than bytes. The structure layer above it is not written yet, on purpose.">
+          <div class="flow">
+            <div class="flow__node flow__node--hub"><span>a SIMH image, a tape, a container</span><strong>bytes</strong></div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__fan">
+              <span>le64</span><span>be64</span><span>core</span><span>…</span>
+            </div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__node"><span>one packing layer, masked to 36 bits</span><strong>words</strong></div>
+            <div class="flow__arrow" aria-hidden="true">↓</div>
+            <div class="flow__fan">
+              <span>info</span><span>dump</span><span>repack</span><span>sixbit</span><span>poke</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-strip" aria-label="Core ideas">
+        <article>
+          <h2>A word is 36 bits, and does not tile onto bytes</h2>
+          <p>So the bottom layer is <em>word packing</em>, not byte order — a bigger abstraction than a byte-addressed filesystem needs, and the first thing built. No host integer is ever laid over image bytes: every word enters through <code>get()</code> and leaves through <code>put()</code>, masked to 36 bits.</p>
+        </article>
+        <article>
+          <h2>Proven against a real structure, not a fixture</h2>
+          <p>All 39,398,400 words of a 300 MB RP06 decode and re-encode byte-for-byte, and again through a packing with a different stride. Because <code>put()</code> masks, that identity also measures — over the whole image — that nothing sets the 28 bits outside the word.</p>
+        </article>
+        <article>
+          <h2>What is not known says so</h2>
+          <p>There is no structure header in this repo, and that is the design. Field offsets get written from sources with a citation each, never from recollection — and every packing carries its own provenance, so a layout nobody has checked against an artifact is labelled <code>unverified</code> by the tool itself.</p>
+        </article>
+      </section>
+
+      <section class="docs-panel">
+        <div class="section-heading">
+          <p class="eyebrow">The documentation</p>
+          <h2>One binary, and the reasoning behind it.</h2>
+        </div>
+        <div class="tool-catalog">
+{{ doc_groups }}
+        </div>
+      </section>
+
+      <section class="docs-panel">
+        <div class="section-heading">
+          <p class="eyebrow">Documentation</p>
+          <h2>Start here.</h2>
+        </div>
+        <div class="doc-grid">
+{{ docs_cards }}
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© {{ year }} {{ copyright }} · <a href="{{ home_href }}">{{ site_name }}</a> · <a href="{{ license_href }}">License</a></p>
+      {{ attribution }}
+    </footer>
+  </div>
+</body>
+</html>

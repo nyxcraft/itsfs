@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Validation | itsfs</title>
+  <meta name="description" content="How correctness is established here, what has actually been established, and what has been found by trying.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Validation</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#the-standard">The standard</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-3a-the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-3b-the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Validation</h1>
+          <p class="docs-article__summary">How correctness is established here, what has actually been established, and what has been found by trying.</p>
+          <p class="docs-article__source">Validation</p>
+        </header>
+        <div class="prose">
+<p>How correctness is established here, what has actually been established, and what
+has been found by trying.</p>
+<h2 id="the-standard">The standard</h2>
+<p>Three levels of evidence, in the order they are worth anything:</p>
+<ol>
+<li><strong>Byte-identical</strong> — build something with <code>itsfs</code>, build the same thing with
+ITS, <code>cmp</code>. Nothing here reaches this level, because there is no writer.</li>
+<li><strong>Accepted by native tools</strong> — hand what we produce to <code>NSALV</code>, ITS's own
+salvager, or to the monitor. Nothing here reaches this level either, for the
+same reason.</li>
+<li><strong>Self-consistent</strong> — round trips, and cross-checks against numbers the file
+system maintains independently of the thing being checked.</li>
+</ol>
+<p>Everything below is level 3, and the interesting question is how strong a level-3
+result can be made. The answer turns out to be: quite strong, if the numbers you
+check against were computed by somebody else.</p>
+<h2 id="level-3a-the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</h2>
+<pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
+IDENTICAL: the word layer round-trips the real pack
+IDENTICAL: cross-packing round trip
+IDENTICAL: and through the packing that shares a byte
+</code></pre>
+<p>All 39,641,600 words of a 300 MB RP06, decoded and re-encoded, byte for byte;
+then the same through <code>core</code> (five bytes to the word, a different stride) and
+<code>dbd9</code> (two words in nine bytes, sharing a byte between them) and back.</p>
+<p>This is stronger than &quot;the codec is its own inverse&quot;. Because <code>get()</code> masks every
+word to 36 bits, byte identity over the whole image also proves that <strong>nothing on
+the pack sets any of the 28 bits outside the word</strong> — an invariant everything
+above depends on, established by measurement rather than assertion.</p>
+<h2 id="level-3b-the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</h2>
+<pre><code class="language-console">1. 247 directories walked, 247 whose descriptors agree with their own UDBLKS
+2. 30940 blocks described by files == 30940 blocks the TUT calls in use
+3. 505 blocks locked out == 500 directories + 1 MFD + 4 TUT blocks
+</code></pre>
+<p><code>tests/accounting.sh</code>, run by <code>make oracle</code>. Each line is worth something
+different, and the reason to state them separately is that they fail
+independently:</p>
+<p><strong>1</strong> compares the descriptor decoder against <code>UDBLKS</code>, a running total the
+monitor maintains in each UFD header as files are written. Nothing here computes
+it and nothing here can influence it. It is 247 separate comparisons, one per
+directory, and a decoder that mishandled one opcode would fail some and pass
+others.</p>
+<p><strong>2</strong> compares the same sum against the TUT — a different structure, in a
+different place, maintained by a different part of the monitor. A block skipped
+or double-counted <em>anywhere on the pack</em> moves this number. That it lands exactly
+on 30,940 is the single strongest statement this project can currently make.</p>
+<p><strong>3</strong> is the only check there is on the MFD-slot arithmetic. There is no pointer
+from an MFD entry to its directory — the position <em>is</em> the address — so the only
+way to know the formula is right is that the blocks it says are directories are
+exactly the blocks the TUT refuses to allocate. 500 directories, one MFD, four
+TUT blocks, 505 locked out.</p>
+<h2 id="the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</h2>
+<p>Everything above compares the reader against numbers ITS wrote <strong>on the same
+pack</strong>. <code>tests/crosscheck.sh</code> compares it against files that never went near one.</p>
+<p>The ITS source tree builds its own disk: a host file is packed into a tape image
+by <code>itstar</code>, the tape is read by ITS's own loader, and the monitor writes the
+file onto the pack. So for a file that exists in both places, the host copy is an
+independent original:</p>
+<pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
+cross-check: 137 files byte-identical to their host originals, 0 differ,
+             40 skipped as escaped by itstar, 0 not on the pack
+</code></pre>
+<p>Every layer of this project is on that path. A byte-identical result means the
+geometry found the right blocks, the descriptor decoded them <strong>in the right
+order</strong>, <code>UNWRDC</code> gave the right length for the last one, and the seven-bit
+extraction is right — checked against something this project cannot influence.</p>
+<p>Two differences are expected and are the file's rather than the reader's: ITS
+text uses CRLF (<code>itsfs cat</code> translates nothing, so the CRs are really there) and
+ITS pads the last word with <code>^C</code>.</p>
+<p><strong>Forty files are skipped, and saying why is the point.</strong> The host copy is not
+raw ITS text — it is in the &quot;evacuated file format&quot; <code>itstar</code> uses, which escapes
+exactly the characters a plain CRLF-to-LF conversion would lose: a lone CR, a
+bare LF, NUL, and anything with the high bit set. Comparing those files would
+test whether this script had reimplemented somebody else's escape table, so it
+does not, and it counts them instead. What the check actually covers is visible
+rather than assumed.</p>
+<h2 id="hostile-input">Hostile input</h2>
+<p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
+bound a loop or index an array.</p>
+<p><strong>81 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader a pack
+damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
+a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
+address, one that names a block past the end of the drive, one with no
+terminating zero at all, a TUT that ends before it begins, and one that maps more
+blocks than its own table can hold. The bar is not that the reader survives — it
+is that it <strong>refuses by name</strong> and reads nothing it did not bound first.</p>
+<p>The suite builds its own fixture: a complete little ITS file system, poked into a
+sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
+that is exactly why — a suite that used the writer to make its input would be
+asking the reader to agree with the writer rather than with ITS.</p>
+<p><strong><code>make test-san</code></strong> runs the same 81 under AddressSanitizer and UBSan, which is
+where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
+build. It returns whatever was next in memory, and the test passes.</p>
+<p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader
+must parse, and runs every command over the result. 250 iterations × 7 commands =
+1,750 runs against damaged packs under the sanitizers, with no crash, no hang, no
+sanitizer report and no silent failure.</p>
+<h2 id="lint">Lint</h2>
+<p><code>make lint</code> compiles the tree under <strong>16 warning options</strong> — including
+<code>-Wconversion</code> and <code>-Wsign-conversion</code>, which are the two that catch a 36-bit
+value quietly becoming an <code>int</code> — and requires zero. It also requires the tree to
+be <code>clang-format</code> clean under a pinned version, with the hand-aligned tables
+(<code>its.h</code> is one large one) fenced so the tool cannot collapse the columns that
+are the documentation.</p>
+<p>CI keeps <code>-Werror</code> on the portable three (<code>-Wall -Wextra -pedantic</code>) across gcc,
+clang and macOS; the larger set stays local, because a build that fails on
+somebody else's compiler version is worse than a warning nobody sees.</p>
+<h2 id="what-has-been-found-so-far">What has been found so far</h2>
+<p>The point of writing down a method is that it finds things. So far:</p>
+<p><strong>The link separator is SIXBIT, not ASCII.</strong> FSDEFS documents the quoting
+characters as <code>&quot;;&quot; (73)</code> and <code>&quot;:&quot; (72)</code>, which are ASCII codes; the disk holds
+033 and 032. Implemented from the documentation, the link decoder found no
+separator in anything and rendered <code>.;@ DDT</code> as <code>.;@;DDT</code>. Found by dumping the
+bytes of a link that was already &quot;working&quot;. Written up in
+<a href="../sources/index.html#two-traps">sources</a>.</p>
+<p><strong>A descriptor pointer counts from <code>UDDESC</code>, not from word 0.</strong> <code>UNDSCP</code> is a
+six-bit-byte offset from word 11 of the directory block. Read from word 0, it
+lands 66 bytes early — where a well-formed directory holds zero, which means &quot;end
+of description&quot;. So every file decoded to <strong>zero blocks and no error at all</strong>.
+The check that caught it was <code>UDBLKS</code>: 37 files, 0 blocks, and a header saying
+540. A cross-check against a number somebody else computed is the only thing that
+catches a bug whose symptom is silence.</p>
+<p><strong>Two documented numbers in the MFD are not what they look like.</strong> <code>MDNUDS</code> is
+the number of directory slots the monitor was <em>built</em> for, not the number in use;
+the number in use follows from where <code>MDNAMP</code> points. The first version of <code>info</code>
+printed them the other way round.</p>
+<p><strong><code>cat</code> dropped interior NULs, not just trailing padding.</strong> A file's length is
+known in words, so the last word may hold up to four characters that are not part
+of the file; dropping every NUL is the same code with one state fewer, and it is
+wrong. Two files on the pack have NULs in the middle — <code>ASCII \^@E^@A</code> in a macro
+argument — and lost them silently. <strong>The cross-check above is what found it</strong>,
+which is exactly the argument for having a piece of evidence that does not come
+from the pack: nothing the pack knows about itself could have caught this, because
+the pack has no opinion about what a character is.</p>
+<h2 id="what-is-not-established">What is not established</h2>
+<p>Stated plainly, because a validation document that only lists successes is
+marketing:</p>
+<ul>
+<li><strong>No writer</strong>, so no level-1 or level-2 evidence exists at all.</li>
+<li><strong><code>NSALV</code> has never been run against anything this produced</strong>, because nothing
+is produced. It is the obvious second opinion and it is phase 8.</li>
+<li><strong>One pack, one drive, one era.</strong> Everything above is an RP06 built from source
+in 2026. No RP07, no RM03, no multi-pack file system, and no artifact recovered
+from MIT.</li>
+<li><strong>No ITS magtape has been read</strong>, which is why <code>core</code> and <code>dbd9</code> are
+<code>corroborated</code> here and <code>confirmed</code> in <code>t10fs</code>.</li>
+<li><strong>The version span is unknown.</strong> <code>FSDEFS 43</code> is one version of one file, and it
+carries two dated format changes in its own comments.</li>
+</ul>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

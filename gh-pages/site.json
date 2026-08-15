@@ -1,0 +1,80 @@
+{
+  "site_name": "itsfs",
+  "site_tagline": "Host tools for the ITS file system.",
+  "site_description": "Read the disk MIT's Incompatible Timesharing System ran, on a machine that has never heard of a 36-bit word. One dependency-free C99 binary, a word-packing layer proven byte-for-byte against a real RP06 pack, a geometry layer because an ITS block number is not an offset, and a documented refusal to write a field offset that has not been checked against a source.",
+  "github_href": "https://github.com/nyxcraft/itsfs",
+  "branch": "main",
+  "copyright": "Nicholas J. Kisseberth",
+  "copyright_year": "2026",
+  "status": "phases 0-4 done: a complete read-only reader",
+  "attribution": [
+    "Software Architecture, Design & Engineering by Nicholas J. Kisseberth."
+  ],
+
+  "groups": [
+    { "id": "start",     "name": "Start here" },
+    { "id": "format",    "name": "The format" },
+    { "id": "evidence",  "name": "The evidence" },
+    { "id": "reference", "name": "Reference" }
+  ],
+
+  "docs": [
+    { "slug": "overview", "source": "README.md", "template": "page", "group": "start",
+      "title": "Overview",
+      "tagline": "What it is, and every command",
+      "blurb": "The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven and what is only claimed.",
+      "featured": true },
+
+    { "slug": "design", "source": "docs/design.md", "group": "start",
+      "title": "Design",
+      "tagline": "The layers and the invariants",
+      "blurb": "The layer cake — including the one neither sibling project needs — the seven rules that each cost somebody a bug once, the two held in reserve for code that does not exist yet, and what is deliberately out of scope.",
+      "featured": true },
+
+    { "slug": "roadmap", "source": "docs/roadmap.md", "group": "start",
+      "title": "Roadmap",
+      "tagline": "Five phases done, five to go",
+      "blurb": "What ended each finished phase, what the next five have to prove, and the open questions — a pack recovered from MIT, a second FSDEFS — that would reorder the whole list.",
+      "featured": true },
+
+    { "slug": "geometry", "source": "docs/geometry.md", "group": "format",
+      "title": "Geometry",
+      "tagline": "A block number is not an offset",
+      "blurb": "ITS numbers blocks within a cylinder, and the division truncates — so four sectors of every RP06 cylinder are reachable by no block number at all. The layer that has no counterpart in t10fs or s5fs, and the arithmetic that finds the master file directory 3,244 sectors from where linear numbering puts it.",
+      "featured": true },
+
+    { "slug": "filesystem", "source": "docs/filesystem.md", "group": "format",
+      "title": "The file system",
+      "tagline": "The format itself, and what is still unknown",
+      "blurb": "The MFD whose entry positions are its pointers, one-block directories with two areas growing towards each other, a block list that is a bytecode, links stored as strings in the same field — and a gap register naming every question still open.",
+      "featured": true },
+
+    { "slug": "word-packing", "source": "docs/word-packing.md", "group": "format",
+      "tagline": "Not a byte-order codec",
+      "blurb": "Thirty-six bits do not tile onto eight, so the bottom layer is word packing rather than byte order. The four packings, DEC's bit numbering, why SIXBIT is deliberately somewhere else, and why two packings are `corroborated` here that a sibling project calls `confirmed`." },
+
+    { "slug": "on-disk-format", "source": "docs/on-disk-format.md", "group": "format",
+      "tagline": "Confirmed, observed, sourced",
+      "blurb": "Kept scrupulously apart: what has been measured on a real pack, what was observed before any theory existed, what the monitor source states, and — field by field — which of it has actually been exercised." },
+
+    { "slug": "sources", "source": "docs/sources.md", "group": "evidence",
+      "title": "Sources",
+      "tagline": "Where every constant comes from",
+      "blurb": "The citation record: the one ITS file that defines this format, the licensing line and where it sits, the corroborating implementations, and two traps — a base that changes on a full stop, and documentation that gives ASCII codes for bytes stored as SIXBIT.",
+      "featured": true },
+
+    { "slug": "validation", "source": "docs/validation.md", "group": "evidence",
+      "tagline": "How correctness is established",
+      "blurb": "The three levels of evidence, the 39,641,600-word round trip, the three-way accounting that comes out exact on a real pack, 1,750 fuzzed commands under the sanitizers — and a plain statement of everything that is not established.",
+      "featured": true },
+
+    { "slug": "plan", "source": "PLAN.md", "template": "page", "group": "reference",
+      "title": "The plan",
+      "tagline": "Written before any code",
+      "blurb": "The planning document this project is being built to: what was measured on a real pack before anything was written, what is still assumption, and the four places where copying t10fs would have been a mistake." },
+
+    { "slug": "handoff", "source": "HANDOFF.md", "template": "page", "group": "reference",
+      "tagline": "For the next maintainer",
+      "blurb": "What to read in what order, the shape of the tree, the things not to do — one of which is silent when you get it wrong — and the known gaps stated plainly." }
+  ]
+}

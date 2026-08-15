@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="itsfs">
+  <title>itsfs</title>
+  <rect x="2" y="6" width="44" height="36" rx="4" fill="#0d1014" stroke="#25303a" stroke-width="2"/>
+  <!-- a cylinder of blocks: eight sectors to a block, and the tail no block reaches -->
+  <g fill="#7dd3ff">
+    <rect x="7"  y="15" width="8" height="5" rx="1"/>
+    <rect x="17" y="15" width="8" height="5" rx="1"/>
+    <rect x="27" y="15" width="8" height="5" rx="1"/>
+    <rect x="37" y="15" width="4" height="5" rx="1" opacity=".22"/>
+    <rect x="7"  y="22" width="8" height="5" rx="1"/>
+    <rect x="17" y="22" width="8" height="5" rx="1"/>
+    <rect x="27" y="22" width="8" height="5" rx="1"/>
+    <rect x="37" y="22" width="4" height="5" rx="1" opacity=".22"/>
+    <rect x="7"  y="29" width="8" height="5" rx="1"/>
+    <rect x="17" y="29" width="8" height="5" rx="1"/>
+    <rect x="27" y="29" width="8" height="5" rx="1" opacity=".22"/>
+    <rect x="37" y="29" width="4" height="5" rx="1" opacity=".22"/>
+  </g>
+  <!-- the master file directory, in the middle of the pack where ITS puts it -->
+  <circle cx="24" cy="24.5" r="3.1" fill="#0d1014" stroke="#ffb347" stroke-width="1.6"/>
+</svg>

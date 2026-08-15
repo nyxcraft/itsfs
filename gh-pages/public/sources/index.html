@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sources | itsfs</title>
+  <meta name="description" content="Where every constant comes from, what has been checked against a real pack, and two traps worth knowing about before reading the ITS sources yourself.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Sources</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#the-primary-source">The primary source</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-licensing-line-and-where-it-sits">The licensing line, and where it sits</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#two-traps">Two traps</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#evidence-markers">Evidence markers</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#corroborating-implementations">Corroborating implementations</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Sources</h1>
+          <p class="docs-article__summary">Where every constant comes from, what has been checked against a real pack, and two traps worth knowing about before reading the ITS sources yourself.</p>
+          <p class="docs-article__source">Sources</p>
+        </header>
+        <div class="prose">
+<p>Where every constant comes from, what has been checked against a real pack, and
+two traps worth knowing about before reading the ITS sources yourself.</p>
+<h2 id="the-primary-source">The primary source</h2>
+<p>Every on-disk offset, width and opcode in <a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> is
+transcribed from one file:</p>
+<pre><code>SYSTEM;FSDEFS 43     the file system parameters, &quot;APPLIES TO ALL ITS MACHINES&quot;
+</code></pre>
+<p>read in the <a href="https://github.com/PDP-10/its">PDP-10/its</a> repository, at
+<code>src/system/fsdefs.43</code>, in a tree checked out at commit <code>e07922f</code> (2026-06-18).
+That checkout is shallow, so this project cannot report when the file itself last
+changed — a gap worth closing before any claim is made about which ITS releases
+this reader covers. See the version-drift entry in
+<a href="../filesystem/index.html#gap-register">the gap register</a>.</p>
+<p>Its own header reads:</p>
+<pre><code>;;; Copyright (c) 1999 Massachusetts Institute of Technology
+;;; See the COPYING file at the top-level directory of this project.
+</code></pre>
+<p>Two other files in the same tree supplied facts that FSDEFS does not carry:</p>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>what it settled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/system/disk.1228</code></td>
+<td>that a &quot;track&quot; is a block (line 48); <code>QFL2</code>, the MFD-slot arithmetic</td>
+</tr>
+<tr>
+<td><code>src/system/rp06.defs1</code> and the four beside it</td>
+<td>the drive geometry table, per drive</td>
+</tr>
+</tbody>
+</table>
+<p>and two more are named on the roadmap rather than used yet:</p>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>what it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/system/salv.317</code>, <code>src/kshack/nsalv.*</code></td>
+<td>ITS's own salvager: the independent second opinion, phase 8</td>
+</tr>
+<tr>
+<td><code>src/system/dskdmp.217</code></td>
+<td>the standalone dumper and bootstrap: how a pack is written from outside the monitor</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-licensing-line-and-where-it-sits">The licensing line, and where it sits</h2>
+<p><strong>The ITS tree is GPL and is never vendored, copied or committed here.</strong> No line
+of ITS code and no line of anybody else's C appears in this project.</p>
+<p>What is taken is what a file format <em>is</em>: word offsets, field widths, opcode
+values, and the arithmetic that turns a block number into a disk address. That is
+the same thing <code>t10fs</code> takes from DEC's <code>COMMOD.MAC</code> and <code>s5fs</code> from the 2.9BSD
+headers, and it is why each constant is cited: a citation is what distinguishes
+transcribing a fact from copying an implementation.</p>
+<p>The same line applies to two other programs in that tree that read this format,
+both of which were read for what they <em>say</em> and neither of which contributed
+code:</p>
+<ul>
+<li><code>tools/dasm/libword/</code> (GPL) — the container formats a 36-bit word is stored in,
+which is where the name <code>data8</code> for what this project calls <code>le64</code> comes from.</li>
+<li><code>tools/mldev/</code> — a FUSE client for the ITS <em>network</em> file protocol, not the
+disk format. Different problem, listed here so nobody goes looking for disk
+layout in it.</li>
+</ul>
+<p><code>itsfs</code> is clean, original C. Disk images and the ITS source tree are usable
+locally for validation and are never committed. Test fixtures are built by the
+test suite.</p>
+<h2 id="two-traps">Two traps</h2>
+<p><strong>1. MIDAS numbers are octal unless they carry a trailing dot.</strong></p>
+<pre><code>DEFSYM	LTIBLK==20		;BYTES MAPPING THE DISK START HERE      &lt;- 16 decimal
+DEFSYM	UDDESC==11.	;FIRST LOC AVAIL FOR DESC                   &lt;- 11 decimal
+</code></pre>
+<p>Two lines, two bases, and the only difference is a full stop. <code>its.h</code> writes each
+constant in the base FSDEFS writes it in and says so, so a line can be checked
+against the source by eye without converting anything.</p>
+<p><strong>2. FSDEFS's prose gives ASCII codes for characters it stores as SIXBIT.</strong></p>
+<p>The link-target encoding is described as quoting <code>&quot;;&quot; (73)</code> and <code>&quot;:&quot; (72)</code>. Those
+are the ASCII codes. The bytes on the disk are SIXBIT — <strong>033 and 032</strong> — and
+taking the numbers at face value finds no separator anywhere, rendering every
+link as one run-on string. The same sentence gives space as <code>(0)</code>, which <em>is</em> the
+SIXBIT value. One sentence, two encodings.</p>
+<p>This cost an afternoon here and is written up in <code>its.h</code> beside the constants, in
+<a href="../filesystem/index.html#links">the file system</a>, and in
+<a href="../validation/index.html#what-has-been-found-so-far">validation</a>.</p>
+<h2 id="evidence-markers">Evidence markers</h2>
+<p><code>its.h</code> marks every field:</p>
+<pre><code>[v]   read in FSDEFS and seen to decode correctly on a real ITS pack
+[s]   read in FSDEFS, not yet exercised against a pack
+</code></pre>
+<p>A <code>[s]</code> field is not less trustworthy as a <em>transcription</em> — it is less
+trustworthy as an <em>understanding</em>, and a reader should not lean on one. The gap
+register in <a href="../filesystem/index.html#gap-register">the file system</a> lists every one that
+matters and says what is missing.</p>
+<p>What &quot;a real pack&quot; means here is stated plainly because it bounds every <code>[v]</code>:
+an RP06 image built by the PDP-10/its Makefile, booted, and run —
+<code>out/simh/rp0.dsk</code>, SHA-256 <code>27d980f2…</code>. It is not an artifact recovered from
+MIT. A pack built from source in 2026 exercises the format that ITS <em>writes
+today</em>; a 1980s pack could exercise fields that nothing has written since.
+Finding one is on the roadmap.</p>
+<h2 id="corroborating-implementations">Corroborating implementations</h2>
+<p>Not sources — second opinions, and named as such:</p>
+<ul>
+<li><strong>SIMH</strong> (<code>PDP10/pdp10_rp.c</code>, <code>sim_disk.c</code>) — the disk container is
+little-endian per 8-byte word, on any host, because the byte swap is
+conditional on the host being big-endian.</li>
+<li><strong>KLH10</strong> — defines <code>dbd9</code>, two words in nine bytes. DEC never had such a
+format, so KLH10's source is that format's specification rather than a second
+opinion on it.</li>
+<li><strong>TM03 Magnetic Tape Formatter User Guide</strong>, EK-OTM03-UG-003, table 2-12 — the
+core-dump frame layout, from the hardware that does the packing. The formatter
+splits the word; the operating system only hands it over.</li>
+</ul>
+<p>The last two are why <code>core</code> and <code>dbd9</code> are implemented at all. They are marked
+<code>corroborated</code> rather than <code>confirmed</code> here because no <em>ITS</em> artifact in either
+packing has been read yet — see <a href="../word-packing/index.html">word packing</a>.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>On-disk format — confirmed, observed, sourced | itsfs</title>
+  <meta name="description" content="Three columns of knowledge, kept scrupulously apart:">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">On-disk format — confirmed, observed, sourced</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#confirmed">Confirmed</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#observed">Observed</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#sourced">Sourced</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-would-change-these-columns">What would change these columns</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>On-disk format — confirmed, observed, sourced</h1>
+          <p class="docs-article__summary">Three columns of knowledge, kept scrupulously apart:</p>
+          <p class="docs-article__source">On-disk format — confirmed, observed, sourced</p>
+        </header>
+        <div class="prose">
+<p>Three columns of knowledge, kept scrupulously apart:</p>
+<ul>
+<li><strong>Confirmed</strong> — measured on a real pack, by a procedure written down here.</li>
+<li><strong>Observed</strong> — seen on a real pack before any theory existed to explain it.</li>
+<li><strong>Sourced</strong> — stated by <code>SYSTEM;FSDEFS 43</code>, and separately whether anything
+here has exercised it.</li>
+</ul>
+<p>The pack throughout is <code>out/simh/rp0.dsk</code>, an RP06 built and booted by the
+PDP-10/its Makefile: 317,132,800 bytes, 39,641,600 words.</p>
+<h2 id="confirmed">Confirmed</h2>
+<p><strong>A word is 36 bits, stored one per 8-byte little-endian container.</strong>
+<code>itsfs repack</code> decodes all 39,641,600 words and re-encodes them; the result is
+byte-identical to the original. Because every word is masked to 36 bits on the
+way in, that also proves no word on the pack has a bit set above the 36 — 28 bits
+× 39.6 million words of the file that are not storage.</p>
+<p><strong>A sector is 128 words; an ITS block is 8 of them, 1024 words.</strong>
+Two independent confirmations: <code>SECBLK==8</code> in every drive parameter file, and
+<code>UNWRDC</code> being the last block's word count <em>mod 2000 octal</em>, which is 1024
+decimal. A ten-bit field would not describe a block of any other size.</p>
+<p><strong>Blocks are numbered within a cylinder, and the count per cylinder truncates.</strong>
+<code>NBLKSC = NHEDS*NSECS/SECBLK</code> is 47 for an RP06, not 47.5. Confirmed by the MFD:
+the formula puts block 19081 at linear sector 154268, and word 5 of that sector
+is SIXBIT <code>M.F.D.</code>. Linear block numbering puts it 3,244 sectors away. See
+<a href="../geometry/index.html">geometry</a>.</p>
+<p><strong>The MFD is at <code>NBLKS/2-1</code>, and identifies itself.</strong> <code>MDCHK</code> is SIXBIT
+<code>M.F.D.</code> = <code>551646164416</code> octal. This is the one place in the format that exists
+purely so a program can ask &quot;is this the thing I think it is&quot;, and <code>itsfs</code>
+refuses to read an MFD without it.</p>
+<p><strong>A directory's block is the position of its MFD entry.</strong> All 247 directories on
+the pack resolve through <code>(A - 2000 + 2*NUDSL)/2</code>, and every one of them has a
+<code>UDNAME</code> in its own header matching the name in the MFD slot that addressed it —
+247 independent agreements about an arithmetic with no pointer to check.</p>
+<p><strong>The descriptor bytecode.</strong> Decoding every file in every directory produces, per
+directory, exactly the block count <code>UDBLKS</code> records — a number the monitor
+maintains separately as files are written. 247 directories, 247 agreements.</p>
+<p><strong>The TUT is a three-bit reference count per block.</strong> Its map accounts for the
+whole pack, and the totals agree with the descriptors: 30,940 blocks in use, and
+30,940 blocks described by files. Its 505 locked-out blocks are exactly 500 UFD
+blocks + 1 MFD + 4 TUT blocks.</p>
+<p><strong>Link targets are stored in SIXBIT, with SIXBIT separators.</strong> Confirmed by the
+bytes: <code>16 33 40 33 44 44 64 00</code> is <code>.;@;DDT</code>, the link <code>.;@ DDT</code>. See the trap in
+<a href="../sources/index.html#two-traps">sources</a>.</p>
+<h2 id="observed">Observed</h2>
+<p>Things seen on the pack, recorded before they were understood, and some of them
+still not:</p>
+<ul>
+<li>The TUT's reference counts on this pack are only 0, 1 and 7. <strong>No block is
+referenced twice</strong>, so the &quot;many or more&quot; value and the counts between have
+never been seen in the wild here. A reader must still handle them; a <em>checker</em>
+must not assume a second reference is corruption until it is known what makes
+one.</li>
+<li>72 blocks <em>inside</em> the swapping area (below <code>QSWAPA</code>) are in use by files.
+<code>QSWAPA</code> is documented as &quot;new files will not be written lower than this&quot;, which
+is a rule about writing rather than a rule about what is there.</li>
+<li>Every <code>UNAUTH</code> on the pack is all ones — &quot;no directory&quot; — so nothing has ever
+resolved an author index.</li>
+<li>Every <code>UNBYTE</code> on the pack is zero, meaning 36-bit bytes, including on files
+that are plainly seven-bit text. Three of the four <code>UNBYTE</code> encodings have
+therefore never been exercised.</li>
+<li>File dates split cleanly into two eras: 1985–1987 for files that came off MIT
+tapes, and 2026 for files the build wrote. That is what makes the date decoding
+self-evidently right; both halves are sane at once.</li>
+<li>The directory named <code>.</code> (block 499) holds the system's own files. It is a
+perfectly ordinary UFD.</li>
+</ul>
+<h2 id="sourced">Sourced</h2>
+<p>Stated by FSDEFS. The full transcription with evidence markers is
+<a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a>; what follows is which parts have been <em>exercised</em>.</p>
+<table>
+<thead>
+<tr>
+<th>area</th>
+<th>sourced</th>
+<th>exercised</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MFD header words</td>
+<td>all seven</td>
+<td>five of seven; <code>MPDOFF</code>, <code>MPDWDK</code> read but not interpreted</td>
+</tr>
+<tr>
+<td>MFD name area</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>UFD header words</td>
+<td>all five</td>
+<td>four of five; <code>UDALLO</code> read but not interpreted</td>
+</tr>
+<tr>
+<td>name block words</td>
+<td>all five</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>UNRNDM</code> fields</td>
+<td>four byte pointers</td>
+<td>all four</td>
+</tr>
+<tr>
+<td><code>UNDATE</code> fields</td>
+<td>four byte pointers</td>
+<td>three; <code>UNTIM</code>'s unit is unknown</td>
+</tr>
+<tr>
+<td><code>UNREF</code> fields</td>
+<td>three byte pointers</td>
+<td>one; <code>UNAUTH</code> all-ones everywhere, <code>UNBYTE</code> zero everywhere</td>
+</tr>
+<tr>
+<td>flag bits</td>
+<td>five values</td>
+<td>one (<code>UNLINK</code>); the field's width is deduced</td>
+</tr>
+<tr>
+<td>descriptor opcodes</td>
+<td>five kinds</td>
+<td>four; the skip codes are unreachable in ITS itself</td>
+</tr>
+<tr>
+<td>link encoding</td>
+<td>with five examples</td>
+<td>yes, and its documentation is wrong about the base</td>
+</tr>
+<tr>
+<td>TUT header words</td>
+<td>all seven</td>
+<td>five of seven; <code>QTRSRV</code> and the secondary-pack idea untouched</td>
+</tr>
+<tr>
+<td>TUT map</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-would-change-these-columns">What would change these columns</h2>
+<ul>
+<li><strong>A pack recovered from MIT</strong>, rather than built from source, would exercise
+fields nothing has written since the 1980s — <code>UNBYTE</code>'s other three encodings
+above all.</li>
+<li><strong>An ITS magtape</strong> would promote <code>core</code> from <code>corroborated</code> to <code>confirmed</code>.</li>
+<li><strong>A multi-pack file system</strong> would exercise <code>UNPKN</code> and <code>QTRSRV</code>, which are
+currently read and ignored.</li>
+<li><strong>A second FSDEFS</strong>, from another ITS release, would turn the version-span
+question from an open one into a measured one.</li>
+</ul>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design | itsfs</title>
+  <meta name="description" content="What the layers are, which rules are not negotiable, and what is deliberately out of scope.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Design</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#the-layers">The layers</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-invariants">The invariants</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-is-deliberately-out-of-scope">What is deliberately out of scope</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#why-the-front-ends-are-separate-files">Why the front ends are separate files</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Design</h1>
+          <p class="docs-article__summary">What the layers are, which rules are not negotiable, and what is deliberately out of scope.</p>
+          <p class="docs-article__source">Design</p>
+        </header>
+        <div class="prose">
+<p>What the layers are, which rules are not negotiable, and what is deliberately
+out of scope.</p>
+<h2 id="the-layers">The layers</h2>
+<pre><code>   cmd_*.c        front ends: info, dump, dirs, ls, cat, get, free, ...
+   ---------------------------------------------------------------------
+   structure.c    the file system: MFD, UFD, name blocks, descriptors, TUT
+   its.h          every on-disk offset, transcribed from FSDEFS with a citation
+   ---------------------------------------------------------------------
+   image.c        an image, addressed in words and in ITS blocks
+   itsgeom.c      WHERE A BLOCK IS: cylinder-major numbering, and its remainder
+   ---------------------------------------------------------------------
+   itspack.c      how a 36-bit word is stored in 8-bit bytes
+   itstext.c      what the bits mean when they are characters
+</code></pre>
+<p>Each layer knows nothing about the one above it. <code>itspack.c</code> has never heard of a
+block; <code>itsgeom.c</code> has never heard of a directory; <code>structure.c</code> has never heard
+of a byte.</p>
+<p>The middle layer is the one that is not in <code>t10fs</code> or <code>s5fs</code>, and it is there
+because ITS block numbers are not offsets. <a href="../geometry/index.html">Geometry</a> is the whole
+of that argument.</p>
+<h2 id="the-invariants">The invariants</h2>
+<p>Each of these cost somebody a bug once, in this project or in a sibling.</p>
+<p><strong>1. Never lay a host integer over image bytes.</strong> Every word enters through
+<code>its_pack</code>'s <code>get()</code> and leaves through <code>put()</code>, masked to 36 bits. A <code>uint64_t</code>
+carrying a word always has its top 28 bits clear. This is what makes <code>repack</code>
+possible and what makes the byte-for-byte round trip mean something.</p>
+<p><strong>2. Nothing in <code>its.h</code> is a C struct, and nothing ever will be.</strong> A PDP-10 word
+is 36 bits; there is no host type that is one. Every field is fetched by word
+index out of a <code>uint64_t[]</code>.</p>
+<p><strong>3. One definition of any layout arithmetic.</strong> <code>its_blk_sector()</code> is the only
+place a block becomes a sector. <code>ITS_FIELD()</code> is the only place a byte pointer
+becomes a value. <code>its_pack_bytes()</code> is the only place a word count becomes a byte
+count. <code>s5fs</code> learned this by open-coding a block-map ladder in four readers and
+getting it wrong in three.</p>
+<p><strong>4. Bound every value that comes off the disk before using it as an index.</strong>
+<code>MDNAMP</code>, <code>UDNAMP</code>, <code>UNDSCP</code>, <code>QFRSTB</code>, <code>QLASTB</code>, every descriptor opcode and
+every block number a descriptor produces. All of them are checked at the point
+they are read, not at the point they are used, and the fuzzer attacks each.</p>
+<p><strong>5. Refuse what the format cannot represent.</strong> A name that is not SIXBIT is an
+error, not something to truncate or case-fold. Silent truncation in <code>s5fs</code>
+produced two directory entries that looked identical and named different files,
+on an image the checker called clean.</p>
+<p><strong>6. A refusal names the thing it refused.</strong> <code>no directory named 'NOSUCH' in the MFD</code>, not <code>error 2</code>. Half the test suite asserts on those strings, which is also
+what keeps them from rotting.</p>
+<p><strong>7. Evidence markers are part of the code.</strong> A packing says whether it is
+<code>confirmed</code> or <code>corroborated</code>; a field says <code>[v]</code> or <code>[s]</code>. &quot;We implemented it&quot;
+and &quot;we know ITS did it this way&quot; are different claims, and a project that stops
+distinguishing them starts quietly inventing a file system.</p>
+<p>Two more are held in reserve for code that does not exist yet:</p>
+<p><strong>8. Exactly one mutation path.</strong> When there is a writer, it is one file, and
+every front end calls it.</p>
+<p><strong>9. The checker shares no code with the reader.</strong> A clean check has to be
+evidence rather than the reader agreeing with itself.</p>
+<h2 id="what-is-deliberately-out-of-scope">What is deliberately out of scope</h2>
+<ul>
+<li><strong>Anything that is not ITS.</strong> TOPS-10 is <code>t10fs</code>; TOPS-20 is neither.</li>
+<li><strong>Writing, for now.</strong> Phase 7. Until then <code>img_write_words()</code> exists, is
+unreachable from any command, and is there so that the read-modify-write shape
+a shared-byte packing needs is settled before anything depends on it.</li>
+<li><strong>Interpreting file contents.</strong> <code>cat</code> writes the seven-bit characters that are
+on the disk and translates nothing — not line endings, not control characters.
+An extraction tool that quietly changes a file is worse than no extraction
+tool. (ITS text uses CRLF; that is the file's, not ours.)</li>
+<li><strong>Repairing.</strong> A checker that can also fix things is two programs, and the
+second one has to be written after the first is trusted.</li>
+</ul>
+<h2 id="why-the-front-ends-are-separate-files">Why the front ends are separate files</h2>
+<p><code>cmd_dump.c</code> is the tool every other phase is debugged with, and it must keep
+working when the structure layer is broken — including when the structure layer
+is broken <em>on purpose</em>, which is what the fuzzer does. So it depends on nothing
+above <code>image.c</code>, and <code>itsfs dump -s</code> bypasses even the geometry, addressing raw
+128-word sectors. When a block does not decode, that is how you find out whether
+the block, the geometry or the reader is at fault.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

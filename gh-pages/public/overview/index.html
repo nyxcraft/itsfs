@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview | itsfs</title>
+  <meta name="description" content="Host tools for the ITS file system — the disk MIT&#x27;s Incompatible Timesharing System ran, read on a machine that has never heard of a 36-bit word.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-4 done: a complete read-only reader</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Overview</span>
+    </nav>
+
+    <!-- Simple full-width page (no left rail, no section viewer) -- used for the long
+         reference pages that read as one continuous document. -->
+    <main id="main-content" class="page-main" tabindex="-1">
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Overview</h1>
+          <p class="docs-article__summary">Host tools for the ITS file system — the disk MIT&#x27;s Incompatible Timesharing System ran, read on a machine that has never heard of a 36-bit word.</p>
+        </header>
+        <div class="prose">
+<p>Host tools for the <strong>ITS file system</strong> — the disk MIT's Incompatible Timesharing
+System ran, read on a machine that has never heard of a 36-bit word.</p>
+<blockquote>
+<p><strong>Status: phases 0–4 done — a complete read-only reader.</strong> The word layer is
+proven byte-for-byte against a real RP06 pack, the geometry layer finds the
+master file directory by its own check word, and the reader lists directories,
+decodes the run-length descriptors that are ITS's block maps, follows links and
+extracts files. On a real pack the space accounts for <strong>exactly</strong>: every block
+the files describe is a block the allocation table calls in use, and the blocks
+it calls locked out are precisely the directories and the tables. Every field
+offset is transcribed from <code>SYSTEM;FSDEFS 43</code> with a citation
+(<a href="../sources/index.html">sources</a>). There is <strong>no writer</strong>. See
+<a href="../roadmap/index.html">the roadmap</a>, <a href="../validation/index.html">validation</a> and
+<a href="../plan/index.html">PLAN.md</a>.</p>
+</blockquote>
+<pre><code class="language-console">$ itsfs info rp0.dsk
+file          rp0.dsk
+size          317132800 bytes
+packing       le64 (confirmed) -- one word per 64-bit little-endian container
+word          36 bits, 1 per 8 bytes
+words         39641600
+drive         rp06 (SYSTEM;RP06 DEFS 1)
+geometry      812+3 cylinders, 19 surfaces, 20 sectors/track, 8 sectors/block
+blocks/cyl    47   (4 sectors per cylinder are unreachable -- 3260 on the pack)
+blocks        38164 in the file area, 38305 including the spare cylinders
+MFD           block 19081
+TUT           blocks 19077..19080
+MDCHK         551646164416 = SIXBIT |M.F.D.|  -- an ITS master file directory
+directories   247, in an MFD with room for 500 (MDNUDS)
+
+$ itsfs ls -l rp0.dsk KSHACK | head -4
+-READ- -THIS-       116      1  30-dec-1985
+1PROC  BUGS          23      1   1-jun-1986
+AINOTE 8           1676      2  24-oct-1986
+DDT    BIN        link          27-jun-2026  -&gt; .;@ DDT
+</code></pre>
+<h2 id="why-a-separate-project">Why a separate project</h2>
+<p>This is the third in a family — <a href="https://github.com/nyxcraft/s5fs"><code>s5fs</code></a> reads
+UNIX V7/2.xBSD, <a href="https://github.com/nyxcraft/t10fs"><code>t10fs</code></a> reads TOPS-10 — and
+the architecture is deliberately the same. ITS is not, in four ways that shape
+the design rather than fitting inside it:</p>
+<ul>
+<li><strong>A block number is not an offset.</strong> ITS numbers blocks <em>within a cylinder</em>,
+and the count per cylinder is an integer division that usually has a
+remainder — so four sectors of every RP06 cylinder are reachable by no block
+number at all. There is a geometry layer here that neither sibling needs.</li>
+<li><strong>Free space is a reference count</strong>, three bits per block, not a bitmap and not
+a chain. Zero is free, seven is locked out, and everything between is how many
+things point at that block.</li>
+<li><strong>A directory is exactly one block.</strong> Descriptors grow up from word 11, name
+blocks grow down from the end, and when they meet the directory is full. There
+is no growth and nothing to chain.</li>
+<li><strong>A file's block list is a program</strong> — a run-length bytecode in six-bit bytes
+with a load-address escape — and a link's &quot;block list&quot; is the target's name in
+the same field, distinguished by one bit.</li>
+</ul>
+<h2 id="commands">Commands</h2>
+<table>
+<thead>
+<tr>
+<th>command</th>
+<th>what it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>itsfs info</code></td>
+<td>describe an image: packing, drive, geometry, and whether the MFD is there</td>
+</tr>
+<tr>
+<td><code>itsfs dump</code></td>
+<td>print blocks (or raw sectors) as 36-bit words — octal, halfwords, SIXBIT, ASCII</td>
+</tr>
+<tr>
+<td><code>itsfs packings</code></td>
+<td>the word packings, and how well each one is established</td>
+</tr>
+<tr>
+<td><code>itsfs drives</code></td>
+<td>the five drives ITS supported, and the geometry each implies</td>
+</tr>
+<tr>
+<td><code>itsfs repack</code></td>
+<td>rewrite an image word for word in another packing</td>
+</tr>
+<tr>
+<td><code>itsfs sixbit</code></td>
+<td>encode and decode SIXBIT, with no image involved</td>
+</tr>
+<tr>
+<td><code>itsfs dirs</code></td>
+<td>list the directories in the MFD — <code>-l</code> also opens each one</td>
+</tr>
+<tr>
+<td><code>itsfs ls</code></td>
+<td>list a directory: <code>ls rp0.dsk KSHACK</code></td>
+</tr>
+<tr>
+<td><code>itsfs cat</code></td>
+<td>print a file as text</td>
+</tr>
+<tr>
+<td><code>itsfs get</code></td>
+<td>copy a file out to the host — text, or <code>-w</code> for its 36-bit words</td>
+</tr>
+<tr>
+<td><code>itsfs free</code></td>
+<td>what the TUT says: free, in use, locked out, and the reference counts</td>
+</tr>
+</tbody>
+</table>
+<p>Run any of them with no arguments for its own usage.</p>
+<h3 id="names">Names</h3>
+<p>ITS writes a file name as <code>DIR;FN1 FN2</code> — a directory and two six-character
+SIXBIT names, with no extension in the DEC sense and no path deeper than one.
+The space in the middle has to be quoted for the shell, so every command that
+takes a name also takes it as three arguments:</p>
+<pre><code class="language-console">$ itsfs cat rp0.dsk 'KSHACK;BUILD DOC'
+$ itsfs cat rp0.dsk KSHACK BUILD DOC
+</code></pre>
+<p>Both spellings go through one parser. A name that cannot be SIXBIT is refused,
+never truncated and never case-folded: SIXBIT has no lower case, and quietly
+mapping <code>hello</code> to <code>HELLO</code> would match a different file.</p>
+<h3 id="common-options">Common options</h3>
+<p><code>-p &lt;packing&gt;</code> selects the word packing (default <code>le64</code>, which is what SIMH disk
+images use). <code>-d &lt;drive&gt;</code> names the drive when the image is not a whole pack —
+normally it is identified from the size. A word value on the command line is
+<strong>octal by default</strong> — this is a PDP-10 — with <code>0x</code> for hex, <code>d:</code> for decimal,
+<code>lh,,rh</code> for the two 18-bit halves, and <code>sixbit:NAME</code> for text. A <em>block number</em>
+is decimal by default, because that is how ITS writes block numbers; <code>0</code> or <code>0o</code>
+in front asks for octal.</p>
+<h2 id="build">Build</h2>
+<pre><code class="language-console">$ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
+$ make lint             # 16 warning options, and clang-format
+$ make test             # the regression suite (sh + coreutils), 81 checks
+$ make test-san         # the same suite under ASan + UBSan
+$ make fuzz             # optional corruption fuzzer (needs python3)
+$ make oracle IMAGE=... # everything above, against a real pack
+</code></pre>
+<h2 id="what-is-proven-and-what-is-only-claimed">What is proven, and what is only claimed</h2>
+<p>Keeping those two apart is the whole discipline of this project.</p>
+<p><strong>Proven.</strong> Every one of the 39,641,600 words of a real 300 MB RP06 ITS pack
+decodes and re-encodes byte-for-byte identically, and survives a round trip
+through two packings with different strides:</p>
+<pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
+IDENTICAL: the word layer round-trips the real pack
+IDENTICAL: cross-packing round trip
+IDENTICAL: and through the packing that shares a byte
+</code></pre>
+<p>That is a stronger result than it looks: because every word is masked to 36 bits
+on the way in, byte identity over the whole image also proves that nothing
+anywhere on the pack sets one of the 28 bits outside the word.</p>
+<p><strong>Measured, not assumed.</strong> A sector is 128 words and a block is eight of them; an
+RP06 cylinder holds 47 blocks and not 47.5; the MFD is at <code>NBLKS/2-1</code> and says so
+itself in SIXBIT. See <a href="../on-disk-format/index.html">on-disk format</a>, which lists the
+evidence for each.</p>
+<p><strong>Sourced, and checked against the artifact.</strong> Every field offset in
+<a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> is transcribed from <code>SYSTEM;FSDEFS 43</code>, in the base the
+source writes it in, with ITS's own symbol named and a marker saying whether the
+field has actually been seen decoding correctly on a real pack. See
+<a href="../sources/index.html">sources</a>.</p>
+<p><strong>The space on a real pack accounts for exactly</strong>, three ways, against numbers
+this project did not compute:</p>
+<pre><code class="language-console">1. 247 directories walked, 247 whose descriptors agree with their own UDBLKS
+2. 30940 blocks described by files == 30940 blocks the TUT calls in use
+3. 505 blocks locked out == 500 directories + 1 MFD + 4 TUT blocks
+</code></pre>
+<p>Each line is a different structure, maintained by a different part of the
+monitor, agreeing with the descriptor decoder. The first is 247 separate
+comparisons; the second would catch a single block skipped or double-counted
+anywhere on the pack; the third is the only check there is on the MFD-slot
+arithmetic, which has no pointer to verify it against. See
+<a href="../validation/index.html">validation</a>.</p>
+<p><strong>And one piece of evidence that is not the pack agreeing with itself.</strong> The ITS
+source tree builds its own disk — a host file goes through <code>itstar</code>, a tape, and
+ITS's own loader before the monitor writes it — so for a file that exists in both
+places the host copy is an independent original:</p>
+<pre><code class="language-console">cross-check: 137 files byte-identical to their host originals, 0 differ,
+             40 skipped as escaped by itstar, 0 not on the pack
+</code></pre>
+<p>Every layer is on that path: the geometry found the right blocks, the descriptor
+decoded them in the right order, <code>UNWRDC</code> gave the right length for the last one,
+and the seven-bit extraction is right. It also found a real bug — <code>cat</code> was
+dropping NULs from the <em>middle</em> of a file, not just the padding at the end, which
+nothing the pack knows about itself could ever have caught.</p>
+<p><strong>Hostile input is bounded.</strong> 81 checks in the suite, a third of them feeding the
+reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
+commands over damaged packs under ASan and UBSan without a finding. The bar is
+not that the reader survives — it is that it refuses <em>by name</em> and reads nothing
+it did not bound first.</p>
+<p><strong>What is NOT proven.</strong> There is no writer, so nothing here has been graded by
+ITS itself; <code>NSALV</code>, ITS's own salvager, has never been pointed at anything this
+produced; no ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
+<code>corroborated</code> rather than <code>confirmed</code> here even though <code>t10fs</code> confirmed both;
+and the reference pack is one built from source in 2026, not an artifact
+recovered from MIT. Each of those is a phase on <a href="../roadmap/index.html">the roadmap</a>,
+and until it is done this file does not claim it.</p>
+<h2 id="documentation">Documentation</h2>
+<ul>
+<li><a href="../filesystem/index.html">The file system</a> — <strong>the format itself</strong>, and a gap register of what is still unknown</li>
+<li><a href="../design/index.html">Design</a> — the layers, the invariants, and what is out of scope</li>
+<li><a href="../geometry/index.html">Geometry</a> — why a block number is not an offset</li>
+<li><a href="../word-packing/index.html">Word packing</a> — why the bottom layer is not a byte-order codec</li>
+<li><a href="../on-disk-format/index.html">On-disk format</a> — confirmed facts, observations, and what the source settles</li>
+<li><a href="../sources/index.html">Sources</a> — where every constant comes from, and two traps worth knowing</li>
+<li><a href="../validation/index.html">Validation</a> — how correctness is established here, and what has been</li>
+<li><a href="../roadmap/index.html">Roadmap</a> — the phases, and what ends each one</li>
+<li><a href="../plan/index.html">The plan</a> — written before any code</li>
+<li><a href="../handoff/index.html">Handoff</a> — for whoever picks this up next</li>
+</ul>
+<h2 id="copyright">Copyright</h2>
+<p><code>itsfs</code> is clean, original C. The ITS source tree, the disk images built from it
+and the emulators used to validate against it are usable locally and <strong>are never
+committed here</strong>. Test fixtures are built by the test suite, never copied off a
+pack.</p>
+<p>Licensed under the terms in <a href="https://github.com/nyxcraft/itsfs/blob/main/LICENSE">LICENSE</a>.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+</body>
+</html>
