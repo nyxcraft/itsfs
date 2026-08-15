@@ -178,9 +178,10 @@ records.
 - **A pack recovered from MIT** would be worth more than any two phases here, and
   would immediately exercise `UNBYTE` encodings that nothing has written since the
   1980s. If one turns up, read it before writing anything.
-- **A second `FSDEFS`** from another ITS release turns the version-span question
-  from an open one into a measured one, and it is cheap: the diff is the whole
-  method.
+- **A `FSDEFS` from before September 1979.** `make version-diff` already compares
+  versions 40 and 43 and finds all 71 symbols identical, but both postdate the
+  TUT format change both of them mention, so the span this reader covers has a
+  floor and no ceiling. A pre-1979 one would be the interesting artifact.
 - **A multi-pack file system.** `UNPKN` and `QTRSRV` are read and ignored today.
   `t10fs` found two real bugs the first time it met a genuinely multi-unit
   structure.

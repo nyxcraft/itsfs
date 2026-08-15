@@ -352,11 +352,18 @@ against the MFD and the direction of the indexing is untested.</p>
 <code>QTRSRV</code> names a secondary pack. Clearly provided for; entirely unexercised here.
 <code>t10fs</code> found two real bugs the first time it read a genuinely multi-unit
 structure, and there is no reason to expect better.</p>
-<p><strong>Version drift.</strong> <code>FSDEFS 43</code> is one version of one file, carrying two dated
-format changes in its own comments. Which ITS releases this reader covers is
-unestablished. <code>t10fs</code> settled the equivalent question by diffing four monitor
-releases and reporting that 82 of 84 symbols were identical; the same exercise is
-owed here.</p>
+<p><strong>Version drift — narrowed, not closed.</strong> <code>make version-diff</code> compares <code>FSDEFS 43</code> against <code>SYSENG;FSDEFS 40</code>, an earlier version preserved in the PDP-10/its
+history: <strong>all 71 symbols are identical</strong>, and the 65 differing lines are prose.
+So the format did not move across those three file-versions.</p>
+<p>What is still open is where they sit. A file version is ITS's own numbering, not
+a release number, and nothing maps 40 or 43 onto an ITS distribution. Both carry
+<code>;9/5/79 - tut format changed!</code>, which puts a floor under the span — the 3-bit
+TUT entry read here is the post-1979 one — and nothing puts a ceiling on it. A
+<code>FSDEFS</code> from before 1979 would be the interesting one, and none is in the tree.</p>
+<p>One semantic difference survives with no symbol attached: version 40 documents
+the 020 bit of a load address as a <code>&quot;FUNNY&quot; BLOCK IF DMDSK</code>, and 43 says it is
+flushed. This reader does not mask it, per 43. See
+<a href="../sources/index.html#how-far-the-transcription-reaches">sources</a>.</p>
 <p><strong>The <code>DM</code> disks.</strong> FSDEFS's removed &quot;funny&quot; bit was conditional on <code>DMDSK</code>, a
 disk type this project has never seen. Whether such a pack would read is unknown.</p>
 

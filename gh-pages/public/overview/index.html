@@ -182,6 +182,7 @@ $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
+$ make version-diff     # how far the transcription reaches, across two FSDEFS
 </code></pre>
 <h2 id="what-is-proven-and-what-is-only-claimed">What is proven, and what is only claimed</h2>
 <p>Keeping those two apart is the whole discipline of this project.</p>
@@ -203,8 +204,10 @@ evidence for each.</p>
 <p><strong>Sourced, and checked against the artifact.</strong> Every field offset in
 <a href="https://github.com/nyxcraft/itsfs/blob/main/src/its.h"><code>src/its.h</code></a> is transcribed from <code>SYSTEM;FSDEFS 43</code>, in the base the
 source writes it in, with ITS's own symbol named and a marker saying whether the
-field has actually been seen decoding correctly on a real pack. See
-<a href="../sources/index.html">sources</a>.</p>
+field has actually been seen decoding correctly on a real pack. <code>make version-diff</code> checks that every symbol the header cites is really defined there,
+and compares the file against an earlier version preserved in the ITS history:
+<strong>all 71 definitions are identical</strong>, so the format did not move across those
+three file-versions. See <a href="../sources/index.html#how-far-the-transcription-reaches">sources</a>.</p>
 <p><strong>The space on a real pack accounts for exactly</strong>, three ways, against numbers
 this project did not compute:</p>
 <pre><code class="language-console">1. 247 directories walked, 247 whose descriptors agree with their own UDBLKS
@@ -279,9 +282,11 @@ has ever been graded by ITS — <code>NSALV</code> has checked its reading of a 
 a different claim. It was also asked about only one kind of damage, a cleared TUT
 word. No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
 <code>corroborated</code> rather than <code>confirmed</code> here even though <code>t10fs</code> confirmed both;
-and the reference pack is one built from source in 2026, not an artifact
-recovered from MIT. Each of those is a phase on <a href="../roadmap/index.html">the roadmap</a>,
-and until it is done this file does not claim it.</p>
+the reference pack is one built from source in 2026, not an artifact recovered
+from MIT; and the version span has a floor and no ceiling — both <code>FSDEFS</code>
+versions compared are after the 1979 TUT change, and nothing here maps a file
+version onto an ITS release. Each of those is a phase on
+<a href="../roadmap/index.html">the roadmap</a>, and until it is done this file does not claim it.</p>
 <h2 id="documentation">Documentation</h2>
 <ul>
 <li><a href="../filesystem/index.html">The file system</a> — <strong>the format itself</strong>, and a gap register of what is still unknown</li>

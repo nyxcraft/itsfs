@@ -83,6 +83,7 @@ tests/crosscheck.sh extracted files against the host files they were built from
 tests/fuzz.py       one random word damaged per iteration, every command run.
 tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
+tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 </code></pre>
 <h2 id="things-not-to-do">Things not to do</h2>
 <p>Each of these has already cost somebody time, here or in a sibling.</p>
@@ -121,8 +122,9 @@ here and <code>confirmed</code> in <code>t10fs</code>.</li>
 <li><code>UNTIM</code>'s unit, <code>UNBYTE</code>'s other three encodings, <code>UNDUMP</code>'s position and the
 flag field's width are all unknown. See
 <a href="../filesystem/index.html#gap-register">the gap register</a>.</li>
-<li>The ITS checkout used is shallow, so this project cannot say when <code>FSDEFS</code>
-itself last changed — and therefore cannot say which ITS releases it covers.</li>
+<li>The version span has a floor and no ceiling: <code>make version-diff</code> shows <code>FSDEFS</code>
+40 and 43 define all 71 symbols identically, but both postdate the 1979 TUT
+change, and a file version is not a release number.</li>
 </ul>
 <h2 id="how-to-get-a-pack-to-test-against">How to get a pack to test against</h2>
 <pre><code class="language-console">$ git clone https://github.com/PDP-10/its
@@ -161,8 +163,9 @@ exist:</p>
 nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
 are all things <code>itsfs check</code> reports. <code>tests/nsalv.sh</code> needs a different damage
 step and nothing more.</li>
-<li><strong>A second <code>FSDEFS</code></strong> from another ITS release turns the version-span question
-from an open one into a measured one. The diff is the whole method.</li>
+<li><strong>A <code>FSDEFS</code> from before September 1979</strong> would put a ceiling on the version
+span. <code>make version-diff</code> has the harness; it needs an older artifact, and none
+is in the ITS tree.</li>
 </ul>
 
         </div>

@@ -50,6 +50,7 @@ tests/crosscheck.sh extracted files against the host files they were built from
 tests/fuzz.py       one random word damaged per iteration, every command run.
 tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
+tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
 ## Things not to do
@@ -98,8 +99,9 @@ nothing here knows what a legitimate second reference looks like.
 - `UNTIM`'s unit, `UNBYTE`'s other three encodings, `UNDUMP`'s position and the
   flag field's width are all unknown. See
   [the gap register](docs/filesystem.md#gap-register).
-- The ITS checkout used is shallow, so this project cannot say when `FSDEFS`
-  itself last changed — and therefore cannot say which ITS releases it covers.
+- The version span has a floor and no ceiling: `make version-diff` shows `FSDEFS`
+  40 and 43 define all 71 symbols identically, but both postdate the 1979 TUT
+  change, and a file version is not a release number.
 
 ## How to get a pack to test against
 
@@ -150,5 +152,6 @@ exist:
   nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
   are all things `itsfs check` reports. `tests/nsalv.sh` needs a different damage
   step and nothing more.
-- **A second `FSDEFS`** from another ITS release turns the version-span question
-  from an open one into a measured one. The diff is the whole method.
+- **A `FSDEFS` from before September 1979** would put a ceiling on the version
+  span. `make version-diff` has the harness; it needs an older artifact, and none
+  is in the ITS tree.

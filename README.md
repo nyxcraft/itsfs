@@ -114,6 +114,7 @@ $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
+$ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
 ## What is proven, and what is only claimed
@@ -143,8 +144,11 @@ evidence for each.
 **Sourced, and checked against the artifact.** Every field offset in
 [`src/its.h`](src/its.h) is transcribed from `SYSTEM;FSDEFS 43`, in the base the
 source writes it in, with ITS's own symbol named and a marker saying whether the
-field has actually been seen decoding correctly on a real pack. See
-[sources](docs/sources.md).
+field has actually been seen decoding correctly on a real pack. `make
+version-diff` checks that every symbol the header cites is really defined there,
+and compares the file against an earlier version preserved in the ITS history:
+**all 71 definitions are identical**, so the format did not move across those
+three file-versions. See [sources](docs/sources.md#how-far-the-transcription-reaches).
 
 **The space on a real pack accounts for exactly**, three ways, against numbers
 this project did not compute:
@@ -237,9 +241,11 @@ has ever been graded by ITS — `NSALV` has checked its reading of a pack, which
 a different claim. It was also asked about only one kind of damage, a cleared TUT
 word. No ITS magtape has been read, which is why `core` and `dbd9` are
 `corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
-and the reference pack is one built from source in 2026, not an artifact
-recovered from MIT. Each of those is a phase on [the roadmap](docs/roadmap.md),
-and until it is done this file does not claim it.
+the reference pack is one built from source in 2026, not an artifact recovered
+from MIT; and the version span has a floor and no ceiling — both `FSDEFS`
+versions compared are after the 1979 TUT change, and nothing here maps a file
+version onto an ITS release. Each of those is a phase on
+[the roadmap](docs/roadmap.md), and until it is done this file does not claim it.
 
 ## Documentation
 

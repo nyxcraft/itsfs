@@ -190,6 +190,23 @@ nsalv: $(BIN)/itsfs
 	@test -f "$(IMAGE)" || { echo "no image at $(IMAGE) -- set IMAGE=<path>"; exit 2; }
 	@sh tests/nsalv.sh $(BIN)/itsfs "$(IMAGE)" "$(NSALV_PDP10)" "$(NSALV_TAPE)" $(NSALV_TMP)
 
+#
+# `make version-diff` -- how far does the transcription reach?
+#
+# src/its.h comes from ONE file, SYSTEM;FSDEFS 43, and ITS ran for twenty-three
+# years.  The PDP-10/its repository preserves an earlier version of the same file
+# in its history -- SYSENG;FSDEFS 40, imported and then deleted in 2016 -- so the
+# question has an answer rather than a shrug.
+#
+# Needs the ITS source tree WITH ITS HISTORY.  A shallow clone will not have the
+# deleted file; `git fetch --unshallow` in that tree fixes it.
+#
+# It also checks the citation column: every symbol its.h names must actually be
+# defined in FSDEFS.  That is the one kind of wrong citation a machine can catch.
+#
+version-diff:
+	@sh tests/version-diff.sh $(ITSSRC)/..
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -202,4 +219,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv version-diff

@@ -35,6 +35,7 @@
         <nav class="section-nav" aria-label="On this page">
 <ul class="section-nav__list">
 <li><a class="section-nav__link section-nav__link--l2" href="#the-primary-source">The primary source</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#how-far-the-transcription-reaches">How far the transcription reaches</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-licensing-line-and-where-it-sits">The licensing line, and where it sits</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#two-traps">Two traps</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#evidence-markers">Evidence markers</a></li>
@@ -59,11 +60,49 @@ transcribed from one file:</p>
 <pre><code>SYSTEM;FSDEFS 43     the file system parameters, &quot;APPLIES TO ALL ITS MACHINES&quot;
 </code></pre>
 <p>read in the <a href="https://github.com/PDP-10/its">PDP-10/its</a> repository, at
-<code>src/system/fsdefs.43</code>, in a tree checked out at commit <code>e07922f</code> (2026-06-18).
-That checkout is shallow, so this project cannot report when the file itself last
-changed — a gap worth closing before any claim is made about which ITS releases
-this reader covers. See the version-drift entry in
-<a href="../filesystem/index.html#gap-register">the gap register</a>.</p>
+<code>src/system/fsdefs.43</code>.</p>
+<h2 id="how-far-the-transcription-reaches">How far the transcription reaches</h2>
+<p><code>FSDEFS 43</code> is one version of one file, and ITS ran for twenty-three years, so
+&quot;which ITS releases does this reader cover?&quot; is a real question. It used to be
+answered here with a shrug. It has a better answer now, because the same
+repository preserves an <strong>earlier version of the same file</strong> — <code>SYSENG;FSDEFS 40</code>, three file-versions back, imported in 2016 and deleted a month later, still
+in the history.</p>
+<pre><code class="language-console">$ make version-diff
+1. every symbol, both versions
+  ok   IDENTICAL: all 71 definitions, same names and same values
+
+2. the symbols src/its.h actually cites
+  ok   all 43 symbols its.h cites are defined in FSDEFS 43
+  ok   ...and 2 constants that cite ITS code instead, and say so
+</code></pre>
+<p><strong>All 71 <code>DEFSYM</code>s are identical</strong> — every name, every value. The 65 lines that
+differ are entirely prose: version 43 replaced a terse descriptor comment with a
+long one and added a dated note. And that note makes the claim this comparison
+checks:</p>
+<blockquote>
+<p><code>; 8/19/90 Due to the larger size of RP07s it was necessary to officially</code>
+<code>; flush the DM &quot;funny&quot; bit.  This change only changes the comments in this</code>
+<code>; file, but any program that interprets UFD descriptors needs to be fixed</code>
+<code>; to not mask that bit out (as most of them currently do).</code></p>
+</blockquote>
+<p>The file says its own change was comment-only; the symbol comparison is what
+holds it to that.</p>
+<p><strong>One semantic difference survives, with no symbol attached to it.</strong> <code>FSDEFS 40</code>
+documents the 020 bit of a load address as a <code>&quot;FUNNY&quot; BLOCK IF DMDSK</code>; 43 says it
+is flushed, so 17 bits are block number. This reader does not mask it, which is
+correct for 43 and for any pack FSDEFS calls known — but it is the one place
+where reading version 40 instead would have produced different code, and no diff
+of symbols would have shown it.</p>
+<p><strong>What this does NOT establish.</strong> A file version is ITS's own numbering, not a
+release number, and nothing here maps 40 or 43 onto an ITS distribution. The
+comparison establishes that the format did not move between two points; it does
+not establish where those points are. Both versions carry <code>;9/5/79 - tut format changed!</code>, so the three-bit TUT entry this reads is the post-1979 one in both —
+which puts a floor under the span and no ceiling.</p>
+<p><code>tests/version-diff.sh</code> also checks the <strong>citation column</strong>: every symbol
+<code>its.h</code> names must actually be defined in <code>FSDEFS</code>. That is the one kind of wrong
+citation a machine can catch, and it found one — two constants whose comments
+began with <code>SIXBIT</code> and looked like citations to a symbol of that name. They cite
+ITS's own code instead now, and say so.</p>
 <p>Its own header reads:</p>
 <pre><code>;;; Copyright (c) 1999 Massachusetts Institute of Technology
 ;;; See the COPYING file at the top-level directory of this project.

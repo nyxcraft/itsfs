@@ -245,9 +245,24 @@
  *
  * Note also that the space FSDEFS lists as quoted is `(0)`, which IS its SIXBIT
  * value -- so the comment mixes the two encodings in one sentence.
+ *
+ * THE TWO BELOW ARE THE ONLY CONSTANTS HERE THAT CITE NO DEFSYM, because FSDEFS
+ * gives these characters in prose and defines no symbol for either.  What they
+ * cite instead is ITS's own CODE -- NSALV's link parser, which compares against
+ * MIDAS character constants:
+ *
+ *      LTYPE:	MOVEI B,6
+ *      LTYPE2:	IDPB Z,E		;Z accumulates the link.
+ *      	ILDB A,N		;Get a byte.
+ *      	JUMPE A,CPOPJ		;Not expecting zeros in the link.
+ *      	CAIN A,':		;Quoting character?
+ *
+ * and MIDAS assembles `'X` as SIXBIT (midas.458, SQUOTE: `ADDI T,-40(A)`).  So
+ * `';` is 033 and `':` is 032, and ITS's code contradicts ITS's comment.
+ * tests/version-diff.sh knows these two have no DEFSYM and says so.
  */
-#define ITS_LNK_SEP	033	/* SIXBIT ";" ends a short component          [v] */
-#define ITS_LNK_QUOTE	032	/* SIXBIT ":" quotes the next character       [s] */
+#define ITS_LNK_SEP	033	/* no DEFSYM; NSALV LTYPE's `';`              [v] */
+#define ITS_LNK_QUOTE	032	/* no DEFSYM; NSALV LTYPE's `':`              [s] */
 
 /* clang-format on */
 

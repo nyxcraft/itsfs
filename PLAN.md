@@ -72,11 +72,12 @@ listed in the gap register in [the file system](docs/filesystem.md).
 - **Multi-pack file systems.** `UNPKN` is a pack number in every name block and
   `QTRSRV` names a "secondary" pack, so a file system spanning several drives is
   clearly provided for. One pack is all that has been read.
-- **Version drift.** `FSDEFS 43` is one version of one file. ITS ran from 1967 to
-  1990 and the file itself is dated in two places (`9/5/79 - tut format changed!`
-  and `8/19/90 - DM "funny" bit flushed`), so the format demonstrably moved.
-  Establishing the span this covers is a research task, not a footnote — the same
-  discipline `t10fs` applied across four monitor releases.
+- **Version drift — now partly measured.** `make version-diff` compares `FSDEFS
+  43` with `SYSENG;FSDEFS 40`, preserved in the PDP-10/its history: all 71
+  symbols identical, the 65 differing lines all prose. So the format did not move
+  across those three file-versions. What is still open is where they sit — both
+  postdate the `9/5/79` TUT change they both mention, so the span has a floor and
+  no ceiling, and a file version is not a release number.
 
 **Do not extend `its.h` from this document.** Extend it from the source, and cite
 the source per constant.

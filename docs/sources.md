@@ -13,11 +13,59 @@ SYSTEM;FSDEFS 43     the file system parameters, "APPLIES TO ALL ITS MACHINES"
 ```
 
 read in the [PDP-10/its](https://github.com/PDP-10/its) repository, at
-`src/system/fsdefs.43`, in a tree checked out at commit `e07922f` (2026-06-18).
-That checkout is shallow, so this project cannot report when the file itself last
-changed — a gap worth closing before any claim is made about which ITS releases
-this reader covers. See the version-drift entry in
-[the gap register](filesystem.md#gap-register).
+`src/system/fsdefs.43`.
+
+## How far the transcription reaches
+
+`FSDEFS 43` is one version of one file, and ITS ran for twenty-three years, so
+"which ITS releases does this reader cover?" is a real question. It used to be
+answered here with a shrug. It has a better answer now, because the same
+repository preserves an **earlier version of the same file** — `SYSENG;FSDEFS
+40`, three file-versions back, imported in 2016 and deleted a month later, still
+in the history.
+
+```console
+$ make version-diff
+1. every symbol, both versions
+  ok   IDENTICAL: all 71 definitions, same names and same values
+
+2. the symbols src/its.h actually cites
+  ok   all 43 symbols its.h cites are defined in FSDEFS 43
+  ok   ...and 2 constants that cite ITS code instead, and say so
+```
+
+**All 71 `DEFSYM`s are identical** — every name, every value. The 65 lines that
+differ are entirely prose: version 43 replaced a terse descriptor comment with a
+long one and added a dated note. And that note makes the claim this comparison
+checks:
+
+> `; 8/19/90 Due to the larger size of RP07s it was necessary to officially`
+> `; flush the DM "funny" bit.  This change only changes the comments in this`
+> `; file, but any program that interprets UFD descriptors needs to be fixed`
+> `; to not mask that bit out (as most of them currently do).`
+
+The file says its own change was comment-only; the symbol comparison is what
+holds it to that.
+
+**One semantic difference survives, with no symbol attached to it.** `FSDEFS 40`
+documents the 020 bit of a load address as a `"FUNNY" BLOCK IF DMDSK`; 43 says it
+is flushed, so 17 bits are block number. This reader does not mask it, which is
+correct for 43 and for any pack FSDEFS calls known — but it is the one place
+where reading version 40 instead would have produced different code, and no diff
+of symbols would have shown it.
+
+**What this does NOT establish.** A file version is ITS's own numbering, not a
+release number, and nothing here maps 40 or 43 onto an ITS distribution. The
+comparison establishes that the format did not move between two points; it does
+not establish where those points are. Both versions carry `;9/5/79 - tut format
+changed!`, so the three-bit TUT entry this reads is the post-1979 one in both —
+which puts a floor under the span and no ceiling.
+
+`tests/version-diff.sh` also checks the **citation column**: every symbol
+`its.h` names must actually be defined in `FSDEFS`. That is the one kind of wrong
+citation a machine can catch, and it found one — two constants whose comments
+began with `SIXBIT` and looked like citations to a symbol of that name. They cite
+ITS's own code instead now, and say so.
 
 Its own header reads:
 

@@ -196,9 +196,10 @@ already solved.</li>
 <li><strong>A pack recovered from MIT</strong> would be worth more than any two phases here, and
 would immediately exercise <code>UNBYTE</code> encodings that nothing has written since the
 1980s. If one turns up, read it before writing anything.</li>
-<li><strong>A second <code>FSDEFS</code></strong> from another ITS release turns the version-span question
-from an open one into a measured one, and it is cheap: the diff is the whole
-method.</li>
+<li><strong>A <code>FSDEFS</code> from before September 1979.</strong> <code>make version-diff</code> already compares
+versions 40 and 43 and finds all 71 symbols identical, but both postdate the
+TUT format change both of them mention, so the span this reader covers has a
+floor and no ceiling. A pre-1979 one would be the interesting artifact.</li>
 <li><strong>A multi-pack file system.</strong> <code>UNPKN</code> and <code>QTRSRV</code> are read and ignored today.
 <code>t10fs</code> found two real bugs the first time it met a genuinely multi-unit
 structure.</li>
