@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="index.html">Overview</a>
@@ -42,8 +42,8 @@
 <p>Host tools for the <strong>ITS file system</strong> — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.</p>
 <blockquote>
-<p><strong>Status: phases 0–5a done — a read-only reader, an independent checker, and
-ITS's own salvager agreeing with it.</strong> The word layer is proven byte-for-byte
+<p><strong>Status: phases 0–6 done — a read-only reader, an independent checker, ITS's
+own salvager agreeing with it, and a fingerprint that survives repacking.</strong> The word layer is proven byte-for-byte
 against a real RP06 pack, the geometry layer finds the master file directory by
 its own check word, and the reader lists directories, decodes the run-length
 descriptors that are ITS's block maps, follows links and extracts files.
@@ -152,6 +152,18 @@ the same field, distinguished by one bit.</li>
 <td><code>itsfs check</code></td>
 <td>check a pack — <strong>shares no code with the reader</strong></td>
 </tr>
+<tr>
+<td><code>itsfs manifest</code></td>
+<td>fingerprint a pack: one line per directory, file and link</td>
+</tr>
+<tr>
+<td><code>itsfs verify</code></td>
+<td>diff a pack against a manifest</td>
+</tr>
+<tr>
+<td><code>itsfs shell</code></td>
+<td>interactive explorer — <code>cd</code>, <code>ls</code>, <code>type</code>, <code>blocks</code>, <code>stat</code></td>
+</tr>
 </tbody>
 </table>
 <p>Run any of them with no arguments for its own usage.</p>
@@ -166,6 +178,28 @@ $ itsfs cat rp0.dsk KSHACK BUILD DOC
 <p>Both spellings go through one parser. A name that cannot be SIXBIT is refused,
 never truncated and never case-folded: SIXBIT has no lower case, and quietly
 mapping <code>hello</code> to <code>HELLO</code> would match a different file.</p>
+<h3 id="the-shell">The shell</h3>
+<pre><code class="language-console">$ itsfs shell rp0.dsk
+rp0.dsk, rp06, 247 directories.  `help` lists the commands.
+- (ro)&gt; cd KSHACK
+KSHACK (ro)&gt; blocks NSALV 261
+KSHACK;NSALV 261: 43 blocks, 43087 words
+  16266..16308 (43)
+  1 run
+KSHACK (ro)&gt; quit
+</code></pre>
+<p><code>cd</code>, <code>ls</code>, <code>pwd</code>, <code>type</code>, <code>blocks</code>, <code>stat</code>, <code>free</code> and <code>info</code>. It reads commands
+from standard input, so it scripts — which is also what makes it testable.</p>
+<p><code>blocks</code> prints <strong>runs</strong> rather than a list of numbers, because a descriptor is
+run-length coded and where a file is fragmented is the question worth asking. On
+the reference pack 5,431 of 5,650 files are a single run and one is 59 of them.
+<code>stat</code> prints the raw <code>UNRNDM</code>, <code>UNDATE</code> and <code>UNREF</code> words alongside the decoded
+fields, including the ones nothing here interprets — a stat that showed only the
+understood fields would hide exactly what somebody investigating an unknown one
+needs to see.</p>
+<p><strong>Read-only, and not because of a flag</strong>: there is no writer in this project. The
+prompt says <code>(ro)</code> so that the day there is one, the difference is visible rather
+than assumed.</p>
 <h3 id="common-options">Common options</h3>
 <p><code>-p &lt;packing&gt;</code> selects the word packing (default <code>le64</code>, which is what SIMH disk
 images use). <code>-d &lt;drive&gt;</code> names the drive when the image is not a whole pack —
@@ -177,7 +211,7 @@ in front asks for octal.</p>
 <h2 id="build">Build</h2>
 <pre><code class="language-console">$ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 108 checks
+$ make test             # the regression suite (sh + coreutils), 151 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -220,6 +254,24 @@ comparisons; the second would catch a single block skipped or double-counted
 anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 <a href="../validation/index.html">validation</a>.</p>
+<p><strong>Fingerprinted, and the fingerprint is of the file system rather than of the
+file.</strong> <code>itsfs manifest</code> records every file's name, length and content checksum;
+<code>verify</code> diffs a pack against one. The checksum is over 36-bit <strong>words</strong>, not
+bytes — because <code>repack</code> rewrites every byte of an image and no word of it, so a
+manifest taken from a 317 MB <code>le64</code> pack verifies clean against the same file
+system stored as 178 MB of <code>dbd9</code>:</p>
+<pre><code class="language-console">$ itsfs manifest rp0.dsk &gt; ref.mf
+$ itsfs repack -P dbd9 rp0.dsk rp0.d9
+$ itsfs verify -p dbd9 rp0.d9 ref.mf
+0 differences
+</code></pre>
+<p><code>make oracle</code> does that over all 6,303 directories, files and links of the
+reference pack. One flipped bit anywhere in 39.6 million words is reported, by
+name:</p>
+<pre><code class="language-console">$ itsfs verify rp0.dsk ref.mf
+! SYSTEM;IMPOLD NCP2 (contents differ)
+1 difference
+</code></pre>
 <p><strong>And one piece of evidence that is not the pack agreeing with itself.</strong> The ITS
 source tree builds its own disk — a host file goes through <code>itstar</code>, a tape, and
 ITS's own loader before the monitor writes it — so for a file that exists in both
@@ -272,7 +324,7 @@ predates this project by forty years. Where it agrees, the agreement is about th
 format rather than about our reading of it. It also needs no writer, which is why
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See <a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>.</p>
-<p><strong>Hostile input is bounded.</strong> 108 checks in the suite, a third of them feeding the
+<p><strong>Hostile input is bounded.</strong> 151 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses <em>by name</em> and reads nothing

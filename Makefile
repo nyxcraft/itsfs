@@ -13,7 +13,7 @@ CPPFLAGS += -D_FILE_OFFSET_BITS=64
 BIN := bin
 SRC := src
 
-BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c \
+BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c \
         util.c image.c structure.c itspack.c itsgeom.c itstext.c
 HDRS := $(SRC)/cmds.h $(SRC)/util.h $(SRC)/image.h $(SRC)/itspack.h $(SRC)/itsgeom.h \
         $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h
@@ -141,6 +141,17 @@ oracle: $(BIN)/itsfs
 	@# either alone is one opinion.
 	@echo "and again, with the checker that shares no code with the reader ..."
 	@$(BIN)/itsfs check $(ORACLE_TMP)/ref.dsk
+	@echo
+	@# THE MANIFEST IS OF THE FILE SYSTEM, NOT OF THE CONTAINER.  Fingerprint
+	@# the le64 pack, then verify that manifest against the SAME file system
+	@# stored as dbd9 -- two words in nine bytes, so not one byte boundary in
+	@# common.  Every byte differs and no word does, and a manifest that could
+	@# not survive that would be fingerprinting the wrong thing.
+	@echo "fingerprinting it, and verifying that through a different packing ..."
+	@$(BIN)/itsfs manifest $(ORACLE_TMP)/ref.dsk > $(ORACLE_TMP)/ref.mf
+	@echo "manifest: `grep -vc '^\#' $(ORACLE_TMP)/ref.mf` directories, files and links"
+	@$(BIN)/itsfs verify -p dbd9 $(ORACLE_TMP)/d9.dsk $(ORACLE_TMP)/ref.mf
+	@echo "IDENTICAL: the same file system, four and a half bytes per word instead of eight"
 	@echo
 	@# ...and the one check here that is not the pack agreeing with itself.
 	@# Extract files and compare them to the host files in the ITS source tree

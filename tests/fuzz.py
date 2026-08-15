@@ -155,10 +155,18 @@ COMMANDS = [
     # It is also the one that allocates from numbers it read off the disk, which
     # is the failure mode the sanitizers are here for.
     ["check", "@"],
+    # `manifest` walks every file AND READS ALL THEIR BLOCKS to checksum them,
+    # which no other command does -- a descriptor that decodes to a plausible
+    # block list reaches the reader here rather than only the decoder.
+    ["manifest", "@"],
 ]
 
+# The shell is a parser too, and the only command that reads a script.  It gets
+# its own list because it takes its input on stdin rather than in argv.
+SHELL_SCRIPT = "dirs\ncd TEST\nls -l\nstat HELLO TXT\nblocks HELLO TXT\ntype HELLO TXT\nfree\ninfo\n"
 
-def run(binary, args, image, timeout):
+
+def run(binary, args, image, timeout, stdin=None):
     """Substitute the image for '@', run, and grade the outcome."""
     argv = [binary]
     for a in args:
@@ -167,7 +175,10 @@ def run(binary, args, image, timeout):
         argv.append(image)
 
     try:
-        p = subprocess.run(argv, capture_output=True, timeout=timeout)
+        p = subprocess.run(
+            argv, capture_output=True, timeout=timeout,
+            input=stdin.encode() if stdin else None,
+        )
     except subprocess.TimeoutExpired:
         return "hung", " ".join(argv)
 
@@ -212,6 +223,11 @@ def main():
             print("the UNDAMAGED fixture already fails: %s\n%s" % (what, detail))
             return 2
 
+    what, detail = run(args.bin, ["shell", "@"], good, args.timeout, SHELL_SCRIPT)
+    if what:
+        print("the UNDAMAGED fixture already fails in the shell: %s\n%s" % (what, detail))
+        return 2
+
     bad = 0
     for i in range(args.iters):
         name, blk, off, span = rng.choice(TARGETS)
@@ -240,8 +256,9 @@ def main():
         with open(work, "r+b") as f:
             poke(f, blk, word, [value])
 
-        for cmd in COMMANDS:
-            what, detail = run(args.bin, cmd, work, args.timeout)
+        for cmd in COMMANDS + [["shell", "@"]]:
+            script = SHELL_SCRIPT if cmd[0] == "shell" else None
+            what, detail = run(args.bin, cmd, work, args.timeout, script)
             if what:
                 bad += 1
                 print("BAD  %s: %s word %d := %012o\n     %s" % (what, name, word, value, detail))
@@ -249,7 +266,7 @@ def main():
         if (i + 1) % 25 == 0:
             print("  %d/%d, %d bad" % (i + 1, args.iters, bad), file=sys.stderr)
 
-    print("%d iterations x %d commands, %d bad" % (args.iters, len(COMMANDS), bad))
+    print("%d iterations x %d commands, %d bad" % (args.iters, len(COMMANDS) + 1, bad))
     return 1 if bad else 0
 
 

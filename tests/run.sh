@@ -549,6 +549,154 @@ has "two files holding one block are both named" "$out" \
 out=$("$ITSFS" check "$T/rand.img" 2>&1); rc=$?
 chk "check on an image of no known drive is refused" "$rc" "2"
 
+# ------------------------------------------------- manifest, verify, shell
+
+out=$("$ITSFS" manifest "$T/pack.dsk")
+has "manifest names itself and its version" "$out" "# itsfs manifest 1"
+has "...and records the file" "$out" "TEST;HELLO TXT"
+has "...and the link, by its TARGET rather than by following it" "$out" "TEST;A LINK -> .;@ DDT"
+has "...and the directory" "$out" "d "
+has "...and counts what it walked" "$out" "2 directories, 2 files, 1 links"
+
+# THE CHECKSUM IS OVER WORDS, WHICH IS THE WHOLE POINT.  A manifest taken from
+# an le64 image must verify against the same file system stored in a packing
+# that shares no byte boundary with it -- otherwise the manifest fingerprints
+# the container rather than the file system.
+"$ITSFS" manifest "$T/pack.dsk" > "$T/ref.mf" 2>/dev/null
+"$ITSFS" repack -f -P dbd9 "$T/pack.dsk" "$T/pack.d9" 2>/dev/null
+
+if cmp -s "$T/pack.dsk" "$T/pack.d9"; then
+	no "the dbd9 copy differs from the le64 one (nothing was repacked)"
+else
+	ok "the dbd9 copy shares no bytes with the le64 one"
+fi
+
+out=$("$ITSFS" verify -p dbd9 "$T/pack.d9" "$T/ref.mf" 2>&1); rc=$?
+chk "...and a manifest from le64 verifies against it" "$rc" "0"
+has "...with nothing changed" "$out" "0 differences"
+
+# A verify that cannot fail is decoration.  One word of one file, flipped.
+cp "$T/pack.dsk" "$T/mf1.dsk"
+poke "$T/mf1.dsk" 2000 0 0777777777777
+out=$("$ITSFS" verify "$T/mf1.dsk" "$T/ref.mf" 2>&1); rc=$?
+chk "one changed word is a difference" "$rc" "1"
+has "...named, and named as a content change" "$out" "! TEST;HELLO TXT (contents differ)"
+
+# A file whose length changed, rather than its contents.
+cp "$T/pack.dsk" "$T/mf2.dsk"
+poke "$T/mf2.dsk" 498 1016 $((7 << 24))
+out=$("$ITSFS" verify "$T/mf2.dsk" "$T/ref.mf" 2>&1)
+has "a changed length is reported as one" "$out" "words, was 2051"
+
+# A file that is gone, and one that is new.
+cp "$T/pack.dsk" "$T/mf3.dsk"
+poke "$T/mf3.dsk" 498 1014 0 0
+out=$("$ITSFS" verify "$T/mf3.dsk" "$T/ref.mf" 2>&1)
+has "a file only in the manifest is -" "$out" "- TEST;HELLO TXT"
+
+cp "$T/pack.dsk" "$T/mf4.dsk"
+poke "$T/mf4.dsk" 498 1004 "$(sb EXTRA)" "$(sb TXT)" $(((1 << 24) | 14)) 0 0
+poke "$T/mf4.dsk" 498 1 1004
+out=$("$ITSFS" verify "$T/mf4.dsk" "$T/ref.mf" 2>&1)
+has "a file only on the pack is +" "$out" "+ TEST;EXTRA TXT"
+
+# A LINK IS COMPARED BY ITS TARGET.  Following it would checksum the same file
+# under two names, and make an unrelated deletion look like damage to the link.
+cp "$T/pack.dsk" "$T/mf5.dsk"
+poke "$T/mf5.dsk" 498 12 0163340414243
+out=$("$ITSFS" verify "$T/mf5.dsk" "$T/ref.mf" 2>&1)
+has "a link that now points elsewhere is a difference" "$out" "points at"
+
+# A damaged manifest is refused, not half-read: a verify that skipped the lines
+# it could not parse would report a pack clean on the strength of not looking.
+printf 'not a manifest at all\n' > "$T/bad.mf"
+out=$("$ITSFS" verify "$T/pack.dsk" "$T/bad.mf" 2>&1); rc=$?
+chk "a file that is not a manifest is refused" "$rc" "2"
+
+# ...and one whose lines all parse but whose header is missing, which is the
+# case the magic line exists for: it looks like a manifest and is not one.
+grep -v '^# itsfs manifest' "$T/ref.mf" > "$T/bad2.mf"
+out=$("$ITSFS" verify "$T/pack.dsk" "$T/bad2.mf" 2>&1); rc=$?
+chk "a manifest without its header line is refused" "$rc" "2"
+has "...by name" "$out" "does not begin with"
+
+n=$(grep -n '^f ' "$T/ref.mf" | head -1 | cut -d: -f1)
+sed "${n}s/^f /X /" "$T/ref.mf" > "$T/bad3.mf"
+out=$("$ITSFS" verify "$T/pack.dsk" "$T/bad3.mf" 2>&1); rc=$?
+chk "a malformed line is refused rather than skipped" "$rc" "2"
+has "...with its line number" "$out" "line $n is malformed"
+
+out=$("$ITSFS" manifest "$T/pack.dsk" NOSUCH 2>&1); rc=$?
+chk "manifest of a directory that is not there is refused" "$rc" "1"
+
+#
+# A PACK WITH NO RESOLVABLE DIRECTORIES AT ALL.  MDNUDS is what the MFD-slot
+# arithmetic subtracts, so zeroing it makes every slot resolve to a negative
+# block and the walk finds nothing.  The manifest is then empty -- which is a
+# legitimate answer, and was also undefined behaviour: `qsort(NULL, 0, ...)`.
+# The corruption fuzzer found it; nothing written by hand had reached it,
+# because a pack with no directories is not a case anybody thinks to build.
+#
+mkfixture "$T/mf6.dsk"
+poke "$T/mf6.dsk" $MFDBLK 6 0
+out=$("$ITSFS" manifest "$T/mf6.dsk" 2>&1); rc=$?
+chk "a pack whose MDNUDS is zero yields an empty manifest, not a crash" "$rc" "0"
+has "...that is still a manifest" "$out" "# itsfs manifest 1"
+has "...and says it walked nothing" "$out" "0 directories, 0 files, 0 links"
+
+# ...and verifying a pack against an empty manifest is the same zero on the
+# other side: everything on the pack is new.
+"$ITSFS" manifest "$T/mf6.dsk" > "$T/empty.mf" 2>/dev/null
+out=$("$ITSFS" verify "$T/pack.dsk" "$T/empty.mf" 2>&1); rc=$?
+chk "an empty manifest makes every file a difference" "$rc" "1"
+has "...reported as additions" "$out" "+ TEST;HELLO TXT"
+
+# --- the shell.  It reads stdin, which is what makes it testable.
+
+out=$(printf 'cd TEST\npwd\nls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "the shell changes directory" "$out" "TEST"
+has "...and lists it" "$out" "HELLO  TXT"
+has "...and counts what it listed" "$out" "3 entries"
+
+out=$(printf 'cd test\nls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "a lower-case name is upper-cased for the shell's own convenience" "$out" "HELLO  TXT"
+
+out=$(printf 'cd TEST\ntype HELLO TXT\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "the shell prints a file" "$out" "HIHI"
+
+out=$(printf 'cd TEST\nblocks HELLO TXT\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "blocks shows the run rather than three numbers" "$out" "2000..2002 (3)"
+
+out=$(printf 'cd TEST\nstat HELLO TXT\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "stat shows the raw words as well as the decoded fields" "$out" "UNRNDM"
+has "...including the ones nothing here interprets" "$out" "the unit is not established"
+
+out=$(printf 'ls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "ls with no current directory says what to do" "$out" "cd DIR"
+
+out=$(printf 'cd NOSUCH\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "cd to a directory that is not there is refused" "$out" "no directory named 'NOSUCH'"
+
+out=$(printf 'bogus\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "an unknown command says so" "$out" "unknown command 'bogus'"
+
+out=$(printf 'cd TEST\ntype NOSUCH FILE\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "typing a file that is not there is refused" "$out" "no file"
+
+out=$(printf 'cd TEST\ntype A LINK\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "typing a link says what it points at rather than following it" "$out" "is a link to .;@ DDT"
+
+out=$(printf 'help\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "help says the shell is read-only" "$out" "no writer"
+
+out=$(printf 'free\ninfo\ndirs\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "free works in the shell" "$out" "TESTPK"
+has "info works in the shell" "$out" "rp06"
+has "dirs works in the shell" "$out" "2 directories"
+
+out=$(printf 'quit\nls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+hasnt "quit stops reading commands" "$out" "entries"
+
 # ------------------------------------------------------------ command lines
 
 out=$("$ITSFS" dump "$T/pack.dsk" 99999 2>&1); rc=$?

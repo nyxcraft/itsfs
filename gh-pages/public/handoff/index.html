@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -47,9 +47,10 @@
 discipline, different file system — and ITS is genuinely different, not TOPS-10
 with other field names. See <a href="../plan/index.html#5-what-must-be-designed-fresh">PLAN.md §5</a>
 for the four places that matter.</p>
-<p>Phases 0–5a are done: word layer, geometry, cited constants, a complete
-read-only reader, an independent checker, and ITS's own salvager agreeing with
-it. <strong>There is no writer.</strong></p>
+<p>Phases 0–6 are done: word layer, geometry, cited constants, a complete read-only
+reader, an independent checker, ITS's own salvager agreeing with it, and a
+manifest/verify pair whose fingerprint survives a repacking. <strong>There is no
+writer.</strong></p>
 <h2 id="read-these-in-this-order">Read these, in this order</h2>
 <ol>
 <li><a href="../plan/index.html">PLAN.md</a> — written before any code, and still accurate.</li>
@@ -73,6 +74,8 @@ src/structure.[ch]  MFD, UFD, name blocks, descriptors, links, TUT.
 src/cmd_*.c         the front ends.  cmd_dump.c depends on nothing above image.c.
 src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes the
                     block-to-sector conversion out a second time on purpose.
+src/cmd_manifest.c  manifest/verify.  The checksum is over WORDS -- see its header.
+src/cmd_shell.c     the explorer.  Reads stdin, which is why it is testable.
 tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
                     damages copies of it on purpose.
 tests/accounting.sh does the space add up?  The same three questions `check`
@@ -152,12 +155,11 @@ question the instant it appears makes the RH11 report the drive offline
 (<code>Error 1 = (40001) ILL-FUNC UNSAFE</code>) and the run is lost. The ITS build's own
 scripts sleep in the same places; this was rediscovered the hard way.</p>
 <h2 id="if-you-are-starting-the-next-phase">If you are starting the next phase</h2>
-<p>Phase 6 is manifest/verify and a shell; phase 7 is the writer. The writer is
+<p>Phase 7 is the writer. The writer is
 where invariant 9 in <a href="../design/index.html">docs/design.md</a> starts to matter, and where
 <code>check</code> stops being a nice-to-have: every mutating flow in the suite has to end
 with a clean check.</p>
-<p>Two cheap things are available before either, and both reuse harnesses that now
-exist:</p>
+<p>Two cheap things are available first, and both reuse harnesses that now exist:</p>
 <ul>
 <li><strong>Show <code>NSALV</code> other kinds of damage.</strong> It has seen a cleared TUT word and
 nothing else. A broken descriptor, a damaged directory header and a corrupt MFD

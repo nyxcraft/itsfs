@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-5a done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -63,7 +63,7 @@
         <div class="prose">
 <p>Where each phase ends, and what has to be true before it can be called done.
 <a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
-<p>Phases 0–5a are done. What follows them is written here so that the next person
+<p>Phases 0–6 are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.</p>
 <hr />
@@ -135,12 +135,22 @@ code confirms the encoding that FSDEFS's <em>comment</em> gets wrong. See
 <hr />
 <h2 id="next">Next</h2>
 <h3 id="phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</h3>
-<p><code>manifest</code> fingerprints a pack — one line per file, with a checksum over <strong>words</strong>
-rather than bytes, so that a manifest taken from an <code>le64</code> image verifies against
-the same pack in <code>dbd9</code>. <code>verify</code> diffs a pack against one. A shell makes
-exploring a pack you do not trust a read-only activity by default.</p>
-<p><strong>Ends when:</strong> a manifest survives a repacking, and <code>diff</code> on two manifests is a
-useful description of what a monitor did to a pack while it was running.</p>
+<p><code>manifest</code> fingerprints a pack — one line per directory, file and link, with a
+checksum over <strong>words</strong> rather than bytes. <code>verify</code> diffs a pack against one. The
+shell keeps the image path and the current directory so that exploring is three
+short lines rather than three long ones.</p>
+<p><strong>Ended by:</strong> a manifest taken from the reference pack in <code>le64</code> verifying clean
+against the same file system in <code>dbd9</code>, over all 6,303 entries — two images
+sharing no byte boundary and no differing word. And by the inverse: one flipped
+bit in 39.6 million words reported by file name. See
+<a href="../validation/index.html#the-fingerprint-is-of-the-file-system-not-of-the-container">validation</a>.</p>
+<p>The shell is read-only and has no <code>-w</code>, because there is nothing to guard yet.
+Its prompt says <code>(ro)</code> so that the day there is a writer, the difference is
+visible rather than assumed.</p>
+<p>One thing worth recording from building it: <code>blocks</code> prints runs rather than
+block numbers, and that turned out to matter. 5,431 of the reference pack's 5,650
+files are a single run — a fresh build writes sequentially — but 219 are not, and
+one is 59 runs. A display that printed 1,904 numbers would have hidden that.</p>
 <h3 id="phase-7-the-writer">Phase 7 — the writer</h3>
 <p>One file, one mutation path, every front end calling it. In order:
 <code>put</code>, <code>del</code>, <code>mkdir</code>, <code>mkfs</code>.</p>

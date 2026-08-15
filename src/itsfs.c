@@ -24,6 +24,9 @@
  *   itsfs get       copy a file out to the host
  *   itsfs free      what the TUT says about the pack
  *   itsfs check     check a pack -- shares no code with the reader
+ *   itsfs manifest  fingerprint a pack: one line per file
+ *   itsfs verify    diff a pack against a manifest
+ *   itsfs shell     interactive explorer
  */
 
 #include "cmds.h"
@@ -49,6 +52,9 @@ static const struct subcmd {
 	{ "get",      cmd_get,      "copy a file out to the host"               },
 	{ "free",     cmd_free,     "what the TUT says about the pack"          },
 	{ "check",    cmd_check,    "check a pack (shares no code with the reader)" },
+	{ "manifest", cmd_manifest, "fingerprint a pack: one line per file"     },
+	{ "verify",   cmd_verify,   "diff a pack against a manifest"            },
+	{ "shell",    cmd_shell,    "interactive explorer (read-only)"          },
 };
 
 /* clang-format on */

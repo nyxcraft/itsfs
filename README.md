@@ -3,8 +3,8 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–5a done — a read-only reader, an independent checker, and
-> ITS's own salvager agreeing with it.** The word layer is proven byte-for-byte
+> **Status: phases 0–6 done — a read-only reader, an independent checker, ITS's
+> own salvager agreeing with it, and a fingerprint that survives repacking.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
 > its own check word, and the reader lists directories, decodes the run-length
 > descriptors that are ITS's block maps, follows links and extracts files.
@@ -75,6 +75,9 @@ the design rather than fitting inside it:
 | `itsfs get` | copy a file out to the host — text, or `-w` for its 36-bit words |
 | `itsfs free` | what the TUT says: free, in use, locked out, and the reference counts |
 | `itsfs check` | check a pack — **shares no code with the reader** |
+| `itsfs manifest` | fingerprint a pack: one line per directory, file and link |
+| `itsfs verify` | diff a pack against a manifest |
+| `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
 
 Run any of them with no arguments for its own usage.
 
@@ -94,6 +97,34 @@ Both spellings go through one parser. A name that cannot be SIXBIT is refused,
 never truncated and never case-folded: SIXBIT has no lower case, and quietly
 mapping `hello` to `HELLO` would match a different file.
 
+### The shell
+
+```console
+$ itsfs shell rp0.dsk
+rp0.dsk, rp06, 247 directories.  `help` lists the commands.
+- (ro)> cd KSHACK
+KSHACK (ro)> blocks NSALV 261
+KSHACK;NSALV 261: 43 blocks, 43087 words
+  16266..16308 (43)
+  1 run
+KSHACK (ro)> quit
+```
+
+`cd`, `ls`, `pwd`, `type`, `blocks`, `stat`, `free` and `info`. It reads commands
+from standard input, so it scripts — which is also what makes it testable.
+
+`blocks` prints **runs** rather than a list of numbers, because a descriptor is
+run-length coded and where a file is fragmented is the question worth asking. On
+the reference pack 5,431 of 5,650 files are a single run and one is 59 of them.
+`stat` prints the raw `UNRNDM`, `UNDATE` and `UNREF` words alongside the decoded
+fields, including the ones nothing here interprets — a stat that showed only the
+understood fields would hide exactly what somebody investigating an unknown one
+needs to see.
+
+**Read-only, and not because of a flag**: there is no writer in this project. The
+prompt says `(ro)` so that the day there is one, the difference is visible rather
+than assumed.
+
 ### Common options
 
 `-p <packing>` selects the word packing (default `le64`, which is what SIMH disk
@@ -109,7 +140,7 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 108 checks
+$ make test             # the regression suite (sh + coreutils), 151 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -165,6 +196,30 @@ comparisons; the second would catch a single block skipped or double-counted
 anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 [validation](docs/validation.md).
+
+**Fingerprinted, and the fingerprint is of the file system rather than of the
+file.** `itsfs manifest` records every file's name, length and content checksum;
+`verify` diffs a pack against one. The checksum is over 36-bit **words**, not
+bytes — because `repack` rewrites every byte of an image and no word of it, so a
+manifest taken from a 317 MB `le64` pack verifies clean against the same file
+system stored as 178 MB of `dbd9`:
+
+```console
+$ itsfs manifest rp0.dsk > ref.mf
+$ itsfs repack -P dbd9 rp0.dsk rp0.d9
+$ itsfs verify -p dbd9 rp0.d9 ref.mf
+0 differences
+```
+
+`make oracle` does that over all 6,303 directories, files and links of the
+reference pack. One flipped bit anywhere in 39.6 million words is reported, by
+name:
+
+```console
+$ itsfs verify rp0.dsk ref.mf
+! SYSTEM;IMPOLD NCP2 (contents differ)
+1 difference
+```
 
 **And one piece of evidence that is not the pack agreeing with itself.** The ITS
 source tree builds its own disk — a host file goes through `itstar`, a tape, and
@@ -230,7 +285,7 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 108 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 151 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing

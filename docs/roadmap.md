@@ -3,7 +3,7 @@
 Where each phase ends, and what has to be true before it can be called done.
 [PLAN.md](../PLAN.md) has the same table; this is the detail.
 
-Phases 0–5a are done. What follows them is written here so that the next person
+Phases 0–6 are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.
 
@@ -106,13 +106,25 @@ code confirms the encoding that FSDEFS's *comment* gets wrong. See
 
 ### Phase 6 — manifest, verify, and a shell
 
-`manifest` fingerprints a pack — one line per file, with a checksum over **words**
-rather than bytes, so that a manifest taken from an `le64` image verifies against
-the same pack in `dbd9`. `verify` diffs a pack against one. A shell makes
-exploring a pack you do not trust a read-only activity by default.
+`manifest` fingerprints a pack — one line per directory, file and link, with a
+checksum over **words** rather than bytes. `verify` diffs a pack against one. The
+shell keeps the image path and the current directory so that exploring is three
+short lines rather than three long ones.
 
-**Ends when:** a manifest survives a repacking, and `diff` on two manifests is a
-useful description of what a monitor did to a pack while it was running.
+**Ended by:** a manifest taken from the reference pack in `le64` verifying clean
+against the same file system in `dbd9`, over all 6,303 entries — two images
+sharing no byte boundary and no differing word. And by the inverse: one flipped
+bit in 39.6 million words reported by file name. See
+[validation](validation.md#the-fingerprint-is-of-the-file-system-not-of-the-container).
+
+The shell is read-only and has no `-w`, because there is nothing to guard yet.
+Its prompt says `(ro)` so that the day there is a writer, the difference is
+visible rather than assumed.
+
+One thing worth recording from building it: `blocks` prints runs rather than
+block numbers, and that turned out to matter. 5,431 of the reference pack's 5,650
+files are a single run — a fresh build writes sequentially — but 219 are not, and
+one is 59 runs. A display that printed 1,904 numbers would have hidden that.
 
 ### Phase 7 — the writer
 

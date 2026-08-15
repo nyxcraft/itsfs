@@ -11,9 +11,10 @@ discipline, different file system — and ITS is genuinely different, not TOPS-1
 with other field names. See [PLAN.md §5](PLAN.md#5-what-must-be-designed-fresh)
 for the four places that matter.
 
-Phases 0–5a are done: word layer, geometry, cited constants, a complete
-read-only reader, an independent checker, and ITS's own salvager agreeing with
-it. **There is no writer.**
+Phases 0–6 are done: word layer, geometry, cited constants, a complete read-only
+reader, an independent checker, ITS's own salvager agreeing with it, and a
+manifest/verify pair whose fingerprint survives a repacking. **There is no
+writer.**
 
 ## Read these, in this order
 
@@ -40,6 +41,8 @@ src/structure.[ch]  MFD, UFD, name blocks, descriptors, links, TUT.
 src/cmd_*.c         the front ends.  cmd_dump.c depends on nothing above image.c.
 src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes the
                     block-to-sector conversion out a second time on purpose.
+src/cmd_manifest.c  manifest/verify.  The checksum is over WORDS -- see its header.
+src/cmd_shell.c     the explorer.  Reads stdin, which is why it is testable.
 tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
                     damages copies of it on purpose.
 tests/accounting.sh does the space add up?  The same three questions `check`
@@ -140,13 +143,12 @@ scripts sleep in the same places; this was rediscovered the hard way.
 
 ## If you are starting the next phase
 
-Phase 6 is manifest/verify and a shell; phase 7 is the writer. The writer is
+Phase 7 is the writer. The writer is
 where invariant 9 in [docs/design.md](docs/design.md) starts to matter, and where
 `check` stops being a nice-to-have: every mutating flow in the suite has to end
 with a clean check.
 
-Two cheap things are available before either, and both reuse harnesses that now
-exist:
+Two cheap things are available first, and both reuse harnesses that now exist:
 
 - **Show `NSALV` other kinds of damage.** It has seen a cleared TUT word and
   nothing else. A broken descriptor, a damaged directory header and a corrupt MFD

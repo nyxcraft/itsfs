@@ -6,7 +6,7 @@
   "branch": "main",
   "copyright": "Nicholas J. Kisseberth",
   "copyright_year": "2026",
-  "status": "phases 0-5a done: two checkers agreeing, one of them MIT's",
+  "status": "phases 0-6 done: two checkers agreeing, one of them MIT's",
   "attribution": [
     "Software Architecture, Design & Engineering by Nicholas J. Kisseberth."
   ],
@@ -33,7 +33,7 @@
 
     { "slug": "roadmap", "source": "docs/roadmap.md", "group": "start",
       "title": "Roadmap",
-      "tagline": "Seven phases done, four to go",
+      "tagline": "Eight phases done, three to go",
       "blurb": "What ended each finished phase — including the one taken out of order, because ITS's own salvager turned out to need no writer — and the open questions, a pack recovered from MIT or a second FSDEFS, that would reorder the rest.",
       "featured": true },
 

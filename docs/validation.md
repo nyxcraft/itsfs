@@ -248,6 +248,47 @@ about `UNTIM`, `UNBYTE`, creation dates, or where a link points. Those stay in
 And it grades a **reading**. Nothing here has been written by this project, so it
 is not the level-2 result — that still needs a writer, and it is still phase 8.
 
+## The fingerprint is of the file system, not of the container
+
+```console
+$ make oracle IMAGE=~/its/out/simh/rp0.dsk
+fingerprinting it, and verifying that through a different packing ...
+manifest: 6303 directories, files and links
+0 differences
+IDENTICAL: the same file system, four and a half bytes per word instead of eight
+```
+
+A manifest taken from the 317 MB `le64` pack verifies clean against the same file
+system stored as 178 MB of `dbd9`. **Not one byte boundary is shared** between
+those two images — `dbd9` puts two words in nine bytes and splits one of them
+down the middle — and every word is identical, which is exactly the distinction
+the checksum has to make.
+
+It makes it by feeding each word to the CRC as five bytes in the `core`
+convention rather than as whatever the container happens to hold. A byte-wise
+checksum would have made a manifest a fingerprint of the *container*: the same
+pack in two packings would disagree about every file, which is precisely
+backwards.
+
+**What is compared, and what is only recorded.** The type, the path, and — for a
+file — the length and the checksum. Not the block count: which blocks a file
+occupies is a property of the pack's allocation history rather than of the file.
+A fingerprint that reports differences nobody cares about gets ignored, and then
+it reports nothing at all.
+
+A link is recorded **by its target**, not by what the target contains. Following
+it would checksum the same file twice under two names, and — since a link may
+point at a file that is not there, which the reference pack does seven times —
+would make an unrelated deletion look like damage to the link.
+
+**And it detects one bit.** Flipping a single bit of one word in 39,641,600
+names the file it was in:
+
+```console
+! SYSTEM;IMPOLD NCP2 (contents differ)
+1 difference
+```
+
 ## The one check that is not the pack agreeing with itself
 
 Everything above compares the reader against numbers ITS wrote **on the same
@@ -286,8 +327,8 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**108 checks** in `tests/run.sh`, of which about a third feed the reader a pack
-damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
+**151 checks** in `tests/run.sh`, of which about a third feed the reader or the
+checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
 terminating zero at all, a TUT that ends before it begins, and one that maps more
@@ -299,15 +340,23 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 108 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 151 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 
 **`make fuzz`** damages one random word of a valid pack, in a structure the reader
-must parse, and runs every command over the result. 250 iterations × 8 commands =
-2,000 runs against damaged packs under the sanitizers, with no crash, no hang, no
-sanitizer report and no silent failure. `check` is one of the eight, and it is
-the one that reaches every structure on the pack in a single run.
+must parse, and runs every command over the result — 200 iterations × 10 commands
+= 2,000 runs under the sanitizers. `check` is one of the ten and reaches every
+structure in a single run; `manifest` is another and is the only command that
+reads *every block of every file*; the shell is driven with a script.
+
+**It has found one bug so far**, which is what it is for: `manifest` called
+`qsort(NULL, 0, …)` on a pack whose `MDNUDS` was zero, because then no MFD slot
+resolves and nothing is walked. Passing NULL is undefined behaviour regardless of
+the count. Nothing hand-written had reached it — a pack with no directories at
+all is not a case anybody thinks to build — and on an ordinary build UBSan only
+*prints*, so the regression test for it passes unless `halt_on_error` is set.
+Confirmed against the unfixed code under `make test-san`, where it aborts.
 
 ## Lint
 
