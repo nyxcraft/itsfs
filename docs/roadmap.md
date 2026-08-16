@@ -3,7 +3,7 @@
 Where each phase ends, and what has to be true before it can be called done.
 [PLAN.md](../PLAN.md) has the same table; this is the detail.
 
-Phases 0–7 are done, and phase 8 in part. What follows them is written here so that the next person
+All ten phases are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.
 
@@ -151,9 +151,9 @@ appended would produce a directory ITS's own lookup walks wrongly. That was
 found by measuring the reference pack rather than by reading the source, and it
 is why `put` inserts and shifts.
 
-### Phase 8 — native-tool interop — PARTLY DONE
+### Phase 8 — native-tool interop
 
-Three of the four things here exist:
+Everything here exists:
 
 - **`NSALV` accepts a pack we wrote** (phase 7, `make nsalv`).
 - **`DSKDMP` lists our file**, with its own reader — a third implementation,
@@ -165,28 +165,21 @@ Three of the four things here exist:
 - **ITS boots on a pack we wrote**, running its startup salvage over every
   directory on the way (`make interop`).
 
-**What is left, and it is the interesting half:** making the monitor OPEN the
-file and print it. `:print DIR;FN1 FN2` is the command. The obstacle is not the
-file system — it is the console, and what has been ruled out is worth knowing
-before trying again:
-
-- `^Z` on the CTY produces nothing, with or without the SYSJOB patch, though
-  ITS's own `doc/DDT.md` says that is how you get a terminal.
-- `set cpu idle` is not the cause; tried without it.
-- Nor are the DZ lines: 0, 5, 6 and 7 over raw sockets with the telnet option
-  negotiation answered properly. simh accepts the connection; ITS never speaks.
-- **The likely cause, untested because testing it needs a console:** the finished
-  system auto-starts a job — an unpatched boot prints `LOGIN TARAKA 0` — and that
-  job owns the CTY. The ITS build drives the console successfully during a
-  *build*, where no such job exists yet, which fits.
+- **The monitor opens the file and prints it**, which was the last thing here
+  and took the longest. The obstacle was never the file system: the finished
+  system auto-starts the job `SYS;ATSIGN DRAGON` names, and that job owns the
+  console — while it is there `^Z` produces nothing at all. `itsfs del` removes
+  it, which is a pleasing shape for the last step: the project's own writer
+  clearing the way for its own reader to be graded. See
+  [validation](validation.md#level-2-completely--the-monitor-opens-the-file-and-prints-it).
 
 - **`mkfs` exists**, and both NSALV and DSKDMP accept a pack built from nothing
   (`make mkfs-test`). It writes a file system rather than a bootable pack, so
   both are booted from tape; see
   [validation](validation.md#a-file-system-with-no-its-in-it).
 
-**Ends when:** the monitor opens a file we wrote and prints it. Everything else
-in this phase is done.
+**Ended by:** `make interop` — five stages, from `itsfs put` to `:print` on an
+ITS console.
 
 ### Phase 9 — tapes
 

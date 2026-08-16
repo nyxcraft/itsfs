@@ -6,7 +6,7 @@
   "branch": "main",
   "copyright": "Nicholas J. Kisseberth",
   "copyright_year": "2026",
-  "status": "phases 0-9 done bar one: a file round-trips through ITS and back out unchanged",
+  "status": "all ten phases done: ITS opens a file this project wrote and prints it",
   "attribution": [
     "Software Architecture, Design & Engineering by Nicholas J. Kisseberth."
   ],

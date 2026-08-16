@@ -3,8 +3,8 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–8 done bar one thing — a reader, an independent checker, a
-> writer, and ITS accepting a file system built here from nothing.** The word layer is proven byte-for-byte
+> **Status: phases 0–9 done. ITS opens a file this project wrote and prints
+> it.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
 > its own check word, and the reader lists directories, decodes the run-length
 > descriptors that are ITS's block maps, follows links and extracts files.
@@ -314,6 +314,25 @@ touch — and then loads a system out of a directory. `mkfs` writes a *file
 system*; the boot area and the system are somebody else's job. Which is why both
 graders come off tape.
 
+**And ITS opens it and prints it.** The last claim, and the one the whole project
+was built toward:
+
+```console
+5. ...and the monitor opens the file and prints it
+  ok   removed the job that owns the console (itsfs del)
+  ok   THE MONITOR PRINTED A FILE THIS PROJECT WROTE
+       :print KSHACK;ITSFS TXT
+
+       HELLO FROM ITSFS.
+       IF ITS LISTS THIS THE ENTRY IS REAL.
+```
+
+Getting a console out of a running ITS was the obstacle, not the file system, and
+**`itsfs del` is what removed it**: the finished system auto-starts the job
+`SYS;ATSIGN DRAGON` names, and that job owns the console — while it is there `^Z`
+produces nothing at all, forever. Deleting the link frees the terminal. This
+project's own writer clearing the way for its own reader to be graded by ITS.
+
 **And ITS boots on it.** `make interop` writes a file, **makes a directory from
 nothing and writes into that**, then hands the pack to the two ITS programs that
 *use* a file system rather than inspect one:
@@ -456,15 +475,12 @@ commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
 it did not bound first.
 
-**What is NOT proven.** ITS boots on a pack this project wrote and its
-standalone loader lists the file — but **the monitor has never been made to OPEN
-that file and print it**. Its console stops accepting input once the system is
-up (`^Z`, which ITS's own `DDT.md` says gets you a terminal, produces nothing on
-the CTY, and the terminal lines this machine profile exposes are not configured
-for login), so the monitor's *file-opening* path is untested as distinct from
-its *salvage* path. `mkdir` and `mkfs` do not exist, so every write so far has
-been into a directory ITS made. `NSALV` was also asked about only one kind of
-damage, a cleared TUT word. No ITS magtape has been read, which is why `core` and `dbd9` are
+**What is NOT proven.** A pack `mkfs` builds does not boot, so ITS has never come
+up on one — the graders for those are booted from tape. `dbd9` is still
+`corroborated`: no KLH10-written artifact has been read. A tape this project
+writes has not been compared record for record with one ITS wrote. And the
+reference pack is one built from source in 2026, not an artifact recovered from
+MIT. No ITS magtape has been read, which is why `core` and `dbd9` are
 `corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
 the reference pack is one built from source in 2026, not an artifact recovered
 from MIT; and the version span has a floor and no ceiling — both `FSDEFS`

@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -317,7 +317,12 @@ first are next to each other.</p>
 the question is not &quot;is this block allocated&quot; but &quot;is it referenced as many times
 as something says&quot;. FSDEFS notes the entry used to be four bits (<code>;9/5/79 - tut format changed!</code>), which is one of the two dated format changes in the file.</p>
 <p>On the reference pack the counts are 0, 1 and 7 and nothing else — no block is
-referenced twice — and the 505 locked-out blocks are exactly the 500 UFD blocks,
+referenced twice. <strong>A count of 2 has since been seen</strong>, though not on a healthy
+pack: halting ITS abruptly mid-write left 50 blocks at 2 that only one file
+claimed, and NSALV described them exactly as <code>itsfs check</code> did (see
+<a href="../validation/index.html#a-third-kind-of-agreement-found-by-accident">validation</a>). So a
+count above 1 is reachable, and on that evidence it is a state to repair rather
+than a feature to support — and the 505 locked-out blocks are exactly the 500 UFD blocks,
 the MFD and the four TUT blocks.</p>
 <h2 id="reading-a-file">Reading a file</h2>
 <p>Decode the descriptor to a block list; the length in words is

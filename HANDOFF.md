@@ -119,9 +119,8 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
 ## Known gaps, stated plainly
 
 - No writer, therefore no level-1 or level-2 evidence of any kind.
-- The monitor has never been made to OPEN a file we wrote.  It boots on the
-  pack and salvages it, and DSKDMP lists the file, but ITS's console stops
-  taking input once the system is up -- see tests/interop.sh.
+- A pack `mkfs` builds does not BOOT (see above), so ITS has never come up on
+  one; its graders are booted from tape.
 - `NSALV` has been shown only one kind of damage (a cleared TUT word).
 - A pack `mkfs` builds does not BOOT: ITS starts from the front end's blocks at
   the bottom of the disk, which `mkfs` does not write (and NSALV's own ZAP
@@ -156,6 +155,20 @@ $ make oracle IMAGE=~/its/out/simh/rp0.dsk
 **Work on a copy.** `make oracle` makes one itself; `repack` opens its input
 read-only either way; the rule stands regardless, because the first thing a
 writer will do is break it.
+
+## Getting a console out of a running ITS
+
+Three things, and all three are needed.  They are in tests/interop.exp too, but
+they cost enough to be worth repeating:
+
+1. **Delete `SYS;ATSIGN DRAGON` first.**  The finished system auto-starts the
+   job that link names and that job owns the CTY.  While it is there, `^Z` does
+   nothing at all, forever.  `itsfs del` removes it.
+2. **One `^Z`, after a long settle, retried with long gaps.**  A `^Z` that
+   arrives while ITS is still starting its jobs is lost.
+3. **Type blind, about a third of a second per character.**  ITS echoes when it
+   PROCESSES, not when it receives, so waiting for each character's echo
+   deadlocks; sending the line in one burst loses it.
 
 ## Running NSALV
 

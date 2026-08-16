@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="index.html">Overview</a>
@@ -42,8 +42,8 @@
 <p>Host tools for the <strong>ITS file system</strong> — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.</p>
 <blockquote>
-<p><strong>Status: phases 0–8 done bar one thing — a reader, an independent checker, a
-writer, and ITS accepting a file system built here from nothing.</strong> The word layer is proven byte-for-byte
+<p><strong>Status: phases 0–9 done. ITS opens a file this project wrote and prints
+it.</strong> The word layer is proven byte-for-byte
 against a real RP06 pack, the geometry layer finds the master file directory by
 its own check word, and the reader lists directories, decodes the run-length
 descriptors that are ITS's block maps, follows links and extracts files.
@@ -373,6 +373,21 @@ disk — the ones NSALV's own <code>ZAP</code> calls the &quot;8080 HOM sectors&
 touch — and then loads a system out of a directory. <code>mkfs</code> writes a <em>file
 system</em>; the boot area and the system are somebody else's job. Which is why both
 graders come off tape.</p>
+<p><strong>And ITS opens it and prints it.</strong> The last claim, and the one the whole project
+was built toward:</p>
+<pre><code class="language-console">5. ...and the monitor opens the file and prints it
+  ok   removed the job that owns the console (itsfs del)
+  ok   THE MONITOR PRINTED A FILE THIS PROJECT WROTE
+       :print KSHACK;ITSFS TXT
+
+       HELLO FROM ITSFS.
+       IF ITS LISTS THIS THE ENTRY IS REAL.
+</code></pre>
+<p>Getting a console out of a running ITS was the obstacle, not the file system, and
+<strong><code>itsfs del</code> is what removed it</strong>: the finished system auto-starts the job
+<code>SYS;ATSIGN DRAGON</code> names, and that job owns the console — while it is there <code>^Z</code>
+produces nothing at all, forever. Deleting the link frees the terminal. This
+project's own writer clearing the way for its own reader to be graded by ITS.</p>
 <p><strong>And ITS boots on it.</strong> <code>make interop</code> writes a file, <strong>makes a directory from
 nothing and writes into that</strong>, then hands the pack to the two ITS programs that
 <em>use</em> a file system rather than inspect one:</p>
@@ -488,15 +503,12 @@ reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses <em>by name</em> and reads nothing
 it did not bound first.</p>
-<p><strong>What is NOT proven.</strong> ITS boots on a pack this project wrote and its
-standalone loader lists the file — but <strong>the monitor has never been made to OPEN
-that file and print it</strong>. Its console stops accepting input once the system is
-up (<code>^Z</code>, which ITS's own <code>DDT.md</code> says gets you a terminal, produces nothing on
-the CTY, and the terminal lines this machine profile exposes are not configured
-for login), so the monitor's <em>file-opening</em> path is untested as distinct from
-its <em>salvage</em> path. <code>mkdir</code> and <code>mkfs</code> do not exist, so every write so far has
-been into a directory ITS made. <code>NSALV</code> was also asked about only one kind of
-damage, a cleared TUT word. No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
+<p><strong>What is NOT proven.</strong> A pack <code>mkfs</code> builds does not boot, so ITS has never come
+up on one — the graders for those are booted from tape. <code>dbd9</code> is still
+<code>corroborated</code>: no KLH10-written artifact has been read. A tape this project
+writes has not been compared record for record with one ITS wrote. And the
+reference pack is one built from source in 2026, not an artifact recovered from
+MIT. No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are
 <code>corroborated</code> rather than <code>confirmed</code> here even though <code>t10fs</code> confirmed both;
 the reference pack is one built from source in 2026, not an artifact recovered
 from MIT; and the version span has a floor and no ceiling — both <code>FSDEFS</code>

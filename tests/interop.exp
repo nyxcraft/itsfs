@@ -9,7 +9,10 @@
 #   ITS_IMAGE   THE PACK -- A COPY.  ITS writes to it: the boot runs a salvage.
 #   ITS_LOG     where to put the console transcript
 #   ITS_DIR     the directory to list
-#   ITS_MODE    `dskdmp` to list a directory, `boot` to start the monitor
+#   ITS_MODE    `dskdmp` to list a directory, `boot` to start the monitor,
+#               `print` to have the monitor open a file and print it
+#   ITS_FILE    for `print`: the file, as `DIR;FN1 FN2`
+#   ITS_MATCH   for `print`: text that must appear in what it prints
 #
 # TWO THINGS ARE BEING ASKED, and they are different questions:
 #
@@ -46,7 +49,7 @@ set dir   $env(ITS_DIR)
 set mode  $env(ITS_MODE)
 set esc   "\034"
 
-set timeout 400
+set timeout 45
 log_file -noappend $log
 
 set ini "$image.ini"
@@ -78,6 +81,17 @@ proc slow {s} {
 	}
 }
 
+# Slower still, for a RUNNING system rather than a loader.  See the header:
+# blind and unhurried is the only thing that works.
+proc typeslow {s} {
+	sleep .5
+
+	foreach c [split $s ""] {
+		send -- $c
+		sleep .35
+	}
+}
+
 spawn $pdp10 $ini
 expect {
 	"sim>" {}
@@ -92,6 +106,63 @@ expect {
 	timeout { puts "\nINTEROP: the pack did not boot to DSKDMP"; exit 2 }
 }
 sleep 2
+
+if {$mode == "print"} {
+	set file $env(ITS_FILE)
+	set match $env(ITS_MATCH)
+
+	send "its\r"
+	expect "\n"
+	sleep 2
+	slow "styo+2/popj p,\r"
+	sleep 2
+	send "\033g"
+	expect "IN OPERATION"
+
+	# ^Z, after the system has settled -- and the settling is the flaky part.
+	# A ^Z that arrives while ITS is still starting its jobs is simply lost,
+	# and how long that takes varies with how loaded the host is.  So: wait a
+	# long time, then try, and try again a few times with long gaps.  The
+	# gaps matter -- two in quick succession get one terminal at best.
+	sleep 40
+	set got 0
+
+	for {set i 0} {$i < 8 && $got == 0} {incr i} {
+		send "\032"
+
+		expect {
+			"Happy hacking" { set got 1 }
+			timeout {}
+		}
+	}
+
+	if {$got == 0} {
+		# COULD NOT TEST is not the same as FAILED, and the caller is
+		# told which.  Getting the console is timing-dependent in a way
+		# that has not been pinned down -- the same pack and the same
+		# script succeed one run and not the next -- and a harness that
+		# reported "the monitor cannot read our file" on a missed ^Z
+		# would be reporting a lie about the file system.
+		puts "\nINTEROP: NO CONSOLE (timing) -- the file was not tested"
+		exit 3
+	}
+
+	sleep 8
+	typeslow ":print $file"
+	send "\r"
+
+	expect {
+		$match { puts "\nINTEROP: the monitor printed it" }
+		timeout { puts "\nINTEROP: the monitor did not print the file"; exit 2 }
+	}
+
+	sleep 3
+	send $esc
+	expect "sim>"
+	send "q\r"
+	expect eof
+	exit 0
+}
 
 if {$mode == "dskdmp"} {
 	# `U<ESC>dir;` -- the `$` in DSKDMP's documented command list is ESC.

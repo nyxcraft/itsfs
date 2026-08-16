@@ -217,6 +217,35 @@ Same category — the dangerous one, where the allocator would hand the block ou
 again — same block, same file, and `NSALV` renders the name in the same
 `DIR;FN1 FN2` form this project chose from reading the format.
 
+### A third kind of agreement, found by accident
+
+Halting the emulator abruptly on a pack ITS had been running left 50 blocks whose
+allocation-table count was 2 and which only one file claimed. `itsfs check`
+reported them:
+
+```
+block 2004: the TUT says 2 references, the files make 1
+```
+
+`NSALV`, asked about the same pack, answered:
+
+```
+TUT #0 50 1_2
+```
+
+— 50 blocks whose computed value is 1 and whose stored value is 2. **The same
+50 blocks, by number**, on both sides.
+
+That is worth more than it looks. The two earlier comparisons were both of the
+same category, "a file holds a block the table calls free". This is a different
+one — a *miscount* — and it was not constructed: ITS produced it by being
+switched off mid-write, and both checkers independently described it the same
+way. It is also the first time this project has seen a reference count above 1,
+which `docs/filesystem.md` had listed as an open question for eight phases.
+
+It also cleared `put` of suspicion. A `put` onto that pack reported the same 50
+problems and no more, so the writer added none of them.
+
 ### What the comparison actually compares
 
 The **pairs**: which block, and which file holds it. Not counts, and not "both
@@ -300,7 +329,68 @@ $ itsfs manifest w.dsk | diff before.mf -
 $
 ```
 
-## Level 2 again — ITS boots on it, and a third implementation reads it
+## Level 2, completely — the monitor opens the file and prints it
+
+```console
+$ make interop IMAGE=~/its/out/simh/rp0.dsk
+5. ...and the monitor opens the file and prints it
+  ok   removed the job that owns the console (itsfs del)
+  ok   THE MONITOR PRINTED A FILE THIS PROJECT WROTE
+       :print KSHACK;ITSFS TXT
+
+       HELLO FROM ITSFS.
+       IF ITS LISTS THIS THE ENTRY IS REAL.
+```
+
+This is the claim the project was built toward: not a salvager inspecting the
+bookkeeping, not a standalone loader listing a directory, but **the operating
+system opening a file through its own file-system code and printing what is in
+it**.
+
+### The obstacle was never the file system
+
+`^Z` on the console produced nothing for four attempts across two phases, and the
+reasons ruled out are recorded in `tests/interop.sh`: not `set cpu idle`, not the
+DZ terminal lines over raw sockets with telnet negotiation answered, not the
+SYSJOB patch.
+
+**The cause was a job holding the console.** The finished system auto-starts
+whatever `SYS;ATSIGN DRAGON` names — an unpatched boot prints `LOGIN TARAKA 0` —
+and that job owns the CTY. While it is there, `^Z` does nothing at all. That is
+why the ITS build's own scripts drive the console successfully during a *build*,
+where no such job exists yet, and why the same sequence failed here.
+
+**`itsfs del` removed it.** The project's own writer cleared the way for its own
+reader to be graded — which is a pleasing shape for the last step to have, and
+is also the only tool available: there is no console to type `:delete` at until
+the file is gone.
+
+### It is reproducible, and it is not reliable
+
+That distinction is worth being exact about. The result has been reproduced by
+hand and through `make interop`. But **getting a console is timing-dependent in
+a way that has not been pinned down**: the same pack and the same script get one
+on one run and not the next, and eight `^Z`s over four minutes sometimes produce
+nothing at all.
+
+So the harness reports three outcomes rather than two. The monitor printing the
+file is the result; the monitor getting a console and *not* printing it is a
+finding and fails the run; **never getting a console is neither** — it is the
+harness failing to ask the question, and it says so and does not fail. Reporting
+a missed `^Z` as "the monitor cannot read our file" would be reporting a lie
+about the file system.
+
+Two more things the harness records, because both cost an afternoon:
+
+- **One `^Z`, after a long settle, and retry with long gaps.** A `^Z` arriving
+  while ITS is still starting its jobs is simply lost, and how long that takes
+  varies with the host's load.
+- **Type blind, about a third of a second per character.** ITS echoes when it
+  *processes*, not when it receives, so waiting for each character's echo —
+  which is what the ITS build's scripts do — deadlocks against a running system.
+  Sending the line in one burst loses it.
+
+## Level 2 — ITS boots on it, and a third implementation reads it
 
 ```console
 $ make interop IMAGE=~/its/out/simh/rp0.dsk
@@ -340,12 +430,9 @@ after ITS has had it — a boot writes.
 
 ### What this does not establish
 
-**The monitor has not been made to open the file and print it.** ITS's console
-stops accepting input once the system is running: `^Z`, which its own
-`doc/DDT.md` says is how you get a terminal, produces nothing on the CTY, and
-the terminal lines this machine profile exposes are not configured for login.
-So the monitor's *file-opening* path is untested, as distinct from its *salvage*
-path. That is the remaining half of phase 8.
+**This was the remaining half of phase 8, and it is done** — see the section
+above. What it needed was not a file-system fix but the removal of a job that
+owned the console.
 
 ### A method that looked right and was not
 

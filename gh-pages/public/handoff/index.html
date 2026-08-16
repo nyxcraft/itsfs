@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -138,9 +138,8 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.</p>
 <h2 id="known-gaps-stated-plainly">Known gaps, stated plainly</h2>
 <ul>
 <li>No writer, therefore no level-1 or level-2 evidence of any kind.</li>
-<li>The monitor has never been made to OPEN a file we wrote.  It boots on the
-pack and salvages it, and DSKDMP lists the file, but ITS's console stops
-taking input once the system is up -- see tests/interop.sh.</li>
+<li>A pack <code>mkfs</code> builds does not BOOT (see above), so ITS has never come up on
+one; its graders are booted from tape.</li>
 <li><code>NSALV</code> has been shown only one kind of damage (a cleared TUT word).</li>
 <li>A pack <code>mkfs</code> builds does not BOOT: ITS starts from the front end's blocks at
 the bottom of the disk, which <code>mkfs</code> does not write (and NSALV's own ZAP
@@ -169,6 +168,19 @@ $ cd its &amp;&amp; make EMULATOR=simh      # or klh10, or pdp10-ka
 <p><strong>Work on a copy.</strong> <code>make oracle</code> makes one itself; <code>repack</code> opens its input
 read-only either way; the rule stands regardless, because the first thing a
 writer will do is break it.</p>
+<h2 id="getting-a-console-out-of-a-running-its">Getting a console out of a running ITS</h2>
+<p>Three things, and all three are needed.  They are in tests/interop.exp too, but
+they cost enough to be worth repeating:</p>
+<ol>
+<li><strong>Delete <code>SYS;ATSIGN DRAGON</code> first.</strong>  The finished system auto-starts the
+job that link names and that job owns the CTY.  While it is there, <code>^Z</code> does
+nothing at all, forever.  <code>itsfs del</code> removes it.</li>
+<li><strong>One <code>^Z</code>, after a long settle, retried with long gaps.</strong>  A <code>^Z</code> that
+arrives while ITS is still starting its jobs is lost.</li>
+<li><strong>Type blind, about a third of a second per character.</strong>  ITS echoes when it
+PROCESSES, not when it receives, so waiting for each character's echo
+deadlocks; sending the line in one burst loses it.</li>
+</ol>
 <h2 id="running-nsalv">Running NSALV</h2>
 <p><code>make nsalv IMAGE=...</code> needs three things that are not in this repo:</p>
 <ul>

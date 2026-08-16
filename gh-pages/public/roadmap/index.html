@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -45,7 +45,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-7-the-writer">Phase 7 — the writer</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop-partly-done">Phase 8 — native-tool interop — PARTLY DONE</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop">Phase 8 — native-tool interop</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-9-tapes">Phase 9 — tapes</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#not-on-the-roadmap">Not on the roadmap</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#open-questions-that-could-reorder-this">Open questions that could reorder this</a></li>
@@ -63,7 +63,7 @@
         <div class="prose">
 <p>Where each phase ends, and what has to be true before it can be called done.
 <a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
-<p>Phases 0–7 are done, and phase 8 in part. What follows them is written here so that the next person
+<p>All ten phases are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.</p>
 <hr />
@@ -172,40 +172,34 @@ than guessing.</li>
 appended would produce a directory ITS's own lookup walks wrongly. That was
 found by measuring the reference pack rather than by reading the source, and it
 is why <code>put</code> inserts and shifts.</p>
-<h3 id="phase-8-native-tool-interop-partly-done">Phase 8 — native-tool interop — PARTLY DONE</h3>
-<p>Three of the four things here exist:</p>
+<h3 id="phase-8-native-tool-interop">Phase 8 — native-tool interop</h3>
+<p>Everything here exists:</p>
 <ul>
-<li><strong><code>NSALV</code> accepts a pack we wrote</strong> (phase 7, <code>make nsalv</code>).</li>
-<li><strong><code>DSKDMP</code> lists our file</strong>, with its own reader — a third implementation,
+<li>
+<p><strong><code>NSALV</code> accepts a pack we wrote</strong> (phase 7, <code>make nsalv</code>).</p>
+</li>
+<li>
+<p><strong><code>DSKDMP</code> lists our file</strong>, with its own reader — a third implementation,
 sharing nothing with the monitor or with <code>NSALV</code> — and the listing is still in
-sorted order, which is what catches a writer that appended (<code>make interop</code>).</li>
-<li><strong><code>mkdir</code> exists, and DSKDMP reads what it makes.</strong> The MFD entry's position is
+sorted order, which is what catches a writer that appended (<code>make interop</code>).</p>
+</li>
+<li>
+<p><strong><code>mkdir</code> exists, and DSKDMP reads what it makes.</strong> The MFD entry's position is
 the address of the directory's block, with no pointer to check it against, so
-a third implementation resolving it is the only way to know it is right.</li>
-<li><strong>ITS boots on a pack we wrote</strong>, running its startup salvage over every
-directory on the way (<code>make interop</code>).</li>
-</ul>
-<p><strong>What is left, and it is the interesting half:</strong> making the monitor OPEN the
-file and print it. <code>:print DIR;FN1 FN2</code> is the command. The obstacle is not the
-file system — it is the console, and what has been ruled out is worth knowing
-before trying again:</p>
-<ul>
-<li>
-<p><code>^Z</code> on the CTY produces nothing, with or without the SYSJOB patch, though
-ITS's own <code>doc/DDT.md</code> says that is how you get a terminal.</p>
+a third implementation resolving it is the only way to know it is right.</p>
 </li>
 <li>
-<p><code>set cpu idle</code> is not the cause; tried without it.</p>
+<p><strong>ITS boots on a pack we wrote</strong>, running its startup salvage over every
+directory on the way (<code>make interop</code>).</p>
 </li>
 <li>
-<p>Nor are the DZ lines: 0, 5, 6 and 7 over raw sockets with the telnet option
-negotiation answered properly. simh accepts the connection; ITS never speaks.</p>
-</li>
-<li>
-<p><strong>The likely cause, untested because testing it needs a console:</strong> the finished
-system auto-starts a job — an unpatched boot prints <code>LOGIN TARAKA 0</code> — and that
-job owns the CTY. The ITS build drives the console successfully during a
-<em>build</em>, where no such job exists yet, which fits.</p>
+<p><strong>The monitor opens the file and prints it</strong>, which was the last thing here
+and took the longest. The obstacle was never the file system: the finished
+system auto-starts the job <code>SYS;ATSIGN DRAGON</code> names, and that job owns the
+console — while it is there <code>^Z</code> produces nothing at all. <code>itsfs del</code> removes
+it, which is a pleasing shape for the last step: the project's own writer
+clearing the way for its own reader to be graded. See
+<a href="../validation/index.html#level-2-completely--the-monitor-opens-the-file-and-prints-it">validation</a>.</p>
 </li>
 <li>
 <p><strong><code>mkfs</code> exists</strong>, and both NSALV and DSKDMP accept a pack built from nothing
@@ -214,8 +208,8 @@ both are booted from tape; see
 <a href="../validation/index.html#a-file-system-with-no-its-in-it">validation</a>.</p>
 </li>
 </ul>
-<p><strong>Ends when:</strong> the monitor opens a file we wrote and prints it. Everything else
-in this phase is done.</p>
+<p><strong>Ended by:</strong> <code>make interop</code> — five stages, from <code>itsfs put</code> to <code>:print</code> on an
+ITS console.</p>
 <h3 id="phase-9-tapes">Phase 9 — tapes</h3>
 <p><code>itsfs tape</code> reads the SIMH <code>.tap</code> container: records with their lengths on both
 sides, tape marks, end of medium. It checks the two lengths against each other,

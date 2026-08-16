@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -40,12 +40,16 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#level-3c-a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-opinion-that-is-not-ours">A second opinion that is not ours</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#why-both-runs-are-needed">Why both runs are needed</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#a-third-kind-of-agreement-found-by-accident">A third kind of agreement, found by accident</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-comparison-actually-compares">What the comparison actually compares</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-establishes-and-what-it-does-not">What this establishes, and what it does not</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS&#x27;s own salvager accepts what the writer produced</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-writer-had-to-get-right-to-earn-that">What the writer had to get right to earn that</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-2-again-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 again — ITS boots on it, and a third implementation reads it</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2-completely-the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-obstacle-was-never-the-file-system">The obstacle was never the file system</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#it-is-reproducible-and-it-is-not-reliable">It is reproducible, and it is not reliable</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-does-not-establish">What this does not establish</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-method-that-looked-right-and-was-not">A method that looked right and was not</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-file-system-with-no-its-in-it">A file system with no ITS in it</a></li>
@@ -263,6 +267,25 @@ speaks, in terms that can be compared line for line:</p>
 <p>Same category — the dangerous one, where the allocator would hand the block out
 again — same block, same file, and <code>NSALV</code> renders the name in the same
 <code>DIR;FN1 FN2</code> form this project chose from reading the format.</p>
+<h3 id="a-third-kind-of-agreement-found-by-accident">A third kind of agreement, found by accident</h3>
+<p>Halting the emulator abruptly on a pack ITS had been running left 50 blocks whose
+allocation-table count was 2 and which only one file claimed. <code>itsfs check</code>
+reported them:</p>
+<pre><code>block 2004: the TUT says 2 references, the files make 1
+</code></pre>
+<p><code>NSALV</code>, asked about the same pack, answered:</p>
+<pre><code>TUT #0 50 1_2
+</code></pre>
+<p>— 50 blocks whose computed value is 1 and whose stored value is 2. <strong>The same
+50 blocks, by number</strong>, on both sides.</p>
+<p>That is worth more than it looks. The two earlier comparisons were both of the
+same category, &quot;a file holds a block the table calls free&quot;. This is a different
+one — a <em>miscount</em> — and it was not constructed: ITS produced it by being
+switched off mid-write, and both checkers independently described it the same
+way. It is also the first time this project has seen a reference count above 1,
+which <code>docs/filesystem.md</code> had listed as an open question for eight phases.</p>
+<p>It also cleared <code>put</code> of suspicion. A <code>put</code> onto that pack reported the same 50
+problems and no more, so the writer added none of them.</p>
 <h3 id="what-the-comparison-actually-compares">What the comparison actually compares</h3>
 <p>The <strong>pairs</strong>: which block, and which file holds it. Not counts, and not &quot;both
 reported something&quot; — two checkers can agree that a pack is broken and disagree
@@ -329,7 +352,57 @@ $ itsfs put w.dsk 'TEST;TEMP FILE' f.txt &amp;&amp; itsfs del w.dsk 'TEST;TEMP F
 $ itsfs manifest w.dsk | diff before.mf -
 $
 </code></pre>
-<h2 id="level-2-again-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 again — ITS boots on it, and a third implementation reads it</h2>
+<h2 id="level-2-completely-the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</h2>
+<pre><code class="language-console">$ make interop IMAGE=~/its/out/simh/rp0.dsk
+5. ...and the monitor opens the file and prints it
+  ok   removed the job that owns the console (itsfs del)
+  ok   THE MONITOR PRINTED A FILE THIS PROJECT WROTE
+       :print KSHACK;ITSFS TXT
+
+       HELLO FROM ITSFS.
+       IF ITS LISTS THIS THE ENTRY IS REAL.
+</code></pre>
+<p>This is the claim the project was built toward: not a salvager inspecting the
+bookkeeping, not a standalone loader listing a directory, but <strong>the operating
+system opening a file through its own file-system code and printing what is in
+it</strong>.</p>
+<h3 id="the-obstacle-was-never-the-file-system">The obstacle was never the file system</h3>
+<p><code>^Z</code> on the console produced nothing for four attempts across two phases, and the
+reasons ruled out are recorded in <code>tests/interop.sh</code>: not <code>set cpu idle</code>, not the
+DZ terminal lines over raw sockets with telnet negotiation answered, not the
+SYSJOB patch.</p>
+<p><strong>The cause was a job holding the console.</strong> The finished system auto-starts
+whatever <code>SYS;ATSIGN DRAGON</code> names — an unpatched boot prints <code>LOGIN TARAKA 0</code> —
+and that job owns the CTY. While it is there, <code>^Z</code> does nothing at all. That is
+why the ITS build's own scripts drive the console successfully during a <em>build</em>,
+where no such job exists yet, and why the same sequence failed here.</p>
+<p><strong><code>itsfs del</code> removed it.</strong> The project's own writer cleared the way for its own
+reader to be graded — which is a pleasing shape for the last step to have, and
+is also the only tool available: there is no console to type <code>:delete</code> at until
+the file is gone.</p>
+<h3 id="it-is-reproducible-and-it-is-not-reliable">It is reproducible, and it is not reliable</h3>
+<p>That distinction is worth being exact about. The result has been reproduced by
+hand and through <code>make interop</code>. But <strong>getting a console is timing-dependent in
+a way that has not been pinned down</strong>: the same pack and the same script get one
+on one run and not the next, and eight <code>^Z</code>s over four minutes sometimes produce
+nothing at all.</p>
+<p>So the harness reports three outcomes rather than two. The monitor printing the
+file is the result; the monitor getting a console and <em>not</em> printing it is a
+finding and fails the run; <strong>never getting a console is neither</strong> — it is the
+harness failing to ask the question, and it says so and does not fail. Reporting
+a missed <code>^Z</code> as &quot;the monitor cannot read our file&quot; would be reporting a lie
+about the file system.</p>
+<p>Two more things the harness records, because both cost an afternoon:</p>
+<ul>
+<li><strong>One <code>^Z</code>, after a long settle, and retry with long gaps.</strong> A <code>^Z</code> arriving
+while ITS is still starting its jobs is simply lost, and how long that takes
+varies with the host's load.</li>
+<li><strong>Type blind, about a third of a second per character.</strong> ITS echoes when it
+<em>processes</em>, not when it receives, so waiting for each character's echo —
+which is what the ITS build's scripts do — deadlocks against a running system.
+Sending the line in one burst loses it.</li>
+</ul>
+<h2 id="level-2-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</h2>
 <pre><code class="language-console">$ make interop IMAGE=~/its/out/simh/rp0.dsk
 2. DSKDMP, ITS's standalone loader, reads the directory
   ok   DSKDMP listed our file, reading the directory with its own code
@@ -361,12 +434,9 @@ directory on the pack before it comes up; reaching <code>IN OPERATION</code> mea
 found nothing worth stopping for. And the pack still holds the file, unchanged,
 after ITS has had it — a boot writes.</p>
 <h3 id="what-this-does-not-establish">What this does not establish</h3>
-<p><strong>The monitor has not been made to open the file and print it.</strong> ITS's console
-stops accepting input once the system is running: <code>^Z</code>, which its own
-<code>doc/DDT.md</code> says is how you get a terminal, produces nothing on the CTY, and
-the terminal lines this machine profile exposes are not configured for login.
-So the monitor's <em>file-opening</em> path is untested, as distinct from its <em>salvage</em>
-path. That is the remaining half of phase 8.</p>
+<p><strong>This was the remaining half of phase 8, and it is done</strong> — see the section
+above. What it needed was not a file-system fix but the removal of a job that
+owned the console.</p>
 <h3 id="a-method-that-looked-right-and-was-not">A method that looked right and was not</h3>
 <p><code>DSKDMP</code> has <code>L&lt;ESC&gt;file</code> (load a file into core) and <code>I&lt;ESC&gt;file</code> (verify a file
 against core), which look exactly like a byte-for-byte comparison harness: load

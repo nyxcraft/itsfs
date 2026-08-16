@@ -213,7 +213,12 @@ as something says". FSDEFS notes the entry used to be four bits (`;9/5/79 - tut
 format changed!`), which is one of the two dated format changes in the file.
 
 On the reference pack the counts are 0, 1 and 7 and nothing else — no block is
-referenced twice — and the 505 locked-out blocks are exactly the 500 UFD blocks,
+referenced twice. **A count of 2 has since been seen**, though not on a healthy
+pack: halting ITS abruptly mid-write left 50 blocks at 2 that only one file
+claimed, and NSALV described them exactly as `itsfs check` did (see
+[validation](validation.md#a-third-kind-of-agreement-found-by-accident)). So a
+count above 1 is reachable, and on that evidence it is a state to repair rather
+than a feature to support — and the 505 locked-out blocks are exactly the 500 UFD blocks,
 the MFD and the four TUT blocks.
 
 ## Reading a file
