@@ -173,6 +173,15 @@ for p in le64 be64 core dbd9; do
 	fi
 done
 
+# THE dbd9 CODEC IS KLH10'S OWN FUNCTION, and this checks that rather than
+# trusting the comment that says so.  KLH10's cvtfr_dbd9 builds each word as
+# LRHSET(w, lh, rh) out of nine bytes; the same nine bytes through `dump -s`
+# must give the same two words.  The expected values below were computed from
+# KLH10's formula, not from this project's.
+printf '\001\002\003\004\125\006\007\010\011' > "$T/d9.img"
+out=$("$ITSFS" dump -s -z -w 2 -p dbd9 "$T/d9.img" 0 | tail -2 | awk '{print $2}' | tr '\n' ' ')
+chk "the dbd9 codec agrees with KLH10's cvtfr_dbd9" "$out" "002010030105 240601604011 "
+
 # The top 28 bits of a word are not storage.  An le64 container with them set
 # comes back with them clear, which is the invariant the whole project rests on.
 printf '\377\377\377\377\377\377\377\377' > "$T/big.img"

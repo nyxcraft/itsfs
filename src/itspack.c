@@ -171,6 +171,27 @@ core_put(uint8_t *b, unsigned i, uint64_t w)
  *
  * This is the one packing here with more than one word per group, so it is what
  * actually exercises the group interface rather than merely fitting it.
+ *
+ * VERIFIED AGAINST KLH10'S OWN CODE, not against a description of it.  KLH10
+ * declares the format in vdisk.h --
+ *
+ *      vdk_fmt(VDK_FMT_DBD9, "DBD9", "Disk_BigEnd_Double (9/2) (H36)",
+ *                                      9, cvtfr_dbd9, cvtto_dbd9)
+ *
+ * -- and cvtfr_dbd9 in vdisk.c builds each word as LRHSET(w, lh, rh) from the
+ * same nine bytes this does.  Feeding 200,000 random 9-byte groups through both
+ * formulas gives no disagreement, so the two are the same function and not
+ * merely the same intention.
+ *
+ * IT IS STILL `corroborated` RATHER THAN `confirmed`, and the attempt to promote
+ * it is worth recording.  KLH10 was built from the tree, a pack was repacked
+ * into dbd9, and its DSKDMP was pointed at it: it answered MFDCLB, "M.F.D.
+ * clobbered".  The CONTROL -- the same KLH10, the same DSKDMP, the untouched
+ * le64 pack read through KLH10's own "SIMH" format -- answers MFDCLB too.  So
+ * that setup cannot tell a good pack from a bad one and says nothing about this
+ * packing; the DSKDMP in build/klh10 is a different build (216) from the pack's
+ * own (217) and probably wants a machine this is not.  Promoting dbd9 needs a
+ * pack KLH10 ITSELF wrote, which means a full `make EMULATOR=klh10`.
  */
 static uint64_t
 dbd9_get(const uint8_t *b, unsigned i)

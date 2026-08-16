@@ -83,10 +83,36 @@ to the host originals byte for byte.
 
 KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
 for it to be wrong about — so that source is the specification rather than a
-second opinion. But no KLH10-packed ITS image has been read here. `make oracle`
-round-trips a pack through `dbd9` and back, which proves the codec is its own
-inverse; it does not prove KLH10 writes that. Building an ITS pack with
-`make EMULATOR=klh10` would settle it.
+second opinion on one.
+
+That source has now been read **in this tree, and checked rather than trusted**.
+KLH10 declares the format in `vdisk.h`:
+
+```
+vdk_fmt(VDK_FMT_DBD9, "DBD9", "Disk_BigEnd_Double (9/2) (H36)",
+                                9, cvtfr_dbd9, cvtto_dbd9)
+```
+
+and `cvtfr_dbd9` in `vdisk.c` assembles each word as `LRHSET(w, lh, rh)` out of
+the same nine bytes. Running 200,000 random 9-byte groups through both that
+formula and `itspack.c`'s gives **no disagreement** — they are the same function,
+not merely the same intention.
+
+### The attempt to promote it, and why it failed
+
+KLH10 was built from the tree, a pack was repacked into `dbd9`, and KLH10's
+DSKDMP was pointed at it. It answered `MFDCLB` — "M.F.D. clobbered".
+
+The control saves that from being a finding: the *same* KLH10 and the *same*
+DSKDMP, pointed at the **untouched `le64` pack** through KLH10's own `SIMH`
+format, answer `MFDCLB` as well. A setup that cannot tell a good pack from a bad
+one says nothing about the packing. (The DSKDMP in `build/klh10` is a different
+build — 216 — from the one on the pack — 217 — and probably expects a machine
+this is not.)
+
+So the honest position is unchanged: the codec is verified against the code that
+defines the format, and no artifact KLH10 wrote has been read. Settling it needs
+a pack KLH10 itself produced, which means a full `make EMULATOR=klh10`.
 
 ## What is not here
 

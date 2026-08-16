@@ -236,7 +236,12 @@ would produce a tape unlike any ITS made.
   would immediately exercise `UNBYTE` encodings that nothing has written since the
   1980s. If one turns up, read it before writing anything.
 - **A KLH10-built ITS pack** would promote `dbd9` the way a tape promoted
-  `core`. `make EMULATOR=klh10` in the ITS tree produces one.
+  `core`. `make EMULATOR=klh10` in the ITS tree produces one, and it has to be a
+  full build: the shortcut of repacking an existing pack and pointing KLH10's
+  DSKDMP at it does not work, and the reason is recorded in
+  [word packing](word-packing.md#the-attempt-to-promote-it-and-why-it-failed) so
+  nobody spends the afternoon on it twice. The codec itself is now checked
+  against KLH10's own `cvtfr_dbd9`, exhaustively.
 - **A `FSDEFS` from before September 1979.** `make version-diff` already compares
   versions 40 and 43 and finds all 71 symbols identical, but both postdate the
   TUT format change both of them mention, so the span this reader covers has a

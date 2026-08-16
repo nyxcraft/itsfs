@@ -39,6 +39,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#the-four-packings">The four packings</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#how-core-was-confirmed">How `core` was confirmed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#why-dbd9-is-still-corroborated">Why `dbd9` is still `corroborated`</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-attempt-to-promote-it-and-why-it-failed">The attempt to promote it, and why it failed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-here">What is not here</a></li>
 </ul>
         </nav>
@@ -113,10 +114,28 @@ to the host originals byte for byte.</p>
 <h2 id="why-dbd9-is-still-corroborated">Why <code>dbd9</code> is still <code>corroborated</code></h2>
 <p>KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
 for it to be wrong about — so that source is the specification rather than a
-second opinion. But no KLH10-packed ITS image has been read here. <code>make oracle</code>
-round-trips a pack through <code>dbd9</code> and back, which proves the codec is its own
-inverse; it does not prove KLH10 writes that. Building an ITS pack with
-<code>make EMULATOR=klh10</code> would settle it.</p>
+second opinion on one.</p>
+<p>That source has now been read <strong>in this tree, and checked rather than trusted</strong>.
+KLH10 declares the format in <code>vdisk.h</code>:</p>
+<pre><code>vdk_fmt(VDK_FMT_DBD9, &quot;DBD9&quot;, &quot;Disk_BigEnd_Double (9/2) (H36)&quot;,
+                                9, cvtfr_dbd9, cvtto_dbd9)
+</code></pre>
+<p>and <code>cvtfr_dbd9</code> in <code>vdisk.c</code> assembles each word as <code>LRHSET(w, lh, rh)</code> out of
+the same nine bytes. Running 200,000 random 9-byte groups through both that
+formula and <code>itspack.c</code>'s gives <strong>no disagreement</strong> — they are the same function,
+not merely the same intention.</p>
+<h3 id="the-attempt-to-promote-it-and-why-it-failed">The attempt to promote it, and why it failed</h3>
+<p>KLH10 was built from the tree, a pack was repacked into <code>dbd9</code>, and KLH10's
+DSKDMP was pointed at it. It answered <code>MFDCLB</code> — &quot;M.F.D. clobbered&quot;.</p>
+<p>The control saves that from being a finding: the <em>same</em> KLH10 and the <em>same</em>
+DSKDMP, pointed at the <strong>untouched <code>le64</code> pack</strong> through KLH10's own <code>SIMH</code>
+format, answer <code>MFDCLB</code> as well. A setup that cannot tell a good pack from a bad
+one says nothing about the packing. (The DSKDMP in <code>build/klh10</code> is a different
+build — 216 — from the one on the pack — 217 — and probably expects a machine
+this is not.)</p>
+<p>So the honest position is unchanged: the codec is verified against the code that
+defines the format, and no artifact KLH10 wrote has been read. Settling it needs
+a pack KLH10 itself produced, which means a full <code>make EMULATOR=klh10</code>.</p>
 <h2 id="what-is-not-here">What is not here</h2>
 <p><strong>SIXBIT is not a packing.</strong> It is an interpretation of a word's contents, not a
 way of storing one, and it lives in <code>itstext.c</code> one layer up. The same goes for

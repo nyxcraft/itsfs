@@ -542,7 +542,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**258 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**259 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -555,7 +555,7 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 258 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 259 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 

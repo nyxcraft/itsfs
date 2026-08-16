@@ -519,7 +519,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>258 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>259 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -530,7 +530,7 @@ is that it <strong>refuses by name</strong> and reads nothing it did not bound f
 sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.</p>
-<p><strong><code>make test-san</code></strong> runs the same 258 under AddressSanitizer and UBSan, which is
+<p><strong><code>make test-san</code></strong> runs the same 259 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader

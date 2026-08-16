@@ -186,7 +186,7 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 258 checks
+$ make test             # the regression suite (sh + coreutils), 259 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -450,7 +450,7 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 258 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 259 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
