@@ -278,6 +278,10 @@ tape-test: $(BIN)/itsfs
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
+#
+# It runs the WRITERS as well as the readers, so it works entirely inside a
+# mkdtemp of its own on packs it built itself.  It is never pointed at anything
+# on disk here, and takes no argument that could be.
 fuzz: $(OBJSRC) $(HDRS) | $(BIN)
 	$(CC) $(SANFLAGS) $(CPPFLAGS) -o $(BIN)/itsfs-fuzz $(OBJSRC)
 	@python3 tests/fuzz.py --bin $(BIN)/itsfs-fuzz --iters $(ITERS)

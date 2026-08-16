@@ -25,7 +25,7 @@ ITSFS=$(cd "$(dirname "$ITSFS")" && pwd)/$(basename "$ITSFS")
 
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
-pass=0; fail=0
+pass=0; fail=0; skipped=0
 
 #
 # A CHECK'S FAILURE MESSAGE MUST BEGIN WITH ITS SUCCESS MESSAGE, so that a
@@ -33,6 +33,11 @@ pass=0; fail=0
 # this right for free; a hand-written if/else has to do it on purpose.
 #
 ok() { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
+# A check that cannot run HERE -- not one that failed, and not one to quietly
+# drop.  Counted in the total so the documented number is the same under the
+# sanitizers as without them, and reported separately so it is never mistaken
+# for a pass.
+skip() { skipped=$((skipped + 1)); printf '  skip %s\n' "$1"; }
 no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 chk() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (got '$2', want '$3')"; fi; }
 
@@ -1086,6 +1091,25 @@ has "...saying so" "$out" "runs off the end"
 out=$("$ITSFS" tape "$T/t4.tap" 2>&1); rc=$?
 chk "an absurd record length is refused rather than allocated" "$rc" "1"
 
+# ...AND "RATHER THAN ALLOCATED" IS MEASURED, not just asserted by the name of
+# the check above.  A reader that malloc'd the length first and complained
+# afterwards would pass that one.  So the same file is read again under a
+# virtual-memory limit far below the length in it: refusing still works, and
+# reserving the space cannot.
+#
+# The limit is skipped under the sanitizers, which reserve a large shadow
+# mapping at startup and cannot run under any ulimit worth setting.  It is
+# skipped rather than adapted because a check that quietly weakens itself to
+# keep passing is worse than one that says it did not run.
+if ( ulimit -v 65536 && "$ITSFS" tape "$T/t1.tap" ) >/dev/null 2>&1; then
+	out=$( ( ulimit -v 65536 && "$ITSFS" tape "$T/t4.tap" ) 2>&1 ); rc=$?
+	chk "...with 64 MB of address space, which the length would not fit in" "$rc" "1"
+	has "...saying so rather than dying" "$out" "megabyte"
+else
+	skip "the absurd-length allocation ceiling (needs an unsanitized build)"
+	skip "...saying so rather than dying"
+fi
+
 # End of medium stops the read without complaint.
 {
 	emit_le32 10; printf 'AAAAAAAAAA'; emit_le32 10
@@ -1285,14 +1309,18 @@ chk "help exits zero" "$rc" "0"
 #
 for doc in README.md docs/validation.md; do
 	[ -f "$doc" ] || continue
-	bad=$(grep -oE '[0-9]{2,4} checks' "$doc" | grep -v "^$pass checks" | sort -u)
+	bad=$(grep -oE '[0-9]{2,4} checks' "$doc" | grep -v "^$((pass + skipped)) checks" | sort -u)
 	[ -z "$bad" ] || {
 		echo
-		echo "STALE: $doc says '$bad'; this run is $pass checks"
+		echo "STALE: $doc says '$bad'; this run is $((pass + skipped)) checks"
 		fail=$((fail + 1))
 	}
 done
 
 echo
-echo "passed $pass, failed $fail"
+if [ "$skipped" -eq 0 ]; then
+	echo "passed $pass, failed $fail"
+else
+	echo "passed $pass, skipped $skipped, failed $fail"
+fi
 [ "$fail" -eq 0 ]

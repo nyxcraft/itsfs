@@ -186,7 +186,7 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 262 checks
+$ make test             # the regression suite (sh + coreutils), 264 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -469,11 +469,16 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 262 checks in the suite, a third of them feeding the
-reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
-commands over damaged packs under ASan and UBSan without a finding. The bar is
+**Hostile input is bounded.** 264 checks in the suite, a third of them feeding the
+reader a pack damaged on purpose, and a corruption fuzzer that has run 5,400
+commands over damaged packs and damaged tapes under ASan and UBSan without a
+finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
-it did not bound first.
+it did not bound first. Six of those commands per iteration are `put`, `del` and
+`mkdir`: the writer is fuzzed on damaged packs too, each on its own copy, and
+`check` must still be able to read what it left behind. Five more are `tape` and
+`saveset` over a damaged `.tap` — the input most likely to have come from
+somewhere else — with its record-length fields corrupted on purpose.
 
 **What is NOT proven.** A pack `mkfs` builds does not boot, so ITS has never come
 up on one — the graders for those are booted from tape. `dbd9` is still

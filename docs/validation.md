@@ -629,7 +629,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**262 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**264 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -647,8 +647,8 @@ where those checks have teeth: an out-of-bounds *read* does not fault on a norma
 build. It returns whatever was next in memory, and the test passes.
 
 **`make fuzz`** damages one random word of a valid pack, in a structure the reader
-must parse, and runs every command over the result — 200 iterations × 10 commands
-= 2,000 runs under the sanitizers. `check` is one of the ten and reaches every
+must parse, and runs every command over the result — 200 iterations × 27 commands
+= 5,400 runs under the sanitizers. `check` is one of them and reaches every
 structure in a single run; `manifest` is another and is the only command that
 reads *every block of every file*; the shell is driven with a script.
 
@@ -659,6 +659,80 @@ the count. Nothing hand-written had reached it — a pack with no directories at
 all is not a case anybody thinks to build — and on an ordinary build UBSan only
 *prints*, so the regression test for it passes unless `halt_on_error` is set.
 Confirmed against the unfixed code under `make test-san`, where it aborts.
+
+### And then it was pointed at the writer
+
+For most of this project the fuzzer only ever *read* damaged packs, which left
+the more dangerous half uncovered. A reader that misparses a corrupt descriptor
+prints nonsense; a writer that does it overwrites somebody's file. So `put`,
+`del` and `mkdir` now run over the damaged pack too — six commands, each on its
+own fresh copy, because the first `del` to succeed would otherwise change what
+every command after it saw and no failure could be traced back to one word.
+
+Two things had to be added before the pass meant anything.
+
+**A control.** Every write command must first succeed on an *undamaged* pack. A
+misspelled path or a changed argument order would make it refuse every damaged
+pack as well, and the whole pass would report zero failures while testing the
+argument parser and nothing else.
+
+**A completion tally.** The run prints how many of the attempts actually ran to
+completion — currently about 85% — because "refused the pack" is a perfectly
+correct outcome that also happens to be the outcome in which no writing code
+runs. Green is only worth something if that number is not near zero.
+
+And a writer can stay inside its own memory and still leave a pack that crashes
+the *reader* — a descriptor whose length disagrees with its contents, a name
+pointer past the end of the block. So each write is followed by `check` over the
+result, which may report anything it likes and must not crash. That is what turns
+"the writer did not crash" into "the writer did not produce something that
+crashes".
+
+The descriptor target was widened at the same time, from the first twenty words
+of the area to all of it. That was the blind spot the code review had already
+found by hand: the fuzzer had never reached the end-of-block case because it only
+ever damaged bytes near the *start*, where the offsets involved are small.
+
+### And at the containers, which are what you download
+
+A pack is something you own. A `.tap` is something somebody **sent** you, which
+makes it the likelier hostile input of the two, and for nine phases nothing
+damaged one. Both readers over it parse a length out of the file and then read
+that many bytes: `tape` the SIMH record framing, `saveset` the DUMP headers
+inside it.
+
+The fixture is a save set this project writes itself with `save` — three files
+and a link, about 10 KB. For a question about the *format* that would be
+circular. For a question about memory safety it is not: what is being asked is
+whether the reader stays inside its own buffers given bytes it did not write, and
+the damage is precisely what makes them bytes it did not write.
+
+Random bytes reach a length field about one time in three hundred, and the length
+field is the entire point — so half the iterations enumerate the record framing
+and hit one on purpose, with a value chosen to be awkward rather than random:
+longer than the file, `0x7FFFFFFF`, `0xFFFFFFFF`, off by one. A quarter of the
+iterations truncate the file instead, which is the commonest real damage there
+is.
+
+That pass confirmed a property worth stating outright, since "refused rather than
+allocated" is easy to claim and easy to get wrong: **a record length is checked
+before it is believed.** A `.tap` whose first record announces 4 GB is refused
+with `a record longer than a megabyte`, and peak RSS never leaves 3.5 MB. The
+suite now measures that rather than asserting it — the same file is read again
+under `ulimit -v 65536`, where refusing still works and reserving the space
+could not. (Skipped, and *reported* as skipped, under the sanitizers, which
+reserve a shadow mapping too large to run under any useful limit. A check that
+quietly weakens itself to keep passing is worse than one that says it did not
+run.)
+
+One difference between the two layers is deliberate and worth recording, because
+it looks like an inconsistency: a leading `0xFFFFFFFF` makes `tape` exit 0 and
+`saveset` exit 1. End of medium at position zero is a valid, empty tape — and an
+empty *save set* is an error. The container layer and the archive layer are
+allowed to disagree about that, and the fact that they do is the separation
+working.
+
+200 iterations × 27 commands = 5,400 runs under the sanitizers, clean.
 
 ## Lint
 

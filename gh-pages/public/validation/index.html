@@ -58,6 +58,8 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-then-it-was-pointed-at-the-writer">And then it was pointed at the writer</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-at-the-containers-which-are-what-you-download">And at the containers, which are what you download</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
@@ -590,7 +592,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>262 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>264 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -605,8 +607,8 @@ asking the reader to agree with the writer rather than with ITS.</p>
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader
-must parse, and runs every command over the result — 200 iterations × 10 commands
-= 2,000 runs under the sanitizers. <code>check</code> is one of the ten and reaches every
+must parse, and runs every command over the result — 200 iterations × 27 commands
+= 5,400 runs under the sanitizers. <code>check</code> is one of them and reaches every
 structure in a single run; <code>manifest</code> is another and is the only command that
 reads <em>every block of every file</em>; the shell is driven with a script.</p>
 <p><strong>It has found one bug so far</strong>, which is what it is for: <code>manifest</code> called
@@ -616,6 +618,66 @@ the count. Nothing hand-written had reached it — a pack with no directories at
 all is not a case anybody thinks to build — and on an ordinary build UBSan only
 <em>prints</em>, so the regression test for it passes unless <code>halt_on_error</code> is set.
 Confirmed against the unfixed code under <code>make test-san</code>, where it aborts.</p>
+<h3 id="and-then-it-was-pointed-at-the-writer">And then it was pointed at the writer</h3>
+<p>For most of this project the fuzzer only ever <em>read</em> damaged packs, which left
+the more dangerous half uncovered. A reader that misparses a corrupt descriptor
+prints nonsense; a writer that does it overwrites somebody's file. So <code>put</code>,
+<code>del</code> and <code>mkdir</code> now run over the damaged pack too — six commands, each on its
+own fresh copy, because the first <code>del</code> to succeed would otherwise change what
+every command after it saw and no failure could be traced back to one word.</p>
+<p>Two things had to be added before the pass meant anything.</p>
+<p><strong>A control.</strong> Every write command must first succeed on an <em>undamaged</em> pack. A
+misspelled path or a changed argument order would make it refuse every damaged
+pack as well, and the whole pass would report zero failures while testing the
+argument parser and nothing else.</p>
+<p><strong>A completion tally.</strong> The run prints how many of the attempts actually ran to
+completion — currently about 85% — because &quot;refused the pack&quot; is a perfectly
+correct outcome that also happens to be the outcome in which no writing code
+runs. Green is only worth something if that number is not near zero.</p>
+<p>And a writer can stay inside its own memory and still leave a pack that crashes
+the <em>reader</em> — a descriptor whose length disagrees with its contents, a name
+pointer past the end of the block. So each write is followed by <code>check</code> over the
+result, which may report anything it likes and must not crash. That is what turns
+&quot;the writer did not crash&quot; into &quot;the writer did not produce something that
+crashes&quot;.</p>
+<p>The descriptor target was widened at the same time, from the first twenty words
+of the area to all of it. That was the blind spot the code review had already
+found by hand: the fuzzer had never reached the end-of-block case because it only
+ever damaged bytes near the <em>start</em>, where the offsets involved are small.</p>
+<h3 id="and-at-the-containers-which-are-what-you-download">And at the containers, which are what you download</h3>
+<p>A pack is something you own. A <code>.tap</code> is something somebody <strong>sent</strong> you, which
+makes it the likelier hostile input of the two, and for nine phases nothing
+damaged one. Both readers over it parse a length out of the file and then read
+that many bytes: <code>tape</code> the SIMH record framing, <code>saveset</code> the DUMP headers
+inside it.</p>
+<p>The fixture is a save set this project writes itself with <code>save</code> — three files
+and a link, about 10 KB. For a question about the <em>format</em> that would be
+circular. For a question about memory safety it is not: what is being asked is
+whether the reader stays inside its own buffers given bytes it did not write, and
+the damage is precisely what makes them bytes it did not write.</p>
+<p>Random bytes reach a length field about one time in three hundred, and the length
+field is the entire point — so half the iterations enumerate the record framing
+and hit one on purpose, with a value chosen to be awkward rather than random:
+longer than the file, <code>0x7FFFFFFF</code>, <code>0xFFFFFFFF</code>, off by one. A quarter of the
+iterations truncate the file instead, which is the commonest real damage there
+is.</p>
+<p>That pass confirmed a property worth stating outright, since &quot;refused rather than
+allocated&quot; is easy to claim and easy to get wrong: <strong>a record length is checked
+before it is believed.</strong> A <code>.tap</code> whose first record announces 4 GB is refused
+with <code>a record longer than a megabyte</code>, and peak RSS never leaves 3.5 MB. The
+suite now measures that rather than asserting it — the same file is read again
+under <code>ulimit -v 65536</code>, where refusing still works and reserving the space
+could not. (Skipped, and <em>reported</em> as skipped, under the sanitizers, which
+reserve a shadow mapping too large to run under any useful limit. A check that
+quietly weakens itself to keep passing is worse than one that says it did not
+run.)</p>
+<p>One difference between the two layers is deliberate and worth recording, because
+it looks like an inconsistency: a leading <code>0xFFFFFFFF</code> makes <code>tape</code> exit 0 and
+<code>saveset</code> exit 1. End of medium at position zero is a valid, empty tape — and an
+empty <em>save set</em> is an error. The container layer and the archive layer are
+allowed to disagree about that, and the fact that they do is the separation
+working.</p>
+<p>200 iterations × 27 commands = 5,400 runs under the sanitizers, clean.</p>
 <h2 id="lint">Lint</h2>
 <p><code>make lint</code> compiles the tree under <strong>16 warning options</strong> — including
 <code>-Wconversion</code> and <code>-Wsign-conversion</code>, which are the two that catch a 36-bit

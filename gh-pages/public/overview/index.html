@@ -272,7 +272,7 @@ in front asks for octal.</p>
 <h2 id="build">Build</h2>
 <pre><code class="language-console">$ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 262 checks
+$ make test             # the regression suite (sh + coreutils), 264 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -498,11 +498,16 @@ predates this project by forty years. Where it agrees, the agreement is about th
 format rather than about our reading of it. It also needs no writer, which is why
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See <a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>.</p>
-<p><strong>Hostile input is bounded.</strong> 262 checks in the suite, a third of them feeding the
-reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
-commands over damaged packs under ASan and UBSan without a finding. The bar is
+<p><strong>Hostile input is bounded.</strong> 264 checks in the suite, a third of them feeding the
+reader a pack damaged on purpose, and a corruption fuzzer that has run 5,400
+commands over damaged packs and damaged tapes under ASan and UBSan without a
+finding. The bar is
 not that the reader survives — it is that it refuses <em>by name</em> and reads nothing
-it did not bound first.</p>
+it did not bound first. Six of those commands per iteration are <code>put</code>, <code>del</code> and
+<code>mkdir</code>: the writer is fuzzed on damaged packs too, each on its own copy, and
+<code>check</code> must still be able to read what it left behind. Five more are <code>tape</code> and
+<code>saveset</code> over a damaged <code>.tap</code> — the input most likely to have come from
+somewhere else — with its record-length fields corrupted on purpose.</p>
 <p><strong>What is NOT proven.</strong> A pack <code>mkfs</code> builds does not boot, so ITS has never come
 up on one — the graders for those are booted from tape. <code>dbd9</code> is still
 <code>corroborated</code>: no KLH10-written artifact has been read. A tape this project
