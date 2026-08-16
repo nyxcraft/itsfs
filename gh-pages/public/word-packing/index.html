@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -37,7 +37,8 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#why-this-is-a-layer-at-all">Why this is a layer at all</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#bit-numbering">Bit numbering</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-four-packings">The four packings</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#why-core-and-dbd9-are-not-confirmed-here">Why `core` and `dbd9` are not `confirmed` here</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#how-core-was-confirmed">How `core` was confirmed</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#why-dbd9-is-still-corroborated">Why `dbd9` is still `corroborated`</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-here">What is not here</a></li>
 </ul>
         </nav>
@@ -88,18 +89,34 @@ bytes, sharing byte 4 between them — its high nibble ends the first word and i
 low nibble begins the second. It is the reason the interface is group-based
 rather than a single stride, and it is the packing that actually exercises the
 read-modify-write path in <code>its_put_words()</code>.</p>
-<h2 id="why-core-and-dbd9-are-not-confirmed-here">Why <code>core</code> and <code>dbd9</code> are not <code>confirmed</code> here</h2>
-<p>They are in <code>t10fs</code>, on evidence that has not moved: the TM03 formatter manual
-gives the core-dump frame table bit by bit, and KLH10's own source defines <code>dbd9</code>
-because DEC never had a two-words-in-nine-bytes format to be wrong about.</p>
-<p>But this project has not yet decoded an <strong>ITS</strong> artifact in either. The round
-trip through them in <code>make oracle</code> proves the codecs are inverses of each other;
-it does not prove that an ITS magtape is laid out that way, because no ITS
-magtape has been read. Borrowing a sibling project's measurement and calling it
-ours is exactly the thing the status markers exist to prevent.</p>
-<p>Reading a DUMP tape is phase 9. When one decodes, <code>core</code> gets promoted, and the
-line in <code>itspack.c</code> that explains why it was not will be replaced by one saying
-what settled it.</p>
+<h2 id="how-core-was-confirmed">How <code>core</code> was confirmed</h2>
+<p>It sat at <code>corroborated</code> for eight phases, and the reason is worth keeping: the
+layout was never in doubt — the TM03 formatter manual gives the frame table bit
+by bit, and <code>t10fs</code> had already confirmed it — but no <strong>ITS</strong> artifact had been
+decoded through <em>this</em> code. Borrowing a sibling project's measurement and
+calling it ours is exactly what the status markers exist to prevent.</p>
+<p><code>make tape-test</code> settled it, two ways:</p>
+<p><strong>Arithmetic.</strong> <code>out/simh/salv.tape</code> carries the salvager as 79,890 bytes. That
+is 15,978 × 5 exactly and 9,986.25 × 8 — so the file <em>cannot</em> be one word per
+eight bytes, and can be one per five.</p>
+<p><strong>ITS's own words.</strong> Decoded as five frames per word and read as five seven-bit
+characters each, the image contains:</p>
+<pre><code>&quot;Salvager&quot;                 word 9259
+&quot;Use MFD from unit&quot;        word 9371
+&quot;unprotected in old TUT&quot;   word 10026
+</code></pre>
+<p>Three strings this project has watched NSALV print on a console — the last of
+them about a pack it damaged on purpose. Text that came out of the emulated
+machine, found by this decoder in the file the machine loaded it from.</p>
+<p>And <code>itsfs tape -x</code> extracts both files on that tape into words, which re-encode
+to the host originals byte for byte.</p>
+<h2 id="why-dbd9-is-still-corroborated">Why <code>dbd9</code> is still <code>corroborated</code></h2>
+<p>KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
+for it to be wrong about — so that source is the specification rather than a
+second opinion. But no KLH10-packed ITS image has been read here. <code>make oracle</code>
+round-trips a pack through <code>dbd9</code> and back, which proves the codec is its own
+inverse; it does not prove KLH10 writes that. Building an ITS pack with
+<code>make EMULATOR=klh10</code> would settle it.</p>
 <h2 id="what-is-not-here">What is not here</h2>
 <p><strong>SIXBIT is not a packing.</strong> It is an interpretation of a word's contents, not a
 way of storing one, and it lives in <code>itstext.c</code> one layer up. The same goes for

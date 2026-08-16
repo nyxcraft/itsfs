@@ -167,10 +167,18 @@ Three of the four things here exist:
 
 **What is left, and it is the interesting half:** making the monitor OPEN the
 file and print it. `:print DIR;FN1 FN2` is the command. The obstacle is not the
-file system — it is the console: ITS stops accepting input on the CTY once the
-system is up, `^Z` produces nothing there, and the terminal lines this machine
-profile exposes are not configured for login. Getting a usable terminal is the
-whole task; the file-system half is expected to be uneventful.
+file system — it is the console, and what has been ruled out is worth knowing
+before trying again:
+
+- `^Z` on the CTY produces nothing, with or without the SYSJOB patch, though
+  ITS's own `doc/DDT.md` says that is how you get a terminal.
+- `set cpu idle` is not the cause; tried without it.
+- Nor are the DZ lines: 0, 5, 6 and 7 over raw sockets with the telnet option
+  negotiation answered properly. simh accepts the connection; ITS never speaks.
+- **The likely cause, untested because testing it needs a console:** the finished
+  system auto-starts a job — an unpatched boot prints `LOGIN TARAKA 0` — and that
+  job owns the CTY. The ITS build drives the console successfully during a
+  *build*, where no such job exists yet, which fits.
 
 - **`mkfs` exists**, and both NSALV and DSKDMP accept a pack built from nothing
   (`make mkfs-test`). It writes a file system rather than a bootable pack, so
@@ -182,13 +190,33 @@ in this phase is done.
 
 ### Phase 9 — tapes
 
-The container (SIMH `.tap` framing, or ITS's own), and the archive above it (DUMP
-save sets, which `itstar` also reads). This is where `core` gets promoted from
-`corroborated` to `confirmed`, because it is where an ITS artifact stored in it
-finally gets decoded.
+`itsfs tape` reads the SIMH `.tap` container: records with their lengths on both
+sides, tape marks, end of medium. It checks the two lengths against each other,
+which is the one thing the format itself lets a reader notice, and `-x` extracts
+each file as 36-bit words.
 
-**Ends when:** a tape this project writes and a tape ITS wrote are the same
-records.
+**Ended by:** `make tape-test` — the salvager tape's two files extracted and
+re-encoded to the host originals byte for byte, and `core` promoted from
+`corroborated` to `confirmed` on the strength of finding three strings in the
+image that this project has watched NSALV print. See
+[word packing](word-packing.md#how-core-was-confirmed).
+
+**And the archive layer over it.** `itsfs saveset` reads a DUMP save set:
+volume header, a header per file, data to a tape mark. Graded against `itstar`,
+which reads these for the PDP-10/its project — 3,795 entries on a 91 MB tape,
+name for name and in the same order. It caught a real bug doing it; see
+[validation](validation.md#save-sets-against-itstar).
+
+**And writing one.** `itsfs save` writes a save set from files on a pack, and
+itstar reads it, extracts it, and returns the host file ITS was originally given
+— byte-identical, with its date and its link intact. See
+[validation](validation.md#a-round-trip-through-two-implementations-and-an-operating-system).
+
+Writing follows itstar's own shape, which is not the obvious one: words are
+appended to a record buffer and flushed when it fills, so a header shares a
+record with the data after it. itstar's `save` has the flush after the header
+commented out on purpose. Writing one structure per record would be tidier and
+would produce a tape unlike any ITS made.
 
 ---
 
@@ -207,6 +235,8 @@ records.
 - **A pack recovered from MIT** would be worth more than any two phases here, and
   would immediately exercise `UNBYTE` encodings that nothing has written since the
   1980s. If one turns up, read it before writing anything.
+- **A KLH10-built ITS pack** would promote `dbd9` the way a tape promoted
+  `core`. `make EMULATOR=klh10` in the ITS tree produces one.
 - **A `FSDEFS` from before September 1979.** `make version-diff` already compares
   versions 40 and 43 and finds all 71 symbols identical, but both postdate the
   TUT format change both of them mention, so the span this reader covers has a

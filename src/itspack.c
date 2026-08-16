@@ -103,13 +103,28 @@ be64_put(uint8_t *b, unsigned i, uint64_t w)
  *
  * B0 is the word's MSB in DEC numbering and TP is the parity track.
  *
- * IT IS `corroborated` HERE, NOT `confirmed`, AND THE DIFFERENCE IS DELIBERATE.
- * The layout is settled -- t10fs confirmed it against that manual and two
- * implementations -- but this project has not yet decoded an ITS artifact stored
- * in it.  ITS magtapes (DUMP and itstar's `.tape` files) are the obvious place
- * that will happen, and that is phase 8 work.  Until an ITS tape has actually
- * been read through this code, saying "confirmed for ITS" would be borrowing
- * somebody else's measurement and calling it ours.
+ * CONFIRMED, AGAINST AN ITS ARTIFACT, and here is the measurement.  It sat at
+ * `corroborated` until phase 9 on the principle that borrowing t10fs's
+ * measurement and calling it ours would be dishonest: the manual settles the
+ * layout, but no ITS tape had been decoded through THIS code.
+ *
+ * `out/simh/salv.tape`, the tape NSALV boots from, is 79,890 bytes of program.
+ * That number is a whole multiple of five and is NOT a multiple of eight
+ * (9,986.25), so the file cannot be one word per eight bytes and can be one per
+ * five.  Decoding it here and reading each word as five seven-bit characters
+ * finds, in the middle of the image:
+ *
+ *      "Salvager"                 word 9259
+ *      "Use MFD from unit"        word 9371
+ *      "unprotected in old TUT"   word 10026
+ *
+ * which are three of the exact strings this project has watched NSALV print on
+ * a console -- the third of them about a pack it damaged on purpose.  Text that
+ * came out of the emulated machine, found by this decoder in the file the
+ * machine loaded it from.
+ *
+ * And the round trip: `itsfs tape -x` decodes every record of that tape into
+ * words, and re-encoding them reproduces both host files byte for byte.
  */
 static uint64_t
 core_get(const uint8_t *b, unsigned i)
@@ -195,7 +210,7 @@ dbd9_put(uint8_t *b, unsigned i, uint64_t w)
 static const its_pack packs[ITS_NPACK] = {
 	[ITS_PACK_LE64] = { "le64", "confirmed",    "one word per 64-bit little-endian container (SIMH disk images; libword calls it data8)", 1, 8, le64_get, le64_put },
 	[ITS_PACK_BE64] = { "be64", "structural",   "one word per 64-bit big-endian container",                                              1, 8, be64_get, be64_put },
-	[ITS_PACK_CORE] = { "core", "corroborated", "five frames per word (magtape core-dump mode; TM03 user guide table 2-12)",              1, 5, core_get, core_put },
+	[ITS_PACK_CORE] = { "core", "confirmed",    "five frames per word (magtape core-dump mode; TM03 user guide table 2-12)",              1, 5, core_get, core_put },
 	[ITS_PACK_DBD9] = { "dbd9", "corroborated", "two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)",             2, 9, dbd9_get, dbd9_put },
 };
 

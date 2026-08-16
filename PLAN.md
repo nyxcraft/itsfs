@@ -230,7 +230,7 @@ validated.
 | **6** | manifest / verify, and an interactive shell | a manifest from `le64` verifies against the same file system in `dbd9`, over all 6,303 entries | **done** |
 | **7** | writer core, then the mutation engine | every mutating flow ends `check` clean, and `NSALV` accepts the result | **done** |
 | **8** | native-tool interop: `NSALV`, then the monitor | ITS mounts and reads what we wrote | **all but one: NSALV, DSKDMP, a boot, and a pack built from nothing. The monitor OPENING a file is blocked on a console, not on the format** |
-| **9** | tapes: DUMP save sets, and `.tape` containers | round-trips compare bytes | |
+| **9** | tapes: DUMP save sets, and `.tape` containers | round-trips compare bytes | **done: both layers read, save sets written, and a file round-tripped through itstar and ITS unchanged** |
 
 Phase 5a was added after the fact, and the lesson is worth keeping: the original
 phasing assumed native-tool evidence had to wait for a writer, because levels 1

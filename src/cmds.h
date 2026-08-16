@@ -27,5 +27,8 @@ int cmd_put(int argc, char **argv);
 int cmd_del(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
 int cmd_mkfs(int argc, char **argv);
+int cmd_tape(int argc, char **argv);
+int cmd_saveset(int argc, char **argv);
+int cmd_save(int argc, char **argv);
 
 #endif /* CMDS_H */

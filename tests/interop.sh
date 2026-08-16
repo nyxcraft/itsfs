@@ -28,12 +28,26 @@
 # resolves them with its own arithmetic.
 #
 # WHAT IT DOES NOT ESTABLISH.  The monitor has not been made to OPEN our file
-# and print it.  ITS's console stops accepting input once the system is up: ^Z,
-# which its own doc/DDT.md says gets you a terminal, produces nothing on the
-# CTY, and the DZ lines this machine profile exposes are not configured for
-# login.  So the monitor's file-opening path -- as opposed to its salvage path
-# -- is untested here, and the roadmap says so rather than this pretending
-# otherwise.
+# and print it.  This is a CONSOLE problem and not a file-system one, and it is
+# worth writing down what has been ruled out so the next attempt starts further
+# along:
+#
+#   ^Z on the CTY produces nothing, before or after the SYSJOB patch below.
+#   ITS's own doc/DDT.md says ^Z is how you get a terminal.
+#
+#   `set cpu idle` is not the cause.  Tried without it; no difference.
+#
+#   The DZ lines are not it either.  Lines 0, 5, 6 and 7 were tried over raw
+#   sockets with the telnet option negotiation answered properly; simh accepts
+#   the connection and ITS never says anything on any of them.
+#
+#   The likely cause, untested because testing it needs a console: the finished
+#   system auto-starts a job -- an unpatched boot prints "LOGIN TARAKA 0" -- and
+#   that job owns the CTY.  The ITS build drives the console successfully during
+#   a BUILD, where no such job exists yet, which fits.
+#
+# So the monitor's file-opening path is untested as distinct from its salvage
+# path, and the roadmap says so rather than this pretending otherwise.
 #
 # ONE METHOD THAT LOOKED RIGHT AND WAS NOT, recorded so nobody spends the
 # afternoon again: DSKDMP has `L<ESC>file` (load a file into core) and

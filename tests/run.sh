@@ -995,6 +995,232 @@ fi
 )
 chk "...and ITSFS_IGNORE_INUSE overrides it" "$(cat "$T/inuse2.rc")" "0"
 
+# ------------------------------------------------------------------ tapes
+#
+# The CONTAINER layer: SIMH .tap framing, records and tape marks.  What is
+# inside the records is a separate format and this reads none of it.
+#
+# The fixture is built here, byte by byte, like every other one: a leading
+# length, the record, a trailing length, and 0 for a tape mark.
+
+# emit_le32 <value>
+emit_le32() {
+	_v=$1; _i=0
+
+	while [ $_i -lt 4 ]; do
+		printf "\\$(printf '%03o' "$(((_v >> (8 * _i)) & 255))")"
+		_i=$((_i + 1))
+	done
+}
+
+# A tape of two files: one record of 10 bytes, a mark, two of 10, two marks.
+{
+	emit_le32 10; printf 'AAAAAAAAAA'; emit_le32 10
+	emit_le32 0
+	emit_le32 10; printf 'BBBBBBBBBB'; emit_le32 10
+	emit_le32 10; printf 'CCCCCCCCCC'; emit_le32 10
+	emit_le32 0
+	emit_le32 0
+} > "$T/t1.tap"
+
+out=$("$ITSFS" tape "$T/t1.tap" 2>&1); rc=$?
+chk "tape reads the framing" "$rc" "0"
+has "...counting the records" "$out" "3 records, 3 tape marks"
+has "...and the data" "$out" "30 bytes of data"
+has "...and separating the files at the marks" "$out" "file 0       1 records"
+has "...both of them" "$out" "file 1       2 records"
+
+# THE DEFAULT PACKING IS core, NOT le64.  A magtape is five frames per word and
+# a disk is eight bytes; defaulting a tape to the disk convention would give
+# files of the right length and entirely wrong words.
+has "a tape defaults to the core packing, not the disk one" "$out" "packing       core"
+has "...which is now confirmed against an ITS artifact" "$out" "core (confirmed)"
+
+# THE ONE CHECK THE FORMAT OFFERS: the length is written on both sides so a tape
+# can be read backwards, which is also the only way to notice a garbage header.
+{
+	emit_le32 10; printf 'AAAAAAAAAA'; emit_le32 11
+} > "$T/t2.tap"
+out=$("$ITSFS" tape "$T/t2.tap" 2>&1); rc=$?
+chk "a record whose two lengths disagree is refused" "$rc" "1"
+has "...saying which" "$out" "lengths disagree"
+
+# A length that runs off the end of the file.
+{
+	emit_le32 9999; printf 'AAAA'
+} > "$T/t3.tap"
+out=$("$ITSFS" tape "$T/t3.tap" 2>&1); rc=$?
+chk "a record that runs off the end is refused" "$rc" "1"
+has "...saying so" "$out" "runs off the end"
+
+# ...and one that is not a length at all.
+{
+	emit_le32 99999999; printf 'AAAA'
+} > "$T/t4.tap"
+out=$("$ITSFS" tape "$T/t4.tap" 2>&1); rc=$?
+chk "an absurd record length is refused rather than allocated" "$rc" "1"
+
+# End of medium stops the read without complaint.
+{
+	emit_le32 10; printf 'AAAAAAAAAA'; emit_le32 10
+	emit_le32 4294967295
+	printf 'this is not a record at all'
+} > "$T/t5.tap"
+out=$("$ITSFS" tape "$T/t5.tap" 2>&1); rc=$?
+chk "end of medium ends the read cleanly" "$rc" "0"
+has "...having read what came before it" "$out" "1 records"
+
+# An odd-length record is padded to an even one, which is in the specification
+# and is the kind of thing a reader gets wrong once.
+{
+	emit_le32 5; printf 'ABCDE'; printf '\0'; emit_le32 5
+	emit_le32 5; printf 'FGHIJ'; printf '\0'; emit_le32 5
+	emit_le32 0
+} > "$T/t6.tap"
+out=$("$ITSFS" tape "$T/t6.tap" 2>&1); rc=$?
+chk "an odd-length record is padded to an even one" "$rc" "0"
+has "...and both are read" "$out" "2 records"
+
+# --------------------------------------------------------- DUMP save sets
+#
+# The ARCHIVE layer over the container above.  The fixture is built here, word
+# by word, because the suite reads no real tape -- the tapes are not in this
+# repo and never will be.  What a real one proves is a separate target,
+# `make tape-test`, and what itstar says about one is in docs/validation.md.
+
+# emit_word5 <octal word> -- one 36-bit word in the core packing, five bytes.
+emit_word5() {
+	_w=$(($1))
+	printf "\\$(printf '%03o' "$(((_w >> 28) & 255))")"
+	printf "\\$(printf '%03o' "$(((_w >> 20) & 255))")"
+	printf "\\$(printf '%03o' "$(((_w >> 12) & 255))")"
+	printf "\\$(printf '%03o' "$(((_w >> 4) & 255))")"
+	printf "\\$(printf '%03o' "$((_w & 15))")"
+}
+
+# An AOBJN pointer for a header of n words: its left half is -n.
+aobjn() { echo $(((0777777 - $1 + 1) << 18)); }
+
+# A save set: a volume header, then two files, with the FIRST FILE'S HEADER
+# SHARING THE VOLUME RECORD -- which is what every real ITS tape does and what
+# a reader that assumed one header per record would silently lose.
+{
+	# record 1: volume header (4 words) + file header (4 words)
+	emit_le32 40
+	emit_word5 "$(aobjn 4)"; emit_word5 $(((1 << 18) | 0)); emit_word5 "$(sb 260627)"; emit_word5 0
+	emit_word5 "$(aobjn 4)"; emit_word5 "$(sb TEST)"; emit_word5 "$(sb ONE)"; emit_word5 "$(sb TXT)"
+	emit_le32 40
+	# record 2: that file's data
+	emit_le32 10; emit_word5 0111111111111; emit_word5 0222222222222; emit_le32 10
+	emit_le32 0
+	# record 3: a second file's header, with its data in the SAME record
+	emit_le32 30
+	emit_word5 "$(aobjn 4)"; emit_word5 "$(sb TEST)"; emit_word5 "$(sb TWO)"; emit_word5 "$(sb BIN)"
+	emit_word5 0333333333333; emit_word5 0444444444444
+	emit_le32 30
+	emit_le32 0
+	emit_le32 0
+} > "$T/s1.tap"
+
+out=$("$ITSFS" saveset "$T/s1.tap" 2>&1); rc=$?
+chk "saveset reads a DUMP volume header" "$rc" "0"
+has "...with the tape and reel" "$out" "tape 1, reel 0"
+has "...the date, SIXBIT YYMMDD" "$out" "created 06/27/26"
+has "...and the type" "$out" "type random"
+
+# THE FIRST FILE HEADER SHARES THE VOLUME RECORD.  A reader that skipped to the
+# next record here would list one file instead of two and say nothing about it.
+has "the file header sharing the volume record is found" "$out" "TEST;ONE TXT"
+has "...and so is the second file" "$out" "TEST;TWO BIN"
+has "...both of them" "$out" "2 files, 0 links"
+
+# ...and a file's data may share its own header's record, which is the same
+# mistake in the other place.  TWO BIN's two data words are in its header record.
+"$ITSFS" saveset -x "$T" "$T/s1.tap" >/dev/null 2>&1
+chk "a file whose data shares its header record extracts 2 words" \
+	"$(wc -c < "$T/TEST;TWO.BIN" | tr -d ' ')" "16"
+chk "...and one whose data is in following records extracts 2 as well" \
+	"$(wc -c < "$T/TEST;ONE.TXT" | tr -d ' ')" "16"
+
+# A LINK, WITH ITS TARGET IN THE SAME RECORD AS ITS HEADER -- which is the case
+# that cost this reader 61 of a real tape's 3,795 entries.  Reading a fresh
+# record for the target swallowed the NEXT FILE'S HEADER, one per link, and the
+# listing looked entirely plausible.  itstar reads a new record only if the
+# current one is exhausted, and so does this now.
+#
+# The target is FN1, FN2, UFD -- not the order the header names them in.
+{
+	emit_le32 60
+	emit_word5 "$(aobjn 4)"; emit_word5 $((1 << 18)); emit_word5 "$(sb 260627)"; emit_word5 0
+	emit_word5 "$(aobjn 5)"; emit_word5 "$(sb TEST)"; emit_word5 "$(sb ALINK)"; emit_word5 "$(sb X)"
+	emit_word5 $((1 << 18))
+	emit_word5 "$(sb TFN1)"; emit_word5 "$(sb TFN2)"; emit_word5 "$(sb TDIR)"
+	emit_le32 60
+	emit_le32 0
+	# ...and a file after it, which is what a reader that over-read would lose.
+	emit_le32 20
+	emit_word5 "$(aobjn 4)"; emit_word5 "$(sb TEST)"; emit_word5 "$(sb AFTER)"; emit_word5 "$(sb LINK)"
+	emit_le32 20
+	emit_le32 0
+	emit_le32 0
+} > "$T/s2.tap"
+
+out=$("$ITSFS" saveset "$T/s2.tap" 2>&1)
+has "a link is reported as one" "$out" "1 link"
+has "...with its target read as FN1, FN2, UFD" "$out" "-> TDIR;TFN1 TFN2"
+has "...and the file AFTER it is not swallowed" "$out" "TEST;AFTER LINK"
+has "...so both entries are counted" "$out" "1 file, 1 link"
+
+# A file that is not a save set at all is refused by the volume header's own
+# length word, rather than read as one file of rubbish.
+{
+	emit_le32 10; emit_word5 0; emit_word5 0; emit_le32 10
+} > "$T/s3.tap"
+out=$("$ITSFS" saveset "$T/s3.tap" 2>&1); rc=$?
+chk "a tape that is not a save set is refused" "$rc" "1"
+has "...by its volume header" "$out" "does not begin with a DUMP volume header"
+
+out=$("$ITSFS" saveset "$T/t2.tap" 2>&1); rc=$?
+chk "and the container's own damage is still caught underneath" "$rc" "1"
+
+# --- writing one.  A save set only this project can read proves nothing, so
+# the round trip here is through our own reader and the real check is itstar,
+# in `make tape-test`.
+
+mkfixture "$T/sv.dsk"
+out=$("$ITSFS" save "$T/sv.dsk" "$T/w.tap" 'TEST;HELLO TXT' 2>&1); rc=$?
+chk "save writes a save set from a pack" "$rc" "0"
+
+out=$("$ITSFS" saveset "$T/w.tap" 2>&1); rc=$?
+chk "...which reads back" "$rc" "0"
+has "...with the file on it" "$out" "TEST;HELLO TXT"
+has "...and nothing else" "$out" "1 file, 0 links"
+
+# THE WORDS MUST SURVIVE.  Extracting from the tape and from the pack must give
+# the same bytes -- this is the only check that the data went through the
+# record-buffering intact rather than merely the names.
+"$ITSFS" saveset -x "$T" "$T/w.tap" >/dev/null 2>&1
+"$ITSFS" get -w "$T/sv.dsk" 'TEST;HELLO TXT' "$T/direct.words" >/dev/null 2>&1
+
+if [ -f "$T/TEST;HELLO.TXT" ] && cmp -s "$T/TEST;HELLO.TXT" "$T/direct.words"; then
+	ok "the file's words come off the tape exactly as they come off the pack"
+else
+	no "the file's words come off the tape exactly as they come off the pack"
+fi
+
+# A link goes on the tape as a link, with its target -- not as the file it
+# points at, which would put the same data on twice under two names.
+out=$("$ITSFS" save "$T/sv.dsk" "$T/w2.tap" 'TEST;A LINK' 2>&1); rc=$?
+chk "save writes a link" "$rc" "0"
+out=$("$ITSFS" saveset "$T/w2.tap" 2>&1)
+has "...as a link, with its target" "$out" "TEST;A LINK -> .;@ DDT"
+
+out=$("$ITSFS" save "$T/sv.dsk" "$T/w3.tap" 'TEST;NOSUCH FILE' 2>&1); rc=$?
+chk "save refuses a file that is not there" "$rc" "1"
+
+out=$("$ITSFS" save "$T/sv.dsk" "$T/w4.tap" 'NOTANAME' 2>&1); rc=$?
+chk "save refuses a name that is not DIR;FN1 FN2" "$rc" "1"
+
 # ------------------------------------------------------------ command lines
 
 out=$("$ITSFS" dump "$T/pack.dsk" 99999 2>&1); rc=$?

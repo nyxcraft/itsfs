@@ -49,21 +49,44 @@ low nibble begins the second. It is the reason the interface is group-based
 rather than a single stride, and it is the packing that actually exercises the
 read-modify-write path in `its_put_words()`.
 
-## Why `core` and `dbd9` are not `confirmed` here
+## How `core` was confirmed
 
-They are in `t10fs`, on evidence that has not moved: the TM03 formatter manual
-gives the core-dump frame table bit by bit, and KLH10's own source defines `dbd9`
-because DEC never had a two-words-in-nine-bytes format to be wrong about.
+It sat at `corroborated` for eight phases, and the reason is worth keeping: the
+layout was never in doubt — the TM03 formatter manual gives the frame table bit
+by bit, and `t10fs` had already confirmed it — but no **ITS** artifact had been
+decoded through *this* code. Borrowing a sibling project's measurement and
+calling it ours is exactly what the status markers exist to prevent.
 
-But this project has not yet decoded an **ITS** artifact in either. The round
-trip through them in `make oracle` proves the codecs are inverses of each other;
-it does not prove that an ITS magtape is laid out that way, because no ITS
-magtape has been read. Borrowing a sibling project's measurement and calling it
-ours is exactly the thing the status markers exist to prevent.
+`make tape-test` settled it, two ways:
 
-Reading a DUMP tape is phase 9. When one decodes, `core` gets promoted, and the
-line in `itspack.c` that explains why it was not will be replaced by one saying
-what settled it.
+**Arithmetic.** `out/simh/salv.tape` carries the salvager as 79,890 bytes. That
+is 15,978 × 5 exactly and 9,986.25 × 8 — so the file *cannot* be one word per
+eight bytes, and can be one per five.
+
+**ITS's own words.** Decoded as five frames per word and read as five seven-bit
+characters each, the image contains:
+
+```
+"Salvager"                 word 9259
+"Use MFD from unit"        word 9371
+"unprotected in old TUT"   word 10026
+```
+
+Three strings this project has watched NSALV print on a console — the last of
+them about a pack it damaged on purpose. Text that came out of the emulated
+machine, found by this decoder in the file the machine loaded it from.
+
+And `itsfs tape -x` extracts both files on that tape into words, which re-encode
+to the host originals byte for byte.
+
+## Why `dbd9` is still `corroborated`
+
+KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
+for it to be wrong about — so that source is the specification rather than a
+second opinion. But no KLH10-packed ITS image has been read here. `make oracle`
+round-trips a pack through `dbd9` and back, which proves the codec is its own
+inverse; it does not prove KLH10 writes that. Building an ITS pack with
+`make EMULATOR=klh10` would settle it.
 
 ## What is not here
 

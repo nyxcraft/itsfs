@@ -13,7 +13,7 @@ CPPFLAGS += -D_FILE_OFFSET_BITS=64
 BIN := bin
 SRC := src
 
-BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c cmd_write.c \
+BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c cmd_write.c cmd_tape.c cmd_saveset.c \
         util.c image.c structure.c write.c itspack.c itsgeom.c itstext.c
 HDRS := $(SRC)/cmds.h $(SRC)/util.h $(SRC)/image.h $(SRC)/itspack.h $(SRC)/itsgeom.h \
         $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h $(SRC)/write.h
@@ -255,6 +255,26 @@ MKFS_TMP ?= /tmp/itsfs-mkfs
 mkfs-test: $(BIN)/itsfs
 	@sh tests/mkfs.sh $(BIN)/itsfs "$(NSALV_PDP10)" "$(NSALV_TAPE)" "$(NSALV_DSKDMP)" $(MKFS_TMP)
 
+#
+# `make tape-test` -- read a real ITS tape, and check the words against the
+# host files it was built from.
+#
+# THE MEASUREMENT THAT PROMOTED `core` FROM corroborated TO confirmed.  The
+# salvager tape is 79,890 bytes of program: a whole multiple of five and NOT of
+# eight, so it cannot be one word per eight bytes.  Decoded here as five frames
+# per word and read as seven-bit characters, it contains three strings this
+# project has watched NSALV print on a console.  And extracting it and
+# re-encoding reproduces both host files byte for byte.
+#
+# Needs the ITS tree for the tapes and the files they were made from; no
+# emulator.
+#
+TAPE ?= $(HOME)/its/out/simh/salv.tape
+TAPE_SRC ?= $(HOME)/its/bin/ks10/boot
+TAPE_TMP ?= /tmp/itsfs-tape
+tape-test: $(BIN)/itsfs
+	@sh tests/tape.sh $(BIN)/itsfs "$(TAPE)" "$(TAPE_SRC)" $(TAPE_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -267,4 +287,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test version-diff
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff

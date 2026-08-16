@@ -31,6 +31,9 @@
  *   itsfs del       remove a file -- DESTRUCTIVE
  *   itsfs mkdir     make a directory -- DESTRUCTIVE
  *   itsfs mkfs      create a file system -- DESTRUCTIVE
+ *   itsfs tape      SIMH .tap record framing -- the container, not the archive
+ *   itsfs saveset   an ITS DUMP save set -- the archive over it
+ *   itsfs save      write one, from files on a pack
  */
 
 #include "cmds.h"
@@ -64,6 +67,9 @@ static const struct subcmd {
 	{ "rm",       cmd_del,      "remove a file -- the same command as del"  },
 	{ "mkdir",    cmd_mkdir,    "make a directory (destructive)"            },
 	{ "mkfs",     cmd_mkfs,     "create a file system (destructive)"        },
+	{ "tape",     cmd_tape,     "SIMH .tap record framing (container only)"  },
+	{ "saveset",  cmd_saveset,  "list or extract an ITS DUMP save set"      },
+	{ "save",     cmd_save,     "write a DUMP save set from files on a pack" },
 };
 
 /* clang-format on */

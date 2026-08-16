@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -91,6 +91,8 @@ tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
 tests/interop.exp   DSKDMP list the directory.  Two emulator runs, on purpose.
 tests/mkfs.sh       `make mkfs-test`: a pack built from nothing, graded by
                     NSALV and DSKDMP, both booted from tape.
+tests/tape.sh       `make tape-test`: a real ITS tape, decoded and checked
+                    against the host files it was made from.  No emulator.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 </code></pre>
 <h2 id="things-not-to-do">Things not to do</h2>
@@ -115,6 +117,14 @@ clean.</p>
 <p><strong>Do not let the test suite build its fixtures with a future writer.</strong> The suite
 pokes words in with <code>dd</code> on purpose. A fixture built by the writer asks the
 reader to agree with the writer rather than with ITS.</p>
+<p><strong>Do not write one structure per tape record either.</strong>  itstar appends words to
+a buffer and flushes when it fills; the flush after a file header is commented
+out ON PURPOSE.  A tidier writer would produce a tape unlike any ITS made.</p>
+<p><strong>Do not assume one structure per tape record.</strong>  A DUMP save set puts the first
+file's header in the volume record, a link's target in its header's record, and a
+file's data in whatever is left of its own.  Assuming otherwise listed 3,734 of a
+tape's 3,795 files and looked entirely plausible; itstar disagreeing about the
+count is what noticed.</p>
 <p><strong>Do not assume a second reference to a block is corruption.</strong> The TUT is a
 reference count. On the reference pack nothing is referenced twice, which means
 nothing here knows what a legitimate second reference looks like.</p>
@@ -137,8 +147,11 @@ the bottom of the disk, which <code>mkfs</code> does not write (and NSALV's own 
 refuses to touch).  Both graders for such a pack come off tape.</li>
 <li>One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
 RM03, no multi-pack file system, no artifact recovered from MIT.</li>
-<li>No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are <code>corroborated</code>
-here and <code>confirmed</code> in <code>t10fs</code>.</li>
+<li><code>dbd9</code> is still <code>corroborated</code>: no KLH10-packed ITS image has been read here.
+<code>make EMULATOR=klh10</code> in the ITS tree would produce one.</li>
+<li>A tape this project writes has not been compared RECORD FOR RECORD with one
+ITS wrote, and ITS's own DUMP has never been shown one.  itstar reads ours and
+the data round-trips, which is a weaker claim than byte identity.</li>
 <li><code>UNTIM</code>'s unit, <code>UNBYTE</code>'s other three encodings, <code>UNDUMP</code>'s position and the
 flag field's width are all unknown. See
 <a href="../filesystem/index.html#gap-register">the gap register</a>.</li>

@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -187,25 +187,59 @@ directory on the way (<code>make interop</code>).</li>
 </ul>
 <p><strong>What is left, and it is the interesting half:</strong> making the monitor OPEN the
 file and print it. <code>:print DIR;FN1 FN2</code> is the command. The obstacle is not the
-file system — it is the console: ITS stops accepting input on the CTY once the
-system is up, <code>^Z</code> produces nothing there, and the terminal lines this machine
-profile exposes are not configured for login. Getting a usable terminal is the
-whole task; the file-system half is expected to be uneventful.</p>
+file system — it is the console, and what has been ruled out is worth knowing
+before trying again:</p>
 <ul>
-<li><strong><code>mkfs</code> exists</strong>, and both NSALV and DSKDMP accept a pack built from nothing
+<li>
+<p><code>^Z</code> on the CTY produces nothing, with or without the SYSJOB patch, though
+ITS's own <code>doc/DDT.md</code> says that is how you get a terminal.</p>
+</li>
+<li>
+<p><code>set cpu idle</code> is not the cause; tried without it.</p>
+</li>
+<li>
+<p>Nor are the DZ lines: 0, 5, 6 and 7 over raw sockets with the telnet option
+negotiation answered properly. simh accepts the connection; ITS never speaks.</p>
+</li>
+<li>
+<p><strong>The likely cause, untested because testing it needs a console:</strong> the finished
+system auto-starts a job — an unpatched boot prints <code>LOGIN TARAKA 0</code> — and that
+job owns the CTY. The ITS build drives the console successfully during a
+<em>build</em>, where no such job exists yet, which fits.</p>
+</li>
+<li>
+<p><strong><code>mkfs</code> exists</strong>, and both NSALV and DSKDMP accept a pack built from nothing
 (<code>make mkfs-test</code>). It writes a file system rather than a bootable pack, so
 both are booted from tape; see
-<a href="../validation/index.html#a-file-system-with-no-its-in-it">validation</a>.</li>
+<a href="../validation/index.html#a-file-system-with-no-its-in-it">validation</a>.</p>
+</li>
 </ul>
 <p><strong>Ends when:</strong> the monitor opens a file we wrote and prints it. Everything else
 in this phase is done.</p>
 <h3 id="phase-9-tapes">Phase 9 — tapes</h3>
-<p>The container (SIMH <code>.tap</code> framing, or ITS's own), and the archive above it (DUMP
-save sets, which <code>itstar</code> also reads). This is where <code>core</code> gets promoted from
-<code>corroborated</code> to <code>confirmed</code>, because it is where an ITS artifact stored in it
-finally gets decoded.</p>
-<p><strong>Ends when:</strong> a tape this project writes and a tape ITS wrote are the same
-records.</p>
+<p><code>itsfs tape</code> reads the SIMH <code>.tap</code> container: records with their lengths on both
+sides, tape marks, end of medium. It checks the two lengths against each other,
+which is the one thing the format itself lets a reader notice, and <code>-x</code> extracts
+each file as 36-bit words.</p>
+<p><strong>Ended by:</strong> <code>make tape-test</code> — the salvager tape's two files extracted and
+re-encoded to the host originals byte for byte, and <code>core</code> promoted from
+<code>corroborated</code> to <code>confirmed</code> on the strength of finding three strings in the
+image that this project has watched NSALV print. See
+<a href="../word-packing/index.html#how-core-was-confirmed">word packing</a>.</p>
+<p><strong>And the archive layer over it.</strong> <code>itsfs saveset</code> reads a DUMP save set:
+volume header, a header per file, data to a tape mark. Graded against <code>itstar</code>,
+which reads these for the PDP-10/its project — 3,795 entries on a 91 MB tape,
+name for name and in the same order. It caught a real bug doing it; see
+<a href="../validation/index.html#save-sets-against-itstar">validation</a>.</p>
+<p><strong>And writing one.</strong> <code>itsfs save</code> writes a save set from files on a pack, and
+itstar reads it, extracts it, and returns the host file ITS was originally given
+— byte-identical, with its date and its link intact. See
+<a href="../validation/index.html#a-round-trip-through-two-implementations-and-an-operating-system">validation</a>.</p>
+<p>Writing follows itstar's own shape, which is not the obvious one: words are
+appended to a record buffer and flushed when it fills, so a header shares a
+record with the data after it. itstar's <code>save</code> has the flush after the header
+commented out on purpose. Writing one structure per record would be tidier and
+would produce a tape unlike any ITS made.</p>
 <hr />
 <h2 id="not-on-the-roadmap">Not on the roadmap</h2>
 <ul>
@@ -222,6 +256,8 @@ already solved.</li>
 <li><strong>A pack recovered from MIT</strong> would be worth more than any two phases here, and
 would immediately exercise <code>UNBYTE</code> encodings that nothing has written since the
 1980s. If one turns up, read it before writing anything.</li>
+<li><strong>A KLH10-built ITS pack</strong> would promote <code>dbd9</code> the way a tape promoted
+<code>core</code>. <code>make EMULATOR=klh10</code> in the ITS tree produces one.</li>
 <li><strong>A <code>FSDEFS</code> from before September 1979.</strong> <code>make version-diff</code> already compares
 versions 40 and 43 and finds all 71 symbols identical, but both postdate the
 TUT format change both of them mention, so the span this reader covers has a

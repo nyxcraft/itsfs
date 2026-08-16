@@ -83,6 +83,9 @@ the design rather than fitting inside it:
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
 | `itsfs mkdir` | make a directory — **destructive** |
 | `itsfs mkfs` | create a file system from nothing — **destructive** |
+| `itsfs tape` | SIMH `.tap` record framing — the container, not the archive |
+| `itsfs saveset` | list or extract an ITS DUMP save set — the archive over it |
+| `itsfs save` | write a DUMP save set from files on a pack |
 
 Run any of them with no arguments for its own usage.
 
@@ -183,13 +186,14 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 217 checks
+$ make test             # the regression suite (sh + coreutils), 258 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 $ make interop IMAGE=... # ...and boot ITS on one this wrote
 $ make mkfs-test        # build a pack from nothing; ITS grades it
+$ make tape-test        # read a real ITS tape (no emulator needed)
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
@@ -211,6 +215,47 @@ IDENTICAL: and through the packing that shares a byte
 That is a stronger result than it looks: because every word is masked to 36 bits
 on the way in, byte identity over the whole image also proves that nothing
 anywhere on the pack sets one of the 28 bits outside the word.
+
+**A file that went into ITS one way and came out another, unchanged.** `itsfs
+save` writes a DUMP save set, and `itstar` — the reader the PDP-10/its project
+uses — reads it, extracts it, and gets back the host file ITS was originally
+given:
+
+```console
+4. a save set this project wrote, read by itstar
+  ok   ITSTAR READS IT: 2 entries, and the volume header
+  ok   ...and extracts the file
+  ok   ROUND TRIP: byte-identical to the host file ITS was given
+  ok   ...and the link is a link: -> _/@.ddt
+```
+
+`kshack/its.15` went *into* ITS as a host file — itstar packed it onto a tape and
+ITS's loader wrote it to the pack. It comes back out by a different road: our
+reader, our save-set writer, itstar's extractor. Byte-identical, with its 1986
+date intact and its link still a link. That is two independent implementations
+and an operating system in the loop, and no part of the path is this project
+agreeing with itself.
+
+**And DUMP save sets, checked against `itstar`.** `itsfs saveset` reads the
+archive layer over that container — a volume header, a header per file, and the
+data up to a tape mark. On a 91 MB ITS source tape it lists **3,795 entries,
+name for name and in the same order as `itstar`**, the reader the PDP-10/its
+project uses for these.
+
+That comparison earned its keep immediately. The first version listed 3,734 —
+exactly one short per link — because a link's target can share its header's
+record, and reading a fresh record for it swallowed the *next file's header*. The
+listing looked entirely plausible; only an oracle catches that.
+
+**And the magtape packing, confirmed against ITS's own words.** The salvager tape
+is 79,890 bytes — a whole multiple of five and *not* of eight, so it cannot be
+one word per eight bytes. Decoded as five frames per word and read as seven-bit
+characters, it contains `Salvager`, `Use MFD from unit` and `unprotected in old
+TUT`: three strings this project has watched NSALV print on a console, the last
+of them about a pack it damaged on purpose. Text that came out of the emulated
+machine, found by this decoder in the file the machine loaded it from. And
+`itsfs tape -x` extracts both files on that tape and re-encodes them to the host
+originals byte for byte.
 
 **Measured, not assumed.** A sector is 128 words and a block is eight of them; an
 RP06 cylinder holds 47 blocks and not 47.5; the MFD is at `NBLKS/2-1` and says so
@@ -405,7 +450,7 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 217 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 258 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing

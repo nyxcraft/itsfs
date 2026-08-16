@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-9 done bar one: a file round-trips through ITS and back out unchanged</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -49,6 +49,8 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-does-not-establish">What this does not establish</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-method-that-looked-right-and-was-not">A method that looked right and was not</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-file-system-with-no-its-in-it">A file system with no ITS in it</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-round-trip-through-two-implementations-and-an-operating-system">A round trip through two implementations and an operating system</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#save-sets-against-itstar">Save sets, against itstar</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
@@ -416,6 +418,48 @@ explicitly refuses to touch — and then loads a system out of a directory. <cod
 writes a file system; the boot area and the system are somebody else's job. So
 both graders are booted from tape and pointed at the pack, and ITS coming up on
 one is not claimed anywhere.</p>
+<h2 id="a-round-trip-through-two-implementations-and-an-operating-system">A round trip through two implementations and an operating system</h2>
+<pre><code class="language-console">$ make tape-test
+4. a save set this project wrote, read by itstar
+  ok   wrote a save set of two entries, one of them a link
+  ok   ...and reads it back, link and all
+  ok   ITSTAR READS IT: 2 entries, and the volume header
+  ok   ...and extracts the file
+  ok   ROUND TRIP: byte-identical to the host file ITS was given
+  ok   ...and the link is a link: -&gt; _/@.ddt
+</code></pre>
+<p><code>kshack/its.15</code> has now been all the way around:</p>
+<pre><code>host file  --itstar--&gt;  tape  --ITS's loader--&gt;  the pack
+           --itsfs reader--&gt;  --itsfs save--&gt;  tape
+           --itstar's extractor--&gt;  host file
+</code></pre>
+<p>and the two host files are the same 460 bytes. Its 1986 creation date survives
+the trip — the date word is copied straight from the disk because the two
+layouts turn out to be the same one, <code>year&lt;&lt;9 | month&lt;&lt;5 | day</code> in a halfword —
+and the link comes out a link.</p>
+<p>Nothing on that path is this project agreeing with itself: itstar wrote the tape
+that went in, ITS put it on the pack, and itstar read the tape that came out.</p>
+<h2 id="save-sets-against-itstar">Save sets, against itstar</h2>
+<p><code>itsfs saveset</code> reads the DUMP archive layer, and <code>itstar</code> — the reader the
+PDP-10/its project uses for these tapes — is the oracle. On <code>sources.tape</code>,
+91 MB and 3,795 entries including 68 links:</p>
+<pre><code class="language-console">$ itsfs saveset sources.tape | ... &gt; mine
+$ itstar -tf sources.tape   | ... &gt; theirs
+$ diff mine theirs &amp;&amp; echo identical
+identical
+</code></pre>
+<p>Name for name, in the same order.</p>
+<p><strong>It found a bug on the first run, which is the whole reason for having it.</strong>
+The listing came to 3,734 — exactly 61 short, one per link. A link's target is
+three SIXBIT words that <strong>may share the header's own record</strong>, and reading a
+fresh record for it swallowed the next file's header. Nothing about the output
+looked wrong: 3,734 plausible names in plausible order. <code>itstar</code> disagreeing
+about the count is the only thing that noticed.</p>
+<p>The same mistake had a second instance, found by fixing the first: a <em>file's
+data</em> also begins in whatever is left of its header's record. Both come from the
+same wrong assumption — one structure per record — and the format simply does not
+work that way. <code>itstar</code> reads a new record only when the current one is
+exhausted, and so does this now.</p>
 <h2 id="the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 fingerprinting it, and verifying that through a different packing ...
@@ -475,7 +519,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>217 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>258 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -486,7 +530,7 @@ is that it <strong>refuses by name</strong> and reads nothing it did not bound f
 sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.</p>
-<p><strong><code>make test-san</code></strong> runs the same 217 under AddressSanitizer and UBSan, which is
+<p><strong><code>make test-san</code></strong> runs the same 258 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader

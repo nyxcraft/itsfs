@@ -406,6 +406,63 @@ writes a file system; the boot area and the system are somebody else's job. So
 both graders are booted from tape and pointed at the pack, and ITS coming up on
 one is not claimed anywhere.
 
+## A round trip through two implementations and an operating system
+
+```console
+$ make tape-test
+4. a save set this project wrote, read by itstar
+  ok   wrote a save set of two entries, one of them a link
+  ok   ...and reads it back, link and all
+  ok   ITSTAR READS IT: 2 entries, and the volume header
+  ok   ...and extracts the file
+  ok   ROUND TRIP: byte-identical to the host file ITS was given
+  ok   ...and the link is a link: -> _/@.ddt
+```
+
+`kshack/its.15` has now been all the way around:
+
+```
+host file  --itstar-->  tape  --ITS's loader-->  the pack
+           --itsfs reader-->  --itsfs save-->  tape
+           --itstar's extractor-->  host file
+```
+
+and the two host files are the same 460 bytes. Its 1986 creation date survives
+the trip — the date word is copied straight from the disk because the two
+layouts turn out to be the same one, `year<<9 | month<<5 | day` in a halfword —
+and the link comes out a link.
+
+Nothing on that path is this project agreeing with itself: itstar wrote the tape
+that went in, ITS put it on the pack, and itstar read the tape that came out.
+
+## Save sets, against itstar
+
+`itsfs saveset` reads the DUMP archive layer, and `itstar` — the reader the
+PDP-10/its project uses for these tapes — is the oracle. On `sources.tape`,
+91 MB and 3,795 entries including 68 links:
+
+```console
+$ itsfs saveset sources.tape | ... > mine
+$ itstar -tf sources.tape   | ... > theirs
+$ diff mine theirs && echo identical
+identical
+```
+
+Name for name, in the same order.
+
+**It found a bug on the first run, which is the whole reason for having it.**
+The listing came to 3,734 — exactly 61 short, one per link. A link's target is
+three SIXBIT words that **may share the header's own record**, and reading a
+fresh record for it swallowed the next file's header. Nothing about the output
+looked wrong: 3,734 plausible names in plausible order. `itstar` disagreeing
+about the count is the only thing that noticed.
+
+The same mistake had a second instance, found by fixing the first: a *file's
+data* also begins in whatever is left of its header's record. Both come from the
+same wrong assumption — one structure per record — and the format simply does not
+work that way. `itstar` reads a new record only when the current one is
+exhausted, and so does this now.
+
 ## The fingerprint is of the file system, not of the container
 
 ```console
@@ -485,7 +542,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**217 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**258 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -498,7 +555,7 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 217 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 258 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 

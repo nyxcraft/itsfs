@@ -58,6 +58,8 @@ tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
 tests/interop.exp   DSKDMP list the directory.  Two emulator runs, on purpose.
 tests/mkfs.sh       `make mkfs-test`: a pack built from nothing, graded by
                     NSALV and DSKDMP, both booted from tape.
+tests/tape.sh       `make tape-test`: a real ITS tape, decoded and checked
+                    against the host files it was made from.  No emulator.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
@@ -91,6 +93,16 @@ clean.
 pokes words in with `dd` on purpose. A fixture built by the writer asks the
 reader to agree with the writer rather than with ITS.
 
+**Do not write one structure per tape record either.**  itstar appends words to
+a buffer and flushes when it fills; the flush after a file header is commented
+out ON PURPOSE.  A tidier writer would produce a tape unlike any ITS made.
+
+**Do not assume one structure per tape record.**  A DUMP save set puts the first
+file's header in the volume record, a link's target in its header's record, and a
+file's data in whatever is left of its own.  Assuming otherwise listed 3,734 of a
+tape's 3,795 files and looked entirely plausible; itstar disagreeing about the
+count is what noticed.
+
 **Do not assume a second reference to a block is corruption.** The TUT is a
 reference count. On the reference pack nothing is referenced twice, which means
 nothing here knows what a legitimate second reference looks like.
@@ -116,8 +128,11 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
   refuses to touch).  Both graders for such a pack come off tape.
 - One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
   RM03, no multi-pack file system, no artifact recovered from MIT.
-- No ITS magtape has been read, which is why `core` and `dbd9` are `corroborated`
-  here and `confirmed` in `t10fs`.
+- `dbd9` is still `corroborated`: no KLH10-packed ITS image has been read here.
+  `make EMULATOR=klh10` in the ITS tree would produce one.
+- A tape this project writes has not been compared RECORD FOR RECORD with one
+  ITS wrote, and ITS's own DUMP has never been shown one.  itstar reads ours and
+  the data round-trips, which is a weaker claim than byte identity.
 - `UNTIM`'s unit, `UNBYTE`'s other three encodings, `UNDUMP`'s position and the
   flag field's width are all unknown. See
   [the gap register](docs/filesystem.md#gap-register).
