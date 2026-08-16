@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -45,7 +45,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-7-the-writer">Phase 7 — the writer</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop">Phase 8 — native-tool interop</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop-partly-done">Phase 8 — native-tool interop — PARTLY DONE</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-9-tapes">Phase 9 — tapes</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#not-on-the-roadmap">Not on the roadmap</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#open-questions-that-could-reorder-this">Open questions that could reorder this</a></li>
@@ -63,7 +63,7 @@
         <div class="prose">
 <p>Where each phase ends, and what has to be true before it can be called done.
 <a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
-<p>Phases 0–7 are done. What follows them is written here so that the next person
+<p>Phases 0–7 are done, and phase 8 in part. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.</p>
 <hr />
@@ -172,24 +172,28 @@ than guessing.</li>
 appended would produce a directory ITS's own lookup walks wrongly. That was
 found by measuring the reference pack rather than by reading the source, and it
 is why <code>put</code> inserts and shifts.</p>
-<h3 id="phase-8-native-tool-interop">Phase 8 — native-tool interop</h3>
-<p>The point of the whole exercise, and ITS makes it unusually approachable because
-it builds from source.</p>
+<h3 id="phase-8-native-tool-interop-partly-done">Phase 8 — native-tool interop — PARTLY DONE</h3>
+<p>Three of the four things here exist:</p>
 <ul>
-<li><strong><code>NSALV</code> against a pack we WROTE.</strong> Phase 5a already runs it against one we
-only read, and the harness is there — <code>tests/nsalv.sh</code> needs a different pack
-and nothing else. This is <code>DSKRAT</code>'s role in <code>t10fs</code>, where <code>make prove</code> is the
-template.</li>
-<li><strong><code>NSALV</code> on other kinds of damage.</strong> It has been shown a cleared TUT word and
-nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
-are all things <code>itsfs check</code> reports and none has been put to ITS.</li>
-<li><strong>The monitor</strong> — boot ITS on a pack we wrote to, and have it read the file, and
-copy it, and let us read the copy back.</li>
-<li><strong><code>mkdir</code> and <code>mkfs</code>.</strong> Every write so far has been into a directory ITS made;
-a pack built from nothing is the harder claim, and <code>DSKDMP</code> or the monitor
-booting on it is how it would be graded.</li>
+<li><strong><code>NSALV</code> accepts a pack we wrote</strong> (phase 7, <code>make nsalv</code>).</li>
+<li><strong><code>DSKDMP</code> lists our file</strong>, with its own reader — a third implementation,
+sharing nothing with the monitor or with <code>NSALV</code> — and the listing is still in
+sorted order, which is what catches a writer that appended (<code>make interop</code>).</li>
+<li><strong>ITS boots on a pack we wrote</strong>, running its startup salvage over every
+directory on the way (<code>make interop</code>).</li>
 </ul>
-<p><strong>Ends when:</strong> ITS reads what we wrote and <code>NSALV</code> finds nothing wrong with it.</p>
+<p><strong>What is left, and it is the interesting half:</strong> making the monitor OPEN the
+file and print it. <code>:print DIR;FN1 FN2</code> is the command. The obstacle is not the
+file system — it is the console: ITS stops accepting input on the CTY once the
+system is up, <code>^Z</code> produces nothing there, and the terminal lines this machine
+profile exposes are not configured for login. Getting a usable terminal is the
+whole task; the file-system half is expected to be uneventful.</p>
+<p>Also still missing: <strong><code>mkdir</code> and <code>mkfs</code>.</strong> Every write so far has been into a
+directory ITS made. A pack built from nothing is the harder claim, and DSKDMP or
+the monitor booting on it is how it would be graded. ITS's own idiom for making a
+directory is worth knowing before starting: <code>:print DIR;..new. (udir)</code>.</p>
+<p><strong>Ends when:</strong> ITS reads a file we wrote, out of a directory we made, on a pack
+we created.</p>
 <h3 id="phase-9-tapes">Phase 9 — tapes</h3>
 <p>The container (SIMH <code>.tap</code> framing, or ITS's own), and the archive above it (DUMP
 save sets, which <code>itstar</code> also reads). This is where <code>core</code> gets promoted from

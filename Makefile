@@ -218,6 +218,26 @@ nsalv: $(BIN)/itsfs
 version-diff:
 	@sh tests/version-diff.sh $(ITSSRC)/..
 
+#
+# `make interop` -- write a file, then let ITS ITSELF look at the pack.
+#
+# `nsalv` above hands a pack to ITS's SALVAGER, a program whose job is to
+# inspect a file system.  This hands it to the two that USE one: DSKDMP, the
+# standalone loader, which reads the directory with its own code and is a THIRD
+# implementation sharing nothing with the monitor or with NSALV; and the monitor,
+# which runs a salvage pass over every directory before it will come up at all.
+#
+# Two emulator runs, because doing both in one leaves the first half's output in
+# the expect buffer and the second half types into it.  Budget five minutes.
+#
+# It does NOT make the monitor open the file and print it -- see the header of
+# tests/interop.sh for why, and docs/roadmap.md for what would.
+#
+INTEROP_TMP ?= /tmp/itsfs-interop
+interop: $(BIN)/itsfs
+	@test -f "$(IMAGE)" || { echo "no image at $(IMAGE) -- set IMAGE=<path>"; exit 2; }
+	@sh tests/interop.sh $(BIN)/itsfs "$(IMAGE)" "$(NSALV_PDP10)" $(INTEROP_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -230,4 +250,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv version-diff
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop version-diff

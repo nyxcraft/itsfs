@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -87,6 +87,8 @@ tests/crosscheck.sh extracted files against the host files they were built from
 tests/fuzz.py       one random word damaged per iteration, every command run.
 tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
+tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
+tests/interop.exp   DSKDMP list the directory.  Two emulator runs, on purpose.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 </code></pre>
 <h2 id="things-not-to-do">Things not to do</h2>
@@ -124,8 +126,12 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.</p>
 <h2 id="known-gaps-stated-plainly">Known gaps, stated plainly</h2>
 <ul>
 <li>No writer, therefore no level-1 or level-2 evidence of any kind.</li>
-<li><code>NSALV</code> has graded this project's READING of a pack, not anything it produced,
-and only for one kind of damage (a cleared TUT word).</li>
+<li>The monitor has never been made to OPEN a file we wrote.  It boots on the
+pack and salvages it, and DSKDMP lists the file, but ITS's console stops
+taking input once the system is up -- see tests/interop.sh.</li>
+<li><code>NSALV</code> has been shown only one kind of damage (a cleared TUT word).</li>
+<li><code>mkdir</code> and <code>mkfs</code> do not exist: every write has been into a directory ITS
+made.</li>
 <li>One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
 RM03, no multi-pack file system, no artifact recovered from MIT.</li>
 <li>No ITS magtape has been read, which is why <code>core</code> and <code>dbd9</code> are <code>corroborated</code>

@@ -1,0 +1,132 @@
+#!/usr/bin/expect -f
+#
+# interop.exp -- boot ITS on a pack itsfs wrote to, and have ITS's own
+# standalone loader list the directory we wrote into.
+#
+# Driven by tests/interop.sh.  Environment:
+#
+#   ITS_PDP10   the emulator (Open SIMH's pdp10, with ITS support)
+#   ITS_IMAGE   THE PACK -- A COPY.  ITS writes to it: the boot runs a salvage.
+#   ITS_LOG     where to put the console transcript
+#   ITS_DIR     the directory to list
+#   ITS_MODE    `dskdmp` to list a directory, `boot` to start the monitor
+#
+# TWO THINGS ARE BEING ASKED, and they are different questions:
+#
+#   1. Does ITS BOOT on it?  The monitor runs a salvage pass at startup -- the
+#      console prints "Salvager NNN" -- which walks every directory on the pack
+#      before the system comes up.  A file system it disliked would not get to
+#      "IN OPERATION".
+#
+#   2. Does DSKDMP LIST OUR FILE?  DSKDMP is ITS's standalone dumper: it boots
+#      from the disk on its own, reads the file system with its own code, and
+#      `U<ESC>dir;` lists a directory.  It is a THIRD implementation, sharing
+#      nothing with the monitor or with NSALV, and if our name block is in the
+#      wrong place or the wrong order it is the one that will say so.
+#
+# THE TWO MODES ARE TWO EMULATOR RUNS, and that is not tidiness.  Doing both in
+# one run means the second half starts with the first half's output still in the
+# expect buffer -- a directory listing is forty lines of it -- so an `expect
+# "\n"` matches something stale and the next command is typed before DSKDMP is
+# ready for it.  That is exactly what happened, and the symptom was a file-not-
+# found for a command that was never meant to be a file name.  Two runs cost a
+# couple of minutes and cannot do that.
+#
+# WHAT THIS DOES NOT DO, stated here because the absence is easy to miss: it
+# does not have the MONITOR open the file and print its contents.  ITS's console
+# stops accepting input once the system is up -- ^Z, which its own DDT.md says
+# gets you a terminal, produces nothing on the CTY, and the DZ lines this
+# machine profile exposes are not configured for login.  So the monitor's own
+# file-opening path is untested.  See docs/roadmap.md.
+
+set pdp10 $env(ITS_PDP10)
+set image $env(ITS_IMAGE)
+set log   $env(ITS_LOG)
+set dir   $env(ITS_DIR)
+set mode  $env(ITS_MODE)
+set esc   "\034"
+
+set timeout 400
+log_file -noappend $log
+
+set ini "$image.ini"
+set f [open $ini w]
+puts $f "set console wru=034"
+puts $f "set cpu its"
+puts $f "set cpu idle"
+puts $f "set tim y2k"
+# The Chaosnet interface is not optional: without it the monitor BUGHALTs at
+# startup with "CHAOSNET INTERFACE NOT RESPONDING (CHECK THE BREAKER ON THE
+# UNIBUS)".  Nothing here uses the network; the device merely has to answer.
+puts $f "set ch enabled"
+puts $f "set ch node=177002"
+puts $f "set ch peer=localhost:44041"
+puts $f "att ch 44042"
+puts $f "set rp0 rp06"
+puts $f "at rp0 $image"
+close $f
+
+# ITS's console driver was written for a human at a Teletype.  Sending a line in
+# one burst loses characters; the ITS build's own scripts type and wait, and so
+# does this.
+proc slow {s} {
+	sleep .3
+
+	foreach c [split $s ""] {
+		send -- $c
+		sleep .10
+	}
+}
+
+spawn $pdp10 $ini
+expect {
+	"sim>" {}
+	timeout { puts "\nINTEROP: the emulator never reached its prompt"; exit 2 }
+}
+
+send "b rp0\r"
+
+# Booting the pack lands in DSKDMP, the standalone loader, not in ITS.
+expect {
+	"DSKDMP" {}
+	timeout { puts "\nINTEROP: the pack did not boot to DSKDMP"; exit 2 }
+}
+sleep 2
+
+if {$mode == "dskdmp"} {
+	# `U<ESC>dir;` -- the `$` in DSKDMP's documented command list is ESC.
+	# The trailing carriage return is read as an empty command and answered
+	# with FNF, which is why the log has one and it is not a failure.
+	send "u\033$dir;\r"
+	sleep 8
+	send $esc
+	expect "sim>"
+	send "q\r"
+	expect eof
+	exit 0
+}
+
+# ---- otherwise: boot the monitor.
+send "its\r"
+expect "\n"
+sleep 2
+
+# The ITS build patches SYSJOB's console output out before starting, and so does
+# this: without it the console fills with "IT IS NOW ..." at unpredictable
+# moments, which a script cannot expect around.
+slow "styo+2/popj p,\r"
+sleep 2
+send "\033g"
+
+expect {
+	"IN OPERATION" { puts "\nINTEROP: ITS came up" }
+	"BUGHALT" { puts "\nINTEROP: the monitor BUGHALTed -- see the log"; exit 2 }
+	timeout { puts "\nINTEROP: ITS did not come up"; exit 2 }
+}
+
+sleep 3
+send $esc
+expect "sim>"
+send "q\r"
+expect eof
+exit 0

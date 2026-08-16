@@ -3,8 +3,8 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–7 done — a reader, an independent checker, a writer, and
-> ITS's own salvager accepting what the writer produces.** The word layer is proven byte-for-byte
+> **Status: phases 0–8 in part — a reader, an independent checker, a writer, and
+> ITS booting on a file system this project wrote.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
 > its own check word, and the reader lists directories, decodes the run-length
 > descriptors that are ITS's block maps, follows links and extracts files.
@@ -186,6 +186,7 @@ $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
+$ make interop IMAGE=... # ...and boot ITS on one this wrote
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
@@ -237,6 +238,27 @@ comparisons; the second would catch a single block skipped or double-counted
 anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 [validation](docs/validation.md).
+
+**And ITS boots on it.** `make interop` writes a file, then hands the pack to
+the two ITS programs that *use* a file system rather than inspect one:
+
+```console
+2. DSKDMP, ITS's standalone loader, reads the directory
+  ok   DSKDMP listed our file, reading the directory with its own code
+  ok   ...and the whole listing is still in order (40 entries)
+
+3. ...and then the monitor itself boots on it
+  ok   the monitor ran its startup salvage over the pack
+  ok   ITS CAME UP on a pack itsfs wrote to
+  ok   ...and the file is still there, unchanged, after ITS had the pack
+```
+
+`DSKDMP` is a **third** implementation of this format — standalone, sharing
+nothing with the monitor or with `NSALV` — and it lists our file *in the right
+place*, which is the check that catches a writer that appended instead of
+inserting. The monitor runs a salvage pass over every directory before it will
+come up at all, so reaching `IN OPERATION` means that pass found nothing to stop
+for.
 
 **Written, and ITS's own salvager accepts the result.** This is the level of
 evidence the project's own taxonomy calls "accepted by native tools", and it is
@@ -351,11 +373,15 @@ commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
 it did not bound first.
 
-**What is NOT proven.** `NSALV` has accepted what the writer produced, but **ITS
-itself has never been booted on a pack this project wrote** — a salvager checks
-the bookkeeping, and a monitor opening the file is a further claim. `mkdir` and
-`mkfs` do not exist, so every write so far has been into a directory ITS made.
-`NSALV` was also asked about only one kind of damage, a cleared TUT word. No ITS magtape has been read, which is why `core` and `dbd9` are
+**What is NOT proven.** ITS boots on a pack this project wrote and its
+standalone loader lists the file — but **the monitor has never been made to OPEN
+that file and print it**. Its console stops accepting input once the system is
+up (`^Z`, which ITS's own `DDT.md` says gets you a terminal, produces nothing on
+the CTY, and the terminal lines this machine profile exposes are not configured
+for login), so the monitor's *file-opening* path is untested as distinct from
+its *salvage* path. `mkdir` and `mkfs` do not exist, so every write so far has
+been into a directory ITS made. `NSALV` was also asked about only one kind of
+damage, a cleared TUT word. No ITS magtape has been read, which is why `core` and `dbd9` are
 `corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
 the reference pack is one built from source in 2026, not an artifact recovered
 from MIT; and the version span has a floor and no ceiling — both `FSDEFS`

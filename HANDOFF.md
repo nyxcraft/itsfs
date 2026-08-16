@@ -54,6 +54,8 @@ tests/crosscheck.sh extracted files against the host files they were built from
 tests/fuzz.py       one random word damaged per iteration, every command run.
 tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
+tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
+tests/interop.exp   DSKDMP list the directory.  Two emulator runs, on purpose.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
@@ -103,8 +105,12 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
 ## Known gaps, stated plainly
 
 - No writer, therefore no level-1 or level-2 evidence of any kind.
-- `NSALV` has graded this project's READING of a pack, not anything it produced,
-  and only for one kind of damage (a cleared TUT word).
+- The monitor has never been made to OPEN a file we wrote.  It boots on the
+  pack and salvages it, and DSKDMP lists the file, but ITS's console stops
+  taking input once the system is up -- see tests/interop.sh.
+- `NSALV` has been shown only one kind of damage (a cleared TUT word).
+- `mkdir` and `mkfs` do not exist: every write has been into a directory ITS
+  made.
 - One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
   RM03, no multi-pack file system, no artifact recovered from MIT.
 - No ITS magtape has been read, which is why `core` and `dbd9` are `corroborated`

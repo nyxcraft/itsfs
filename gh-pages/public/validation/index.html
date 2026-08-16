@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -45,6 +45,9 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS&#x27;s own salvager accepts what the writer produced</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-writer-had-to-get-right-to-earn-that">What the writer had to get right to earn that</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2-again-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 again — ITS boots on it, and a third implementation reads it</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-this-does-not-establish">What this does not establish</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#a-method-that-looked-right-and-was-not">A method that looked right and was not</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
@@ -71,8 +74,9 @@ has been found by trying.</p>
 <li><strong>Byte-identical</strong> — build something with <code>itsfs</code>, build the same thing with
 ITS, <code>cmp</code>. Nothing here reaches this level.</li>
 <li><strong>Accepted by native tools</strong> — hand what we produce to <code>NSALV</code>, ITS's own
-salvager, or to the monitor. <strong><code>NSALV</code> accepts what the writer produces</strong>; the
-monitor has never been booted on one. See below.</li>
+salvager, or to the monitor. <strong><code>NSALV</code> accepts what the writer produces, ITS
+boots on it, and DSKDMP lists the file.</strong> What is still missing is the
+monitor <em>opening</em> the file. See below.</li>
 <li><strong>Self-consistent</strong> — round trips, and cross-checks against numbers the file
 system maintains independently of the thing being checked.</li>
 </ol>
@@ -322,6 +326,48 @@ $ itsfs put w.dsk 'TEST;TEMP FILE' f.txt &amp;&amp; itsfs del w.dsk 'TEST;TEMP F
 $ itsfs manifest w.dsk | diff before.mf -
 $
 </code></pre>
+<h2 id="level-2-again-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 again — ITS boots on it, and a third implementation reads it</h2>
+<pre><code class="language-console">$ make interop IMAGE=~/its/out/simh/rp0.dsk
+2. DSKDMP, ITS's standalone loader, reads the directory
+  ok   DSKDMP listed our file, reading the directory with its own code
+  ok   ...and the whole listing is still in order (40 entries)
+
+3. ...and then the monitor itself boots on it
+  ok   the monitor ran its startup salvage over the pack
+  ok   ITS CAME UP on a pack itsfs wrote to
+  ok   ...and the file is still there, unchanged, after ITS had the pack
+  ok   ...and the pack still checks clean
+</code></pre>
+<p><code>NSALV</code> inspects a file system for a living. These two <em>use</em> one, which is a
+different thing to ask of them.</p>
+<p><strong>DSKDMP is a third implementation.</strong> It is ITS's standalone dumper: it boots
+from the disk on its own, reads the file system with its own code, and
+<code>U&lt;ESC&gt;dir;</code> lists a directory. It shares nothing with the monitor or with
+<code>NSALV</code>. Its listing contains our file — and, more usefully, <strong>the whole listing
+is still in sorted order</strong>, which is the check that catches a writer that
+appended instead of inserting. A file at the end of the list would be listed
+just as happily.</p>
+<p><strong>The monitor's startup salvage is a gate.</strong> ITS runs a salvage pass over every
+directory on the pack before it comes up; reaching <code>IN OPERATION</code> means that pass
+found nothing worth stopping for. And the pack still holds the file, unchanged,
+after ITS has had it — a boot writes.</p>
+<h3 id="what-this-does-not-establish">What this does not establish</h3>
+<p><strong>The monitor has not been made to open the file and print it.</strong> ITS's console
+stops accepting input once the system is running: <code>^Z</code>, which its own
+<code>doc/DDT.md</code> says is how you get a terminal, produces nothing on the CTY, and
+the terminal lines this machine profile exposes are not configured for login.
+So the monitor's <em>file-opening</em> path is untested, as distinct from its <em>salvage</em>
+path. That is the remaining half of phase 8.</p>
+<h3 id="a-method-that-looked-right-and-was-not">A method that looked right and was not</h3>
+<p><code>DSKDMP</code> has <code>L&lt;ESC&gt;file</code> (load a file into core) and <code>I&lt;ESC&gt;file</code> (verify a file
+against core), which look exactly like a byte-for-byte comparison harness: load
+the original ITS wrote, then verify our copy of it against core. It reported
+<code>CMPERR</code>.</p>
+<p>The control run is the only reason that is not written up here as a finding:
+<strong>loading the original and verifying it against <em>itself</em> also reports <code>CMPERR</code>.</strong>
+Whatever those two commands compare, it is not what it appears to be, and the
+first result said nothing about the writer. Verifying a test against known-good
+input is the rule that caught it.</p>
 <h2 id="the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 fingerprinting it, and verifying that through a different packing ...

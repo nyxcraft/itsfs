@@ -3,7 +3,7 @@
 Where each phase ends, and what has to be true before it can be called done.
 [PLAN.md](../PLAN.md) has the same table; this is the detail.
 
-Phases 0–7 are done. What follows them is written here so that the next person
+Phases 0–7 are done, and phase 8 in part. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.
 
@@ -151,25 +151,31 @@ appended would produce a directory ITS's own lookup walks wrongly. That was
 found by measuring the reference pack rather than by reading the source, and it
 is why `put` inserts and shifts.
 
-### Phase 8 — native-tool interop
+### Phase 8 — native-tool interop — PARTLY DONE
 
-The point of the whole exercise, and ITS makes it unusually approachable because
-it builds from source.
+Three of the four things here exist:
 
-- **`NSALV` against a pack we WROTE.** Phase 5a already runs it against one we
-  only read, and the harness is there — `tests/nsalv.sh` needs a different pack
-  and nothing else. This is `DSKRAT`'s role in `t10fs`, where `make prove` is the
-  template.
-- **`NSALV` on other kinds of damage.** It has been shown a cleared TUT word and
-  nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
-  are all things `itsfs check` reports and none has been put to ITS.
-- **The monitor** — boot ITS on a pack we wrote to, and have it read the file, and
-  copy it, and let us read the copy back.
-- **`mkdir` and `mkfs`.** Every write so far has been into a directory ITS made;
-  a pack built from nothing is the harder claim, and `DSKDMP` or the monitor
-  booting on it is how it would be graded.
+- **`NSALV` accepts a pack we wrote** (phase 7, `make nsalv`).
+- **`DSKDMP` lists our file**, with its own reader — a third implementation,
+  sharing nothing with the monitor or with `NSALV` — and the listing is still in
+  sorted order, which is what catches a writer that appended (`make interop`).
+- **ITS boots on a pack we wrote**, running its startup salvage over every
+  directory on the way (`make interop`).
 
-**Ends when:** ITS reads what we wrote and `NSALV` finds nothing wrong with it.
+**What is left, and it is the interesting half:** making the monitor OPEN the
+file and print it. `:print DIR;FN1 FN2` is the command. The obstacle is not the
+file system — it is the console: ITS stops accepting input on the CTY once the
+system is up, `^Z` produces nothing there, and the terminal lines this machine
+profile exposes are not configured for login. Getting a usable terminal is the
+whole task; the file-system half is expected to be uneventful.
+
+Also still missing: **`mkdir` and `mkfs`.** Every write so far has been into a
+directory ITS made. A pack built from nothing is the harder claim, and DSKDMP or
+the monitor booting on it is how it would be graded. ITS's own idiom for making a
+directory is worth knowing before starting: `:print DIR;..new. (udir)`.
+
+**Ends when:** ITS reads a file we wrote, out of a directory we made, on a pack
+we created.
 
 ### Phase 9 — tapes
 

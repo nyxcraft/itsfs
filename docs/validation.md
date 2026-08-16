@@ -10,8 +10,9 @@ Three levels of evidence, in the order they are worth anything:
 1. **Byte-identical** — build something with `itsfs`, build the same thing with
    ITS, `cmp`. Nothing here reaches this level.
 2. **Accepted by native tools** — hand what we produce to `NSALV`, ITS's own
-   salvager, or to the monitor. **`NSALV` accepts what the writer produces**; the
-   monitor has never been booted on one. See below.
+   salvager, or to the monitor. **`NSALV` accepts what the writer produces, ITS
+   boots on it, and DSKDMP lists the file.** What is still missing is the
+   monitor *opening* the file. See below.
 3. **Self-consistent** — round trips, and cross-checks against numbers the file
    system maintains independently of the thing being checked.
 
@@ -298,6 +299,59 @@ $ itsfs put w.dsk 'TEST;TEMP FILE' f.txt && itsfs del w.dsk 'TEST;TEMP FILE'
 $ itsfs manifest w.dsk | diff before.mf -
 $
 ```
+
+## Level 2 again — ITS boots on it, and a third implementation reads it
+
+```console
+$ make interop IMAGE=~/its/out/simh/rp0.dsk
+2. DSKDMP, ITS's standalone loader, reads the directory
+  ok   DSKDMP listed our file, reading the directory with its own code
+  ok   ...and the whole listing is still in order (40 entries)
+
+3. ...and then the monitor itself boots on it
+  ok   the monitor ran its startup salvage over the pack
+  ok   ITS CAME UP on a pack itsfs wrote to
+  ok   ...and the file is still there, unchanged, after ITS had the pack
+  ok   ...and the pack still checks clean
+```
+
+`NSALV` inspects a file system for a living. These two *use* one, which is a
+different thing to ask of them.
+
+**DSKDMP is a third implementation.** It is ITS's standalone dumper: it boots
+from the disk on its own, reads the file system with its own code, and
+`U<ESC>dir;` lists a directory. It shares nothing with the monitor or with
+`NSALV`. Its listing contains our file — and, more usefully, **the whole listing
+is still in sorted order**, which is the check that catches a writer that
+appended instead of inserting. A file at the end of the list would be listed
+just as happily.
+
+**The monitor's startup salvage is a gate.** ITS runs a salvage pass over every
+directory on the pack before it comes up; reaching `IN OPERATION` means that pass
+found nothing worth stopping for. And the pack still holds the file, unchanged,
+after ITS has had it — a boot writes.
+
+### What this does not establish
+
+**The monitor has not been made to open the file and print it.** ITS's console
+stops accepting input once the system is running: `^Z`, which its own
+`doc/DDT.md` says is how you get a terminal, produces nothing on the CTY, and
+the terminal lines this machine profile exposes are not configured for login.
+So the monitor's *file-opening* path is untested, as distinct from its *salvage*
+path. That is the remaining half of phase 8.
+
+### A method that looked right and was not
+
+`DSKDMP` has `L<ESC>file` (load a file into core) and `I<ESC>file` (verify a file
+against core), which look exactly like a byte-for-byte comparison harness: load
+the original ITS wrote, then verify our copy of it against core. It reported
+`CMPERR`.
+
+The control run is the only reason that is not written up here as a finding:
+**loading the original and verifying it against *itself* also reports `CMPERR`.**
+Whatever those two commands compare, it is not what it appears to be, and the
+first result said nothing about the writer. Verifying a test against known-good
+input is the rule that caught it.
 
 ## The fingerprint is of the file system, not of the container
 
