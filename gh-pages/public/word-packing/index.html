@@ -39,7 +39,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#the-four-packings">The four packings</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#how-core-was-confirmed">How `core` was confirmed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#how-dbd9-was-confirmed">How `dbd9` was confirmed</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#the-attempt-that-failed">The attempt that failed</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-attempt-that-failed-and-why-which-took-two-goes-to-get-right">The attempt that failed, and why — which took two goes to get right</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-settled-it">What settled it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#the-size-difference-is-not-damage">The size difference is not damage</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-here">What is not here</a></li>
@@ -126,15 +126,31 @@ KLH10 declares the format in <code>vdisk.h</code>:</p>
 the same nine bytes. Running 200,000 random 9-byte groups through both that
 formula and <code>itspack.c</code>'s gives <strong>no disagreement</strong> — they are the same function,
 not merely the same intention.</p>
-<h3 id="the-attempt-that-failed">The attempt that failed</h3>
+<h3 id="the-attempt-that-failed-and-why-which-took-two-goes-to-get-right">The attempt that failed, and why — which took two goes to get right</h3>
 <p>KLH10's DSKDMP was pointed at a pack repacked into <code>dbd9</code>. It answered <code>MFDCLB</code>
 — &quot;M.F.D. clobbered&quot;.</p>
-<p>The control saves that from being a finding: the <em>same</em> KLH10 and the <em>same</em>
-DSKDMP, pointed at the <strong>untouched <code>le64</code> pack</strong> through KLH10's own <code>SIMH</code>
-format, answer <code>MFDCLB</code> as well. A setup that cannot tell a good pack from a bad
-one says nothing about the packing. (The DSKDMP in <code>build/klh10</code> is a different
-build — 216 — from the one on the pack — 217 — and probably expects a machine
-this is not.)</p>
+<p>The control saved that from being reported as a finding: the <em>same</em> KLH10 and
+the <em>same</em> DSKDMP, pointed at the <strong>untouched <code>le64</code> pack</strong> through KLH10's own
+<code>SIMH</code> format, answer <code>MFDCLB</code> as well. A setup that cannot tell a good pack
+from a bad one says nothing about the packing.</p>
+<p>That much was right. The <em>cause</em> recorded beside it — that <code>build/klh10</code>'s
+DSKDMP is build 216 against the pack's 217, and &quot;probably expects a machine this
+is not&quot; — was a guess, and it was <strong>wrong</strong>.</p>
+<p>KLH10 drives its disk through a separate process, <code>dprpxx</code>, which has to be
+findable at run time:</p>
+<pre><code>[dp_exec: Cannot access &quot;dprpxx&quot; - No such file or directory]
+[rp_dpstart: Start of DP &quot;dprpxx&quot; failed!]
+Final init of device &quot;dsk0&quot; failed!
+</code></pre>
+<p>Three lines in the middle of the startup noise, after which there is no disk at
+all and DSKDMP is reading nothing. Hence <code>MFDCLB</code>, for the <code>dbd9</code> pack and for
+the control alike. With <code>dprpxx</code> present, DSKDMP 216 reads a <code>dbd9</code> pack and
+lists a directory off it; take <code>dprpxx</code> away again and <code>MFDCLB</code> comes straight
+back. The version difference was never involved.</p>
+<p>The lesson is not &quot;run the control&quot; — the control worked exactly as intended. It
+is that a control tells you your setup cannot answer the question, and <strong>not
+why</strong>. The why still has to be found, and until it is, it is a guess and should
+be written down as one.</p>
 <h3 id="what-settled-it">What settled it</h3>
 <p>Building KLH10 from the tree, which is worth doing for a reason that was not
 obvious: it ships <strong><code>vdkfmt</code></strong>, KLH10's own disk-format converter. That means an

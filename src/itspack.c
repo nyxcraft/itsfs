@@ -186,13 +186,32 @@ core_put(uint8_t *b, unsigned i, uint64_t w)
  * IT IS `confirmed` AS OF THE KLH10 BUILD, and both the failed attempt and the
  * one that worked are worth recording.
  *
- * THE ATTEMPT THAT FAILED.  KLH10's DSKDMP was pointed at a pack this repacked
- * into dbd9, and answered MFDCLB, "M.F.D. clobbered".  That looked like a
- * finding until the CONTROL was run -- the same KLH10, the same DSKDMP, the
- * UNTOUCHED le64 pack read through KLH10's own "SIMH" format -- which answers
- * MFDCLB as well.  A setup that cannot tell a good pack from a bad one says
- * nothing about a packing.  (That DSKDMP is build 216 and the pack's own is
- * 217; it probably wants a machine this is not.)
+ * THE ATTEMPT THAT FAILED, AND WHY -- WHICH TOOK TWO GOES TO GET RIGHT.
+ * KLH10's DSKDMP was pointed at a pack this repacked into dbd9 and answered
+ * MFDCLB, "M.F.D. clobbered".  The CONTROL stopped that being reported as a
+ * finding: the same KLH10 and the same DSKDMP, given the UNTOUCHED le64 pack
+ * through KLH10's own "SIMH" format, answer MFDCLB too.  A setup that cannot
+ * tell a good pack from a bad one says nothing about a packing.
+ *
+ * That much was right.  The CAUSE written down next to it -- that the DSKDMP in
+ * build/klh10 is build 216 against the pack's 217 and "probably wants a machine
+ * this is not" -- was a guess, and it was WRONG.  KLH10 drives its disk through
+ * a separate process, `dprpxx`, which has to be findable at run time:
+ *
+ *	[dp_exec: Cannot access "dprpxx" - No such file or directory]
+ *	[rp_dpstart: Start of DP "dprpxx" failed!]
+ *	Final init of device "dsk0" failed!
+ *
+ * -- three lines in the middle of the startup noise, after which there is no
+ * disk at all and DSKDMP is reading nothing.  Hence MFDCLB, for the dbd9 pack
+ * and the control alike.  With dprpxx on hand, DSKDMP 216 reads a dbd9 pack
+ * this project wrote and lists a directory off it; removing dprpxx again brings
+ * MFDCLB straight back.  The version difference was never involved.
+ *
+ * The lesson is not "run the control" -- the control worked.  It is that a
+ * control tells you your setup cannot answer the question, and NOT why.  The
+ * why still has to be found, and until it is, it is a guess and should be
+ * written as one.
  *
  * WHAT SETTLED IT was building KLH10 from the tree, which turns out to ship
  * `vdkfmt` -- KLH10's own disk-format converter, so an artifact written by

@@ -98,17 +98,39 @@ the same nine bytes. Running 200,000 random 9-byte groups through both that
 formula and `itspack.c`'s gives **no disagreement** — they are the same function,
 not merely the same intention.
 
-### The attempt that failed
+### The attempt that failed, and why — which took two goes to get right
 
 KLH10's DSKDMP was pointed at a pack repacked into `dbd9`. It answered `MFDCLB`
 — "M.F.D. clobbered".
 
-The control saves that from being a finding: the *same* KLH10 and the *same*
-DSKDMP, pointed at the **untouched `le64` pack** through KLH10's own `SIMH`
-format, answer `MFDCLB` as well. A setup that cannot tell a good pack from a bad
-one says nothing about the packing. (The DSKDMP in `build/klh10` is a different
-build — 216 — from the one on the pack — 217 — and probably expects a machine
-this is not.)
+The control saved that from being reported as a finding: the *same* KLH10 and
+the *same* DSKDMP, pointed at the **untouched `le64` pack** through KLH10's own
+`SIMH` format, answer `MFDCLB` as well. A setup that cannot tell a good pack
+from a bad one says nothing about the packing.
+
+That much was right. The *cause* recorded beside it — that `build/klh10`'s
+DSKDMP is build 216 against the pack's 217, and "probably expects a machine this
+is not" — was a guess, and it was **wrong**.
+
+KLH10 drives its disk through a separate process, `dprpxx`, which has to be
+findable at run time:
+
+```
+[dp_exec: Cannot access "dprpxx" - No such file or directory]
+[rp_dpstart: Start of DP "dprpxx" failed!]
+Final init of device "dsk0" failed!
+```
+
+Three lines in the middle of the startup noise, after which there is no disk at
+all and DSKDMP is reading nothing. Hence `MFDCLB`, for the `dbd9` pack and for
+the control alike. With `dprpxx` present, DSKDMP 216 reads a `dbd9` pack and
+lists a directory off it; take `dprpxx` away again and `MFDCLB` comes straight
+back. The version difference was never involved.
+
+The lesson is not "run the control" — the control worked exactly as intended. It
+is that a control tells you your setup cannot answer the question, and **not
+why**. The why still has to be found, and until it is, it is a guess and should
+be written down as one.
 
 ### What settled it
 
