@@ -54,8 +54,18 @@ echo
 
 # Every DEFSYM, as `NAME==VALUE` with the whitespace normalised and any trailing
 # comment dropped.  MIDAS writes them both at the left margin and indented.
+#
+# `-a` ON EVERY GREP OVER AN ITS FILE, and it is not decoration.  Some greps --
+# ugrep, which a few systems install AS `grep` -- classify a file with any byte
+# that is not valid UTF-8 as binary and silently report NO MATCHES, exit 1, no
+# warning.  A 1970s MIDAS source is exactly the kind of file that trips it: 54
+# of a 400-file sample of the ITS tree here are skipped that way.
+#
+# The zero-symbol guard below would catch it, because two empty extractions
+# compare equal and would otherwise print "IDENTICAL: all 0 definitions".  This
+# makes the check WORK rather than merely fail honestly.
 syms() {
-	grep -oE 'DEFSYM[[:space:]]+[A-Z0-9$.]+==[^;]*' "$1" |
+	grep -aoE 'DEFSYM[[:space:]]+[A-Z0-9$.]+==[^;]*' "$1" |
 		sed 's/DEFSYM[[:space:]]*//; s/[[:space:]]*$//' | sort
 }
 
@@ -102,7 +112,7 @@ missing=0
 
 while read -r sym; do
 	# A DEFSYM, or one of the flag values FSDEFS writes as a bare assignment.
-	grep -qE "DEFSYM[[:space:]]+$sym==|^[[:space:]]*$sym==" "$NEW" || {
+	grep -aqE "DEFSYM[[:space:]]+$sym==|^[[:space:]]*$sym==" "$NEW" || {
 		echo "       $sym is cited in its.h and is not defined in FSDEFS 43"
 		missing=$((missing + 1))
 	}
@@ -122,14 +132,14 @@ fi
 # none: the link separators, which are given in prose and got wrong there.  They
 # say "no DEFSYM" in their own citation column, and this is what keeps that
 # convention from being quietly extended to a constant somebody could not place.
-nodefsym=$(grep -c '/\* no DEFSYM' "$HDR")
+nodefsym=$(grep -ac '/\* no DEFSYM' "$HDR")
 echo "  ok   ...and $nodefsym constants that cite ITS code instead, and say so"
 
 echo
 echo "3. what DID change between the two"
 
 # Everything else is prose, and FSDEFS 43 says so about itself.
-if grep -q 'This change only changes the comments in this file' "$NEW"; then
+if grep -aq 'This change only changes the comments in this file' "$NEW"; then
 	echo "  FSDEFS 43 states its own change was comment-only:"
 	echo
 	sed -n '/8\/19\/90 Due to the larger size/,/upward compatible/p' "$NEW" |
@@ -139,12 +149,12 @@ if grep -q 'This change only changes the comments in this file' "$NEW"; then
 fi
 
 echo "  The 020 bit in a load address:"
-echo "    FSDEFS 40:  $(grep -m1 'FUNNY' "$T/old" | sed 's/^[[:space:]]*//')"
+echo "    FSDEFS 40:  $(grep -am1 'FUNNY' "$T/old" | sed 's/^[[:space:]]*//')"
 echo "    FSDEFS 43:  flushed -- 17 bits of block number, and programs are told"
 echo "                not to mask it out.  src/its.h does not."
 echo
 echo "  The TUT entry width, in BOTH:"
-echo "    $(grep -m1 '9/5/79' "$NEW" | sed 's/^[[:space:]]*//')"
+echo "    $(grep -am1 '9/5/79' "$NEW" | sed 's/^[[:space:]]*//')"
 echo "    -- so the 3-bit entry this reads is the post-1979 one, in both versions."
 
 exit $rc

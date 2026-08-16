@@ -832,23 +832,76 @@ and turns "unreachable" into "impossible". The corruption fuzzer had never found
 it because it damages descriptor bytes at the *start* of the area, where the
 offsets involved are small.
 
+## The tool you verify with can lie by omission
+
+This one is not about ITS, and it is the most portable lesson here.
+
+Every negative claim in `src/its.h` — every `no DEFSYM`, every "FSDEFS does not
+define this" — was established by grepping the ITS source tree. While chasing
+something else, a `grep` for `DBD9` in KLH10's `vdisk.h` came back with **no
+matches**, and `sed -n '68p'` on the same file printed the line containing it.
+
+The cause: `grep` on this machine is **ugrep**, which some systems install under
+that name, and it classifies a file containing any byte that is not valid UTF-8
+as *binary* — then reports no matches, exits 1, and says nothing. `vdisk.h` has
+a Latin-1 copyright sign on line 5. That is the whole trigger.
+
+It is not a rare edge. Of a 400-file sample of the ITS source tree here, **54
+are skipped that way** — 13.5%, and skewed exactly toward the oldest files,
+which are the ones worth reading.
+
+The failure mode that matters is not a wrong answer. It is a *confident empty
+one*: "there is no DEFSYM for this" and "grep could not read the file" are the
+same output. A verification method built on grepping old source has to know
+this, or it will keep confirming absences that were never checked.
+
+**What was done about it.** Every negative claim in `its.h` was re-checked with
+`grep -a`. All of them held: `LTYPE` is at `kshack/nsalv.261:2152` exactly as
+cited, comments and all, and no `DEFSYM` for a link separator or quote exists
+anywhere in the tree. `tests/version-diff.sh` — the only script here that greps
+ITS sources — now passes `-a` on all six of its greps.
+
+Its zero-symbol guard would have caught a silent skip anyway, and that is worth
+noting because it is the reason nothing was actually wrong: two empty extractions
+compare *equal*, so without that guard the check would have printed `IDENTICAL:
+all 0 definitions` and passed. A comparison that cannot tell "the same" from
+"nothing at all" is not a comparison. The guard was already there; the `-a` makes
+the check work rather than merely fail honestly.
+
+`tests/crosscheck.sh` was never exposed — it compares with `cmp` and `tr`, and
+already forces `LC_ALL=C`.
+
 ## What is not established
 
 Stated plainly, because a validation document that only lists successes is
 marketing:
 
-- **No writer**, so no level-1 or level-2 evidence exists at all. `NSALV` has
-  graded this project's *reading* of a pack, not anything it produced.
-- **`NSALV` was asked about one kind of damage.** A cleared TUT word, at two
-  sites. It has not been shown a broken descriptor, a damaged directory header or
-  a corrupt MFD — all of which `itsfs check` reports and none of which has been
-  put to ITS for a second opinion.
-- **`NSALV` has never been run against anything this produced**, because nothing
-  is produced. It is the obvious second opinion and it is phase 8.
+*This list was written when there was no writer, and most of it has since been
+struck through by work rather than by editing. What is left is what is still
+true.*
+
+- **`NSALV` was asked about two kinds of damage.** A cleared TUT word at two
+  sites, and a miscount found by accident after an abrupt halt. It has not been
+  shown a broken descriptor, a damaged directory header or a corrupt MFD — all of
+  which `itsfs check` reports and none of which has been put to ITS for a second
+  opinion.
+- **A pack `mkfs` builds does not boot.** Nothing writes a boot area; the graders
+  are booted from tape instead. ITS comes up on packs this project has *written
+  files to*, which is a weaker statement than it first sounds.
 - **One pack, one drive, one era.** Everything above is an RP06 built from source
   in 2026. No RP07, no RM03, no multi-pack file system, and no artifact recovered
   from MIT.
-- **No ITS magtape has been read**, which is why `core` and `dbd9` are
-  `corroborated` here and `confirmed` in `t10fs`.
-- **The version span is unknown.** `FSDEFS 43` is one version of one file, and it
-  carries two dated format changes in its own comments.
+- **No tape written here has been compared with one ITS wrote.** `itstar` reads
+  ours and ours reads `itstar`'s, but ITS's own DUMP has never been shown one.
+- **The version span has a floor and no ceiling.** Both `FSDEFS` versions
+  compared are after the 1979 TUT change, and nothing here maps a file system
+  written by a monitor older than that.
+
+Struck off since, and where the evidence is:
+
+| was | now |
+|---|---|
+| no writer, so no level-1 or level-2 evidence at all | `NSALV` accepts packs this writes, DSKDMP lists their files, and ITS boots and prints one — [phases 8–10](roadmap.md) |
+| `NSALV` never run against anything this produced | `make nsalv` does exactly that |
+| no ITS magtape read, so `core` is unconfirmed | three strings ITS prints, found in the tape it loads them from — `make tape-test` |
+| `dbd9` unconfirmed, no KLH10 artifact read | byte-identical to KLH10's own `vdkfmt` — `make klh10` |

@@ -33,8 +33,8 @@ $ itsfs packings
 name   status        layout
 le64   confirmed     one word per 64-bit little-endian container (SIMH disk images; libword calls it data8)
 be64   structural    one word per 64-bit big-endian container
-core   corroborated  five frames per word (magtape core-dump mode; TM03 user guide table 2-12)
-dbd9   corroborated  two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)
+core   confirmed     five frames per word (magtape core-dump mode; TM03 user guide table 2-12)
+dbd9   confirmed     two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)
 ```
 
 `le64` is what a SIMH disk image uses, and for ITS it is measured rather than
@@ -79,7 +79,7 @@ machine, found by this decoder in the file the machine loaded it from.
 And `itsfs tape -x` extracts both files on that tape into words, which re-encode
 to the host originals byte for byte.
 
-## Why `dbd9` is still `corroborated`
+## How `dbd9` was confirmed
 
 KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
 for it to be wrong about — so that source is the specification rather than a
@@ -98,10 +98,10 @@ the same nine bytes. Running 200,000 random 9-byte groups through both that
 formula and `itspack.c`'s gives **no disagreement** — they are the same function,
 not merely the same intention.
 
-### The attempt to promote it, and why it failed
+### The attempt that failed
 
-KLH10 was built from the tree, a pack was repacked into `dbd9`, and KLH10's
-DSKDMP was pointed at it. It answered `MFDCLB` — "M.F.D. clobbered".
+KLH10's DSKDMP was pointed at a pack repacked into `dbd9`. It answered `MFDCLB`
+— "M.F.D. clobbered".
 
 The control saves that from being a finding: the *same* KLH10 and the *same*
 DSKDMP, pointed at the **untouched `le64` pack** through KLH10's own `SIMH`
@@ -110,9 +110,45 @@ one says nothing about the packing. (The DSKDMP in `build/klh10` is a different
 build — 216 — from the one on the pack — 217 — and probably expects a machine
 this is not.)
 
-So the honest position is unchanged: the codec is verified against the code that
-defines the format, and no artifact KLH10 wrote has been read. Settling it needs
-a pack KLH10 itself produced, which means a full `make EMULATOR=klh10`.
+### What settled it
+
+Building KLH10 from the tree, which is worth doing for a reason that was not
+obvious: it ships **`vdkfmt`**, KLH10's own disk-format converter. That means an
+artifact written by KLH10's code without running the emulator at all.
+
+```console
+$ vdkfmt ip=rp0.dsk op=klh10.dbd9 ifmt=SIMH ofmt=DBD9 dt=RP06
+$ itsfs repack -p le64 -P dbd9 rp0.dsk ours.dbd9
+$ cmp -n 177776640 klh10.dbd9 ours.dbd9
+$ itsfs check -p dbd9 -d rp06 klh10.dbd9
+blocks         6719 free, 30940 in use, 505 locked out
+directories    247, 5657 files, 399 links (7 of them unresolved)
+no problems found (7 notes)
+```
+
+Two directions over one artifact, and neither of them ours. The repack is
+byte-identical to KLH10's output over every byte KLH10 wrote, and the reader
+takes KLH10's file to the same accounting — to the block — as the `le64`
+original.
+
+### The size difference is not damage
+
+KLH10's file is 177,776,640 bytes and ours is 178,387,200, which looks exactly
+like truncation. It is not. `vdkfmt`'s copy loop is
+
+```c
+if (!zerosector(wbuff, 128))
+	err = devwrite(&dvo, nsect, wbuff);	/* Write a sector  */
+```
+
+— it never writes an all-zero sector, so the file simply **stops** at the last
+non-zero one, 1,060 sectors short of the drive. Every sector it did write is at
+its true offset, and our extra 610,560 bytes are all zero.
+
+One practical consequence: a real KLH10 pack does not have its drive's nominal
+size, so the size-based geometry inference refuses it and `-d rp06` must be
+given. Refusing is the right behaviour — guessing a geometry is the one thing
+this project will not do — but it is worth knowing before you meet it.
 
 ## What is not here
 

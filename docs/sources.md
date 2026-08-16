@@ -209,6 +209,8 @@ Not sources — second opinions, and named as such:
   core-dump frame layout, from the hardware that does the packing. The formatter
   splits the word; the operating system only hands it over.
 
-The last two are why `core` and `dbd9` are implemented at all. They are marked
-`corroborated` rather than `confirmed` here because no *ITS* artifact in either
-packing has been read yet — see [word packing](word-packing.md).
+The last two are why `core` and `dbd9` are implemented at all. Both are now
+`confirmed`, and neither on the strength of the documents above alone: `core` by
+finding three strings ITS prints inside the tape it loads them from, and `dbd9`
+by agreeing byte for byte with a pack written by KLH10's own `vdkfmt` — see
+[word packing](word-packing.md).

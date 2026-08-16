@@ -1302,6 +1302,29 @@ out=$("$ITSFS" help); rc=$?
 chk "help exits zero" "$rc" "0"
 
 #
+# AND THE DOCUMENTED PACKING TABLE MUST BE THE REAL ONE.  docs/word-packing.md
+# shows the output of `itsfs packings` as a console transcript, and a status
+# column that disagrees with the code is a false claim about evidence -- which
+# is the one kind of error this project can least afford.  It went stale once
+# already: `core` was promoted in phase 9 and the transcript still said
+# `corroborated` two phases later.  Not a `chk`, for the same reason as below.
+#
+doc=docs/word-packing.md
+if [ -f "$doc" ]; then
+	"$ITSFS" packings | sed -n '2,5p' > "$T/packings.real"
+	sed -n '/^name   status        layout/,/^```/p' "$doc" |
+		sed -n '2,5p' > "$T/packings.doc"
+	if cmp -s "$T/packings.real" "$T/packings.doc"; then
+		:
+	else
+		echo
+		echo "STALE: $doc's packing table is not what itsfs prints"
+		diff -u "$T/packings.doc" "$T/packings.real" | sed 's/^/  /'
+		fail=$((fail + 1))
+	fi
+fi
+
+#
 # THE DOCUMENTED COUNT MUST BE THIS COUNT.  A number written in prose in a
 # validation document is read as a measurement, and a stale one is worse than
 # none.  Not a `chk`, and not counted: it is a statement about the repository

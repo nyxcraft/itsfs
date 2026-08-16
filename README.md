@@ -194,6 +194,7 @@ $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 $ make interop IMAGE=... # ...and boot ITS on one this wrote
 $ make mkfs-test        # build a pack from nothing; ITS grades it
 $ make tape-test        # read a real ITS tape (no emulator needed)
+$ make klh10 IMAGE=...  # dbd9 against KLH10's own converter (no emulator either)
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
@@ -481,17 +482,15 @@ it did not bound first. Six of those commands per iteration are `put`, `del` and
 somewhere else — with its record-length fields corrupted on purpose.
 
 **What is NOT proven.** A pack `mkfs` builds does not boot, so ITS has never come
-up on one — the graders for those are booted from tape. `dbd9` is still
-`corroborated`: no KLH10-written artifact has been read. A tape this project
+up on one — the graders for those are booted from tape. A tape this project
 writes has not been compared record for record with one ITS wrote. And the
 reference pack is one built from source in 2026, not an artifact recovered from
-MIT. No ITS magtape has been read, which is why `core` and `dbd9` are
-`corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
-the reference pack is one built from source in 2026, not an artifact recovered
-from MIT; and the version span has a floor and no ceiling — both `FSDEFS`
-versions compared are after the 1979 TUT change, and nothing here maps a file
-version onto an ITS release. Each of those is a phase on
-[the roadmap](docs/roadmap.md), and until it is done this file does not claim it.
+MIT. The version span has a floor and no ceiling — both `FSDEFS` versions
+compared are after the 1979 TUT change, and nothing here maps a file system
+written by an older monitor. Until each of those is done, this file does not
+claim it; what *has* been settled is listed in
+[validation](docs/validation.md#what-is-not-established), with the command that
+settles it.
 
 ## Documentation
 

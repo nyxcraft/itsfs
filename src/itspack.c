@@ -183,15 +183,39 @@ core_put(uint8_t *b, unsigned i, uint64_t w)
  * formulas gives no disagreement, so the two are the same function and not
  * merely the same intention.
  *
- * IT IS STILL `corroborated` RATHER THAN `confirmed`, and the attempt to promote
- * it is worth recording.  KLH10 was built from the tree, a pack was repacked
- * into dbd9, and its DSKDMP was pointed at it: it answered MFDCLB, "M.F.D.
- * clobbered".  The CONTROL -- the same KLH10, the same DSKDMP, the untouched
- * le64 pack read through KLH10's own "SIMH" format -- answers MFDCLB too.  So
- * that setup cannot tell a good pack from a bad one and says nothing about this
- * packing; the DSKDMP in build/klh10 is a different build (216) from the pack's
- * own (217) and probably wants a machine this is not.  Promoting dbd9 needs a
- * pack KLH10 ITSELF wrote, which means a full `make EMULATOR=klh10`.
+ * IT IS `confirmed` AS OF THE KLH10 BUILD, and both the failed attempt and the
+ * one that worked are worth recording.
+ *
+ * THE ATTEMPT THAT FAILED.  KLH10's DSKDMP was pointed at a pack this repacked
+ * into dbd9, and answered MFDCLB, "M.F.D. clobbered".  That looked like a
+ * finding until the CONTROL was run -- the same KLH10, the same DSKDMP, the
+ * UNTOUCHED le64 pack read through KLH10's own "SIMH" format -- which answers
+ * MFDCLB as well.  A setup that cannot tell a good pack from a bad one says
+ * nothing about a packing.  (That DSKDMP is build 216 and the pack's own is
+ * 217; it probably wants a machine this is not.)
+ *
+ * WHAT SETTLED IT was building KLH10 from the tree, which turns out to ship
+ * `vdkfmt` -- KLH10's own disk-format converter, so an artifact written by
+ * KLH10's code rather than by ours:
+ *
+ *	vdkfmt ip=rp0.dsk op=klh10.dbd9 ifmt=SIMH ofmt=DBD9 dt=RP06
+ *
+ * Its output is byte-identical to `itsfs repack -P dbd9` over every one of the
+ * 177,776,640 bytes it wrote, and `itsfs check -p dbd9` reads it to the same
+ * 6719 free / 30940 in use / 505 locked out / 247 directories / 5657 files as
+ * the le64 original.  Two directions, one artifact, neither of them ours.
+ *
+ * THE SIZE DIFFERENCE IS NOT DAMAGE, which is worth writing down because it
+ * looks exactly like truncation.  vdkfmt's copy loop is
+ *
+ *	if (!zerosector(wbuff, 128))
+ *		err = devwrite(&dvo, nsect, wbuff);
+ *
+ * -- it never writes an all-zero sector, so the file simply STOPS at the last
+ * non-zero one, 1,060 sectors short of the drive.  Every sector it did write is
+ * at its true offset, and our trailing 610,560 bytes are all zero.  A real
+ * KLH10 pack therefore does not have the nominal size, which is why the
+ * size-based drive inference refuses it and `-d rp06` has to be given.
  */
 static uint64_t
 dbd9_get(const uint8_t *b, unsigned i)
@@ -232,7 +256,7 @@ static const its_pack packs[ITS_NPACK] = {
 	[ITS_PACK_LE64] = { "le64", "confirmed",    "one word per 64-bit little-endian container (SIMH disk images; libword calls it data8)", 1, 8, le64_get, le64_put },
 	[ITS_PACK_BE64] = { "be64", "structural",   "one word per 64-bit big-endian container",                                              1, 8, be64_get, be64_put },
 	[ITS_PACK_CORE] = { "core", "confirmed",    "five frames per word (magtape core-dump mode; TM03 user guide table 2-12)",              1, 5, core_get, core_put },
-	[ITS_PACK_DBD9] = { "dbd9", "corroborated", "two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)",             2, 9, dbd9_get, dbd9_put },
+	[ITS_PACK_DBD9] = { "dbd9", "confirmed",    "two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)",             2, 9, dbd9_get, dbd9_put },
 };
 
 static const struct {

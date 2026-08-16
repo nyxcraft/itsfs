@@ -275,6 +275,24 @@ TAPE_TMP ?= /tmp/itsfs-tape
 tape-test: $(BIN)/itsfs
 	@sh tests/tape.sh $(BIN)/itsfs "$(TAPE)" "$(TAPE_SRC)" $(TAPE_TMP)
 
+#
+# `make klh10` -- dbd9 against KLH10'S OWN CONVERTER.
+#
+# This is the measurement that promoted dbd9 from `corroborated` to `confirmed`.
+# It needs KLH10 built, which is worth doing for a reason that is not obvious:
+# the build ships `vdkfmt`, KLH10's disk-format converter, so an artifact
+# written by KLH10's code can be had WITHOUT running the emulator.
+#
+#   cd tools/klh10 && ./autogen.sh && mkdir -p tmp && cd tmp && \
+#       ../configure && make -C bld-ks-its
+#
+VDKFMT ?= $(HOME)/its/tools/klh10/tmp/bld-ks-its/vdkfmt
+KLH10_TMP ?= $(shell mktemp -d)
+
+klh10: all
+	@sh tests/klh10.sh $(BIN)/itsfs "$(VDKFMT)" "$(IMAGE)" $(KLH10_TMP)
+	@rm -rf $(KLH10_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -291,4 +309,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff klh10

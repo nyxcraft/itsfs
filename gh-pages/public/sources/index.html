@@ -249,9 +249,11 @@ opinion on it.</li>
 core-dump frame layout, from the hardware that does the packing. The formatter
 splits the word; the operating system only hands it over.</li>
 </ul>
-<p>The last two are why <code>core</code> and <code>dbd9</code> are implemented at all. They are marked
-<code>corroborated</code> rather than <code>confirmed</code> here because no <em>ITS</em> artifact in either
-packing has been read yet — see <a href="../word-packing/index.html">word packing</a>.</p>
+<p>The last two are why <code>core</code> and <code>dbd9</code> are implemented at all. Both are now
+<code>confirmed</code>, and neither on the strength of the documents above alone: <code>core</code> by
+finding three strings ITS prints inside the tape it loads them from, and <code>dbd9</code>
+by agreeing byte for byte with a pack written by KLH10's own <code>vdkfmt</code> — see
+<a href="../word-packing/index.html">word packing</a>.</p>
 
         </div>
       </article>

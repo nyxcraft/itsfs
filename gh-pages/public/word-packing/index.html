@@ -38,8 +38,10 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#bit-numbering">Bit numbering</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-four-packings">The four packings</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#how-core-was-confirmed">How `core` was confirmed</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#why-dbd9-is-still-corroborated">Why `dbd9` is still `corroborated`</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#the-attempt-to-promote-it-and-why-it-failed">The attempt to promote it, and why it failed</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#how-dbd9-was-confirmed">How `dbd9` was confirmed</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-attempt-that-failed">The attempt that failed</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-settled-it">What settled it</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-size-difference-is-not-damage">The size difference is not damage</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-here">What is not here</a></li>
 </ul>
         </nav>
@@ -77,8 +79,8 @@ round.</p>
 name   status        layout
 le64   confirmed     one word per 64-bit little-endian container (SIMH disk images; libword calls it data8)
 be64   structural    one word per 64-bit big-endian container
-core   corroborated  five frames per word (magtape core-dump mode; TM03 user guide table 2-12)
-dbd9   corroborated  two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)
+core   confirmed     five frames per word (magtape core-dump mode; TM03 user guide table 2-12)
+dbd9   confirmed     two words in nine bytes, no waste (KLH10 disk images; its H36 tape format)
 </code></pre>
 <p><code>le64</code> is what a SIMH disk image uses, and for ITS it is measured rather than
 assumed: every word of a real 300 MB pack decodes and re-encodes byte-for-byte.
@@ -111,7 +113,7 @@ them about a pack it damaged on purpose. Text that came out of the emulated
 machine, found by this decoder in the file the machine loaded it from.</p>
 <p>And <code>itsfs tape -x</code> extracts both files on that tape into words, which re-encode
 to the host originals byte for byte.</p>
-<h2 id="why-dbd9-is-still-corroborated">Why <code>dbd9</code> is still <code>corroborated</code></h2>
+<h2 id="how-dbd9-was-confirmed">How <code>dbd9</code> was confirmed</h2>
 <p>KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
 for it to be wrong about — so that source is the specification rather than a
 second opinion on one.</p>
@@ -124,18 +126,44 @@ KLH10 declares the format in <code>vdisk.h</code>:</p>
 the same nine bytes. Running 200,000 random 9-byte groups through both that
 formula and <code>itspack.c</code>'s gives <strong>no disagreement</strong> — they are the same function,
 not merely the same intention.</p>
-<h3 id="the-attempt-to-promote-it-and-why-it-failed">The attempt to promote it, and why it failed</h3>
-<p>KLH10 was built from the tree, a pack was repacked into <code>dbd9</code>, and KLH10's
-DSKDMP was pointed at it. It answered <code>MFDCLB</code> — &quot;M.F.D. clobbered&quot;.</p>
+<h3 id="the-attempt-that-failed">The attempt that failed</h3>
+<p>KLH10's DSKDMP was pointed at a pack repacked into <code>dbd9</code>. It answered <code>MFDCLB</code>
+— &quot;M.F.D. clobbered&quot;.</p>
 <p>The control saves that from being a finding: the <em>same</em> KLH10 and the <em>same</em>
 DSKDMP, pointed at the <strong>untouched <code>le64</code> pack</strong> through KLH10's own <code>SIMH</code>
 format, answer <code>MFDCLB</code> as well. A setup that cannot tell a good pack from a bad
 one says nothing about the packing. (The DSKDMP in <code>build/klh10</code> is a different
 build — 216 — from the one on the pack — 217 — and probably expects a machine
 this is not.)</p>
-<p>So the honest position is unchanged: the codec is verified against the code that
-defines the format, and no artifact KLH10 wrote has been read. Settling it needs
-a pack KLH10 itself produced, which means a full <code>make EMULATOR=klh10</code>.</p>
+<h3 id="what-settled-it">What settled it</h3>
+<p>Building KLH10 from the tree, which is worth doing for a reason that was not
+obvious: it ships <strong><code>vdkfmt</code></strong>, KLH10's own disk-format converter. That means an
+artifact written by KLH10's code without running the emulator at all.</p>
+<pre><code class="language-console">$ vdkfmt ip=rp0.dsk op=klh10.dbd9 ifmt=SIMH ofmt=DBD9 dt=RP06
+$ itsfs repack -p le64 -P dbd9 rp0.dsk ours.dbd9
+$ cmp -n 177776640 klh10.dbd9 ours.dbd9
+$ itsfs check -p dbd9 -d rp06 klh10.dbd9
+blocks         6719 free, 30940 in use, 505 locked out
+directories    247, 5657 files, 399 links (7 of them unresolved)
+no problems found (7 notes)
+</code></pre>
+<p>Two directions over one artifact, and neither of them ours. The repack is
+byte-identical to KLH10's output over every byte KLH10 wrote, and the reader
+takes KLH10's file to the same accounting — to the block — as the <code>le64</code>
+original.</p>
+<h3 id="the-size-difference-is-not-damage">The size difference is not damage</h3>
+<p>KLH10's file is 177,776,640 bytes and ours is 178,387,200, which looks exactly
+like truncation. It is not. <code>vdkfmt</code>'s copy loop is</p>
+<pre><code class="language-c">if (!zerosector(wbuff, 128))
+	err = devwrite(&amp;dvo, nsect, wbuff);	/* Write a sector  */
+</code></pre>
+<p>— it never writes an all-zero sector, so the file simply <strong>stops</strong> at the last
+non-zero one, 1,060 sectors short of the drive. Every sector it did write is at
+its true offset, and our extra 610,560 bytes are all zero.</p>
+<p>One practical consequence: a real KLH10 pack does not have its drive's nominal
+size, so the size-based geometry inference refuses it and <code>-d rp06</code> must be
+given. Refusing is the right behaviour — guessing a geometry is the one thing
+this project will not do — but it is worth knowing before you meet it.</p>
 <h2 id="what-is-not-here">What is not here</h2>
 <p><strong>SIXBIT is not a packing.</strong> It is an interpretation of a word's contents, not a
 way of storing one, and it lives in <code>itstext.c</code> one layer up. The same goes for

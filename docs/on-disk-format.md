@@ -101,7 +101,8 @@ Stated by FSDEFS. The full transcription with evidence markers is
 - **A pack recovered from MIT**, rather than built from source, would exercise
   fields nothing has written since the 1980s — `UNBYTE`'s other three encodings
   above all.
-- **An ITS magtape** would promote `core` from `corroborated` to `confirmed`.
+- **An ITS magtape** promoted `core` from `corroborated` to `confirmed`, and
+  KLH10's own `vdkfmt` did the same for `dbd9`.
 - **A multi-pack file system** would exercise `UNPKN` and `QTRSRV`, which are
   currently read and ignored.
 - **A second FSDEFS**, from another ITS release, would turn the version-span
