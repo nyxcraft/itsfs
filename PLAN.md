@@ -106,9 +106,11 @@ Most of the value of the two siblings is architecture, and it transfers:
   pair, analysis tools.
 - **The evidence markers.** `confirmed` / `corroborated` / `structural` /
   `unverified` on packings, `[v]` / `[s]` on fields. Both were lifted verbatim,
-  and both immediately earned their place: `core` and `dbd9` are `corroborated`
-  here where `t10fs` has them `confirmed`, because no *ITS* artifact in either
-  packing has been read yet.
+  and both immediately earned their place: `core` and `dbd9` started
+  `corroborated` here where `t10fs` had them `confirmed`, because no *ITS*
+  artifact in either packing had been read. Both were promoted later, on this
+  project's own measurements rather than on the sibling's -- which is exactly
+  what the markers existed to force.
 
 `.clang-format`, the workflow files and `gh-pages/` were lifted essentially
 as-is.

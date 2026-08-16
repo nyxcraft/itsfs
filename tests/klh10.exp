@@ -1,0 +1,153 @@
+#!/usr/bin/expect -f
+#
+# klh10.exp -- drive ITS under KLH10.  Used by tests/interop-klh10.sh.
+#
+# Environment:
+#   KN10   the emulator binary
+#   INI    its command file, in the current directory
+#   MODE   `dskdmp` to list a directory, `print` to boot ITS and print a file
+#   DIR    for dskdmp: the directory to list
+#   FILE   for print: the file, as `DIR;FN1 FN2`
+#   MATCH  for print: text that must appear in what it prints
+#
+# This is the KLH10 twin of tests/interop.exp, and the differences from the SIMH
+# one are all about how the machine is started rather than about ITS:
+#
+#   SIMH boots the PACK (`b rp0`), which loads DSKDMP off the disk.  KLH10's ini
+#   `load`s DSKDMP from a HOST FILE and halts, so `go` starts it.  One
+#   consequence worth knowing: under KLH10 the loader is not the one on the
+#   pack, so DSKDMP's version and the pack's need not agree -- and 216 against a
+#   217 pack works fine.
+#
+#   The exit prompt is `KLH10#`, not `sim>`, and quitting asks for confirmation.
+#
+# WAIT FOR THE INI TO FINISH before sending anything.  Matching the first
+# `KLH10#` races the rest of the file: `go` gets typed between two device
+# definitions, KLH10 queues it, and it runs at EOF -- sometimes before the disk
+# is ready.  That produced a boot that reached DSKDMP and then said MFDCLB, for
+# no reason visible anywhere in the log.
+#
+set timeout 300
+log_user 1
+
+set kn10 $env(KN10)
+set ini  $env(INI)
+set mode $env(MODE)
+# TWO DIFFERENT ESCAPES, and mixing them up costs a hang rather than an error.
+#   ESC (033) belongs to the PDP-10 software: DSKDMP's `U<ESC>dir;`, and DDT's
+#     `<ESC>G` to start the monitor.
+#   ^\ (034) is KLH10's OWN command escape -- doc/usage.txt: "the command escape
+#     character (^\, CONTROL-\)".  SIMH uses ESC for this, which is why the SIMH
+#     script gets away with one character for both jobs.
+# Sending ESC where ^\ was meant does not fail: DSKDMP takes it, answers FNF,
+# and the `quit` typed afterwards goes into DSKDMP as a file name.  The run then
+# sits at the expect timeout with the listing already correct on screen.
+set esc  "\033"
+set k10  "\034"
+
+# ITS's console loses characters typed at emulated speed, exactly as under SIMH.
+proc slow {s} {
+	sleep .5
+	foreach c [split $s ""] {
+		send -- $c
+		sleep .35
+	}
+}
+
+proc bye {} {
+	global k10
+	sleep 3
+	send $k10
+	# `KLH10#` is the prompt while the ini is being read; a HALTED machine
+	# prompts `KLH10>`.  Match the part they share.
+	expect {
+		"KLH10" { send "quit\ry\r"; expect eof }
+		timeout {}
+	}
+	# Whatever the monitor did, do not hang waiting for it: the result of the
+	# run was decided before this was called.
+	catch {close}
+	catch {wait}
+}
+
+spawn $kn10 $ini
+
+expect {
+	"EOF on" {}
+	timeout { puts "\nKLH10: the emulator never finished its ini"; exit 2 }
+}
+sleep 2
+send "go\r"
+
+expect {
+	"DSKDMP" {}
+	timeout { puts "\nKLH10: did not reach DSKDMP"; exit 2 }
+}
+sleep 2
+
+if {$mode == "dskdmp"} {
+	set dir $env(DIR)
+
+	# `U<ESC>dir;` -- the `$` in DSKDMP's command list is ESC.  The trailing
+	# carriage return is read as an empty command and answered with FNF,
+	# which is why the log has one and it is not a failure.
+	send "u$esc$dir;\r"
+	sleep 10
+	bye
+	exit 0
+}
+
+# ---- otherwise: boot the monitor and have it print a file.
+set file  $env(FILE)
+set match $env(MATCH)
+
+send "its\r"
+expect "\n"
+sleep 3
+
+# Patch SYSJOB's console chatter out before starting, as the ITS build does and
+# as the SIMH run does: without it the console fills with "IT IS NOW ..." at
+# unpredictable moments and no script can expect around it.
+slow "styo+2/popj p,\r"
+sleep 2
+send "${esc}g"
+
+expect {
+	"IN OPERATION" {}
+	timeout { puts "\nKLH10: ITS did not come up"; exit 2 }
+}
+
+# ^Z after the system settles.  A ^Z that arrives while ITS is still starting
+# its jobs is simply lost, and how long that takes varies with host load -- so
+# wait a long time, then retry with long gaps.  Two in quick succession get one
+# terminal at best.  SYS;ATSIGN DRAGON must already be off the pack or the job
+# it names owns the CTY and no ^Z is ever seen.
+sleep 45
+set got 0
+for {set i 0} {$i < 8 && $got == 0} {incr i} {
+	send "\032"
+	expect {
+		"Happy hacking" { set got 1 }
+		timeout {}
+	}
+}
+
+if {$got == 0} {
+	# COULD NOT TEST is not FAILED, and the caller is told which.  A harness
+	# that reported "the monitor cannot read our file" on a missed ^Z would
+	# be reporting a lie about the file system.
+	puts "\nKLH10: NO CONSOLE (timing) -- the file was not tested"
+	exit 3
+}
+
+sleep 8
+slow ":print $file"
+send "\r"
+
+expect {
+	$match { puts "\nKLH10: the monitor printed it" }
+	timeout { puts "\nKLH10: the monitor did not print the file"; exit 2 }
+}
+
+bye
+exit 0

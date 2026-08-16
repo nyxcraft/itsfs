@@ -63,6 +63,9 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-second-machine-and-a-second-packing">A second machine, and a second packing</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-it-does-not-prove">What it does not prove</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
 </ul>
@@ -760,6 +763,62 @@ of the two functions. <code>desc_put</code> bounds itself now, which costs one c
 and turns &quot;unreachable&quot; into &quot;impossible&quot;. The corruption fuzzer had never found
 it because it damages descriptor bytes at the <em>start</em> of the area, where the
 offsets involved are small.</p>
+<h2 id="a-second-machine-and-a-second-packing">A second machine, and a second packing</h2>
+<p>Everything in <code>make interop</code> runs under SIMH. When ITS boots there and prints a
+file this project wrote, the chain is: our writer, our packing, SIMH's disk
+emulation, ITS. A fault in SIMH's RP06 that happened to line up with a fault in
+our geometry would look exactly like success, and nothing in that run could tell
+the difference.</p>
+<p><code>make interop-klh10</code> asks the same questions of KLH10 — an unrelated
+implementation of the same hardware, by a different author — and it reads a
+<strong>different packing</strong>, because KLH10's ITS config is <code>format=dbd9</code>, two words in
+nine bytes, where SIMH's is one word per eight. The two runs share only the two
+things actually being tested: the file system on the pack, and ITS.</p>
+<pre><code class="language-console">1. the pack, converted and written to
+  ok   repacked into dbd9, which is what KLH10's ITS config asks for
+  ok   removed SYS;ATSIGN DRAGON so the console can be had
+  ok   wrote KSHACK;K10TST TXT onto it
+  ok   ...and our own checker still finds no problems
+
+2. DSKDMP, ITS's standalone loader, reads the pack
+  ok   DSKDMP listed our file, off a dbd9 pack, with its own code
+  ok   ...and the listing is in order (40 entries)
+
+3. ITS boots on it, and prints the file
+  ok   ITS reached IN OPERATION -- its salvage pass walked every directory
+  ok   THE MONITOR PRINTED THE FILE, on a second emulator and a second packing
+</code></pre>
+<p>and on the console:</p>
+<pre><code>:print KSHACK;K10TST TXT
+
+ITSFS WROTE THIS ON A DBD9 PACK AND KLH10 PRINTED IT
+</code></pre>
+<p>This also puts <code>dbd9</code> where it belongs. <code>make klh10</code> confirms the codec against
+KLH10's own converter, which is a statement about bytes. This is the same packing
+carrying a live operating system.</p>
+<h3 id="two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</h3>
+<p><strong>KLH10 drives its devices through separate processes.</strong> <code>dprpxx</code> for the disk,
+<code>dpchaos</code> for the network, <code>dptm03</code> for the tape — exec'd by name at run time.
+If they are not in the working directory it prints</p>
+<pre><code>[dp_exec: Cannot access &quot;dprpxx&quot; - No such file or directory]
+[rp_dpstart: Start of DP &quot;dprpxx&quot; failed!]
+Final init of device &quot;dsk0&quot; failed!
+</code></pre>
+<p>in the middle of a screenful of startup, carries on, and DSKDMP then says
+<code>MFDCLB</code> — &quot;M.F.D. clobbered&quot;. Which reads as a corrupt pack and is nothing of
+the kind: it is <em>no pack at all</em>. That had already cost one wrong conclusion in
+the source, so the test checks for the helpers by name before it runs anything.</p>
+<p><strong>There are two escape characters, and they are not the same one.</strong> ESC belongs
+to the PDP-10 software — DSKDMP's <code>U&lt;ESC&gt;dir;</code>, DDT's <code>&lt;ESC&gt;G</code>. KLH10's own
+command escape is <code>^\</code> (<code>doc/usage.txt</code>: &quot;the command escape character (^,
+CONTROL-)&quot;). SIMH uses ESC for both jobs, which is why the SIMH script gets away
+with one. Sending ESC where <code>^\</code> was meant does not produce an error: DSKDMP
+takes it, answers <code>FNF</code>, and the <code>quit</code> typed after it goes in as a file name —
+so the run hangs at a timeout with a perfectly correct listing on the screen.</p>
+<h3 id="what-it-does-not-prove">What it does not prove</h3>
+<p>The same <code>SYS;ITS</code> binary, off the same pack, under both emulators. Two machines
+agreeing is evidence about the <em>machines</em> and about our geometry; it is not two
+independent implementations of ITS, because there is only one ITS.</p>
 <h2 id="the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</h2>
 <p>This one is not about ITS, and it is the most portable lesson here.</p>
 <p>Every negative claim in <code>src/its.h</code> — every <code>no DEFSYM</code>, every &quot;FSDEFS does not

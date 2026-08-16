@@ -127,8 +127,11 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
   refuses to touch).  Both graders for such a pack come off tape.
 - One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
   RM03, no multi-pack file system, no artifact recovered from MIT.
-- `dbd9` is still `corroborated`: no KLH10-packed ITS image has been read here.
-  `make EMULATOR=klh10` in the ITS tree would produce one.
+- ~~`dbd9` is still `corroborated`~~ -- settled.  KLH10's own `vdkfmt` writes a
+  dbd9 pack byte-identical to ours (`make klh10`), and ITS boots on one under
+  KLH10 and prints a file itsfs wrote (`make interop-klh10`).  Building the whole
+  emulator turned out to be unnecessary for the first half and sufficient for the
+  second.
 - A tape this project writes has not been compared RECORD FOR RECORD with one
   ITS wrote, and ITS's own DUMP has never been shown one.  itstar reads ours and
   the data round-trips, which is a weaker claim than byte identity.

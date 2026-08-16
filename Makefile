@@ -293,6 +293,21 @@ klh10: all
 	@sh tests/klh10.sh $(BIN)/itsfs "$(VDKFMT)" "$(IMAGE)" $(KLH10_TMP)
 	@rm -rf $(KLH10_TMP)
 
+#
+# `make interop-klh10` -- the same questions as `make interop`, on a SECOND
+# emulator and a second packing.  KLH10 is an unrelated implementation of the
+# same hardware and its ITS config reads dbd9, so this run shares with the SIMH
+# one only the two things being tested: the file system, and ITS.
+#
+KLH10_BIN ?= $(HOME)/its/tools/klh10/tmp/bld-ks-its
+ITSTREE ?= $(HOME)/its
+INTEROP_K10_TMP ?= $(shell mktemp -d)
+
+interop-klh10: all
+	@sh tests/interop-klh10.sh $(BIN)/itsfs "$(IMAGE)" "$(KLH10_BIN)" \
+	    "$(ITSTREE)" $(INTEROP_K10_TMP)
+	@rm -rf $(INTEROP_K10_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -309,4 +324,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff klh10
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff klh10 interop-klh10

@@ -832,6 +832,79 @@ and turns "unreachable" into "impossible". The corruption fuzzer had never found
 it because it damages descriptor bytes at the *start* of the area, where the
 offsets involved are small.
 
+## A second machine, and a second packing
+
+Everything in `make interop` runs under SIMH. When ITS boots there and prints a
+file this project wrote, the chain is: our writer, our packing, SIMH's disk
+emulation, ITS. A fault in SIMH's RP06 that happened to line up with a fault in
+our geometry would look exactly like success, and nothing in that run could tell
+the difference.
+
+`make interop-klh10` asks the same questions of KLH10 — an unrelated
+implementation of the same hardware, by a different author — and it reads a
+**different packing**, because KLH10's ITS config is `format=dbd9`, two words in
+nine bytes, where SIMH's is one word per eight. The two runs share only the two
+things actually being tested: the file system on the pack, and ITS.
+
+```console
+1. the pack, converted and written to
+  ok   repacked into dbd9, which is what KLH10's ITS config asks for
+  ok   removed SYS;ATSIGN DRAGON so the console can be had
+  ok   wrote KSHACK;K10TST TXT onto it
+  ok   ...and our own checker still finds no problems
+
+2. DSKDMP, ITS's standalone loader, reads the pack
+  ok   DSKDMP listed our file, off a dbd9 pack, with its own code
+  ok   ...and the listing is in order (40 entries)
+
+3. ITS boots on it, and prints the file
+  ok   ITS reached IN OPERATION -- its salvage pass walked every directory
+  ok   THE MONITOR PRINTED THE FILE, on a second emulator and a second packing
+```
+
+and on the console:
+
+```
+:print KSHACK;K10TST TXT
+
+ITSFS WROTE THIS ON A DBD9 PACK AND KLH10 PRINTED IT
+```
+
+This also puts `dbd9` where it belongs. `make klh10` confirms the codec against
+KLH10's own converter, which is a statement about bytes. This is the same packing
+carrying a live operating system.
+
+### Two things that cost time, both worth writing down
+
+**KLH10 drives its devices through separate processes.** `dprpxx` for the disk,
+`dpchaos` for the network, `dptm03` for the tape — exec'd by name at run time.
+If they are not in the working directory it prints
+
+```
+[dp_exec: Cannot access "dprpxx" - No such file or directory]
+[rp_dpstart: Start of DP "dprpxx" failed!]
+Final init of device "dsk0" failed!
+```
+
+in the middle of a screenful of startup, carries on, and DSKDMP then says
+`MFDCLB` — "M.F.D. clobbered". Which reads as a corrupt pack and is nothing of
+the kind: it is *no pack at all*. That had already cost one wrong conclusion in
+the source, so the test checks for the helpers by name before it runs anything.
+
+**There are two escape characters, and they are not the same one.** ESC belongs
+to the PDP-10 software — DSKDMP's `U<ESC>dir;`, DDT's `<ESC>G`. KLH10's own
+command escape is `^\` (`doc/usage.txt`: "the command escape character (^\,
+CONTROL-\)"). SIMH uses ESC for both jobs, which is why the SIMH script gets away
+with one. Sending ESC where `^\` was meant does not produce an error: DSKDMP
+takes it, answers `FNF`, and the `quit` typed after it goes in as a file name —
+so the run hangs at a timeout with a perfectly correct listing on the screen.
+
+### What it does not prove
+
+The same `SYS;ITS` binary, off the same pack, under both emulators. Two machines
+agreeing is evidence about the *machines* and about our geometry; it is not two
+independent implementations of ITS, because there is only one ITS.
+
 ## The tool you verify with can lie by omission
 
 This one is not about ITS, and it is the most portable lesson here.

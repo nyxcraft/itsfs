@@ -192,6 +192,7 @@ $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 $ make interop IMAGE=... # ...and boot ITS on one this wrote
+$ make interop-klh10 IMAGE=... # ...and do it again on a second emulator
 $ make mkfs-test        # build a pack from nothing; ITS grades it
 $ make tape-test        # read a real ITS tape (no emulator needed)
 $ make klh10 IMAGE=...  # dbd9 against KLH10's own converter (no emulator either)
@@ -362,6 +363,22 @@ no pointer anywhere to check it against — and the UFD header in it are all our
 and DSKDMP resolves them with its own arithmetic. The monitor runs a salvage pass over every directory before it will
 come up at all, so reaching `IN OPERATION` means that pass found nothing to stop
 for.
+
+**And it does it again on a second machine.** `make interop-klh10` asks the same
+questions of KLH10 — an unrelated emulator, by a different author, reading a
+**different packing**, since its ITS config is `dbd9` where SIMH's is `le64`. So
+the two runs share only the two things being tested: the file system, and ITS.
+
+```
+:print KSHACK;K10TST TXT
+
+ITSFS WROTE THIS ON A DBD9 PACK AND KLH10 PRINTED IT
+```
+
+That is worth the trouble because a fault in SIMH's RP06 lining up with a fault
+in our geometry would look exactly like success under SIMH alone. What it is
+*not* is two implementations of ITS — there is only one, and both machines run
+the same `SYS;ITS` off the same pack.
 
 **Written, and ITS's own salvager accepts the result.** This is the level of
 evidence the project's own taxonomy calls "accepted by native tools", and it is
