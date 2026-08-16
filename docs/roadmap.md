@@ -3,7 +3,7 @@
 Where each phase ends, and what has to be true before it can be called done.
 [PLAN.md](../PLAN.md) has the same table; this is the detail.
 
-Phases 0–6 are done. What follows them is written here so that the next person
+Phases 0–7 are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.
 
@@ -128,21 +128,28 @@ one is 59 runs. A display that printed 1,904 numbers would have hidden that.
 
 ### Phase 7 — the writer
 
-One file, one mutation path, every front end calling it. In order:
-`put`, `del`, `mkdir`, `mkfs`.
+One file, one mutation path, every front end calling it. `put` and `del` exist;
+`mkdir` and `mkfs` do not yet.
 
-Two ITS-specific things to get right, neither of which has an analogue in
-`t10fs`:
+**Ended by:** `NSALV` accepting a file system this project wrote — level 2 in the
+oracle's own terms, and the first time anything here has been graded by ITS
+rather than compared with it. See
+[validation](validation.md#level-2--itss-own-salvager-accepts-what-the-writer-produced).
+
+The two ITS-specific things it had to get right, neither of which has an
+analogue in `t10fs`:
 
 - **A directory is one block, so it can be full**, and full is a refusal rather
-  than an allocation problem. The failure mode is `directory full`, stated with
-  the number it refused at, and the directory left exactly as it was.
-- **The TUT is a reference count**, so allocation is increment and free is
-  decrement — and a block at `TUTMNY` ("many or more") cannot be decremented
-  correctly at all, which is a property of the format the writer has to have an
-  answer for rather than discover.
+  than an allocation problem — there is no way to grow a UFD. The message names
+  the two numbers that met.
+- **The TUT is a reference count**, so a block at `TUTMNY` ("many or more")
+  cannot be decremented correctly by anybody. `del` refuses it by name rather
+  than guessing.
 
-**Ends when:** every mutating flow in the suite ends with `check` clean.
+And one that was not on the list: **the name area is sorted**, and a writer that
+appended would produce a directory ITS's own lookup walks wrongly. That was
+found by measuring the reference pack rather than by reading the source, and it
+is why `put` inserts and shifts.
 
 ### Phase 8 — native-tool interop
 
@@ -158,8 +165,9 @@ it builds from source.
   are all things `itsfs check` reports and none has been put to ITS.
 - **The monitor** — boot ITS on a pack we wrote to, and have it read the file, and
   copy it, and let us read the copy back.
-- **A pack built from nothing** — `mkfs`, then `DSKDMP` or the monitor booting on
-  it.
+- **`mkdir` and `mkfs`.** Every write so far has been into a directory ITS made;
+  a pack built from nothing is the harder claim, and `DSKDMP` or the monitor
+  booting on it is how it would be graded.
 
 **Ends when:** ITS reads what we wrote and `NSALV` finds nothing wrong with it.
 

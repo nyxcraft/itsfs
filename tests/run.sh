@@ -257,12 +257,20 @@ mkfixture() {
 	#   at byte 14: 40 40 64 00, a one-block file at block 2100
 	poke "$1" 498 11 0403720020000 0163340334444 0640040406400
 
-	# Three name blocks.  HELLO TXT: descriptor at byte 0, and 3 words in the last
-	# block, so the file is 2*1024 + 3 = 2051 words.  A LINK: the link bit set, and
-	# its descriptor at byte 6.  NUL TXT: one block, one word, at byte 14.
-	poke "$1" 498 1009 "$(sb NUL)" "$(sb TXT)" $(((1 << 24) | 14)) 0 0
+	# Three name blocks, IN SIXBIT ORDER, because a real ITS name area is
+	# sorted -- 6,056 entries on the reference pack and not one out of place,
+	# which is `QRELOC` in disk.1228 keeping it that way.  The first version
+	# of this fixture was in the reverse order, and it was `put`'s own tests
+	# that noticed: a writer looking for an existing name stopped early on an
+	# unsorted area and happily created a duplicate.
+	#
+	#   A LINK      the link bit set, descriptor at byte 6
+	#   HELLO TXT   descriptor at byte 0, 3 words in the last block, so
+	#               2*1024 + 3 = 2051 words
+	#   NUL TXT     one block, one word, at byte 14
+	poke "$1" 498 1009 "$(sb A)" "$(sb LINK)" $(((1 << 18) | 6)) 0 0
 	poke "$1" 498 1014 "$(sb HELLO)" "$(sb TXT)" $((3 << 24)) 0 0
-	poke "$1" 498 1019 "$(sb A)" "$(sb LINK)" $(((1 << 18) | 6)) 0 0
+	poke "$1" 498 1019 "$(sb NUL)" "$(sb TXT)" $(((1 << 24) | 14)) 0 0
 
 	# Three blocks of text.  "HI" is 0110 0111 in seven-bit ASCII, five to a word.
 	poke "$1" 2000 0 $(((0110 << 29) | (0111 << 22)))
@@ -543,7 +551,7 @@ mkfixture "$T/k14.dsk"
 poke "$T/k14.dsk" 498 13 0640040372000
 out=$("$ITSFS" check "$T/k14.dsk" 2>&1)
 has "two files holding one block are both named" "$out" \
-	"block 2000 is claimed by TEST;HELLO TXT and already by TEST;NUL TXT"
+	"block 2000 is claimed by TEST;NUL TXT and already by TEST;HELLO TXT"
 
 # And the checker is a parser like any other: it gets the fuzzer's input too.
 out=$("$ITSFS" check "$T/rand.img" 2>&1); rc=$?
@@ -696,6 +704,163 @@ has "dirs works in the shell" "$out" "2 directories"
 
 out=$(printf 'quit\nls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
 hasnt "quit stops reading commands" "$out" "entries"
+
+# ------------------------------------------------------------- the writer
+#
+# EVERY MUTATING FLOW ENDS WITH A CLEAN CHECK.  That is the rule the sibling
+# projects are built on and it is what makes a writer's tests mean anything:
+# `check` shares no code with the writer OR the reader, so a pack it calls clean
+# after a mutation is a third opinion rather than the writer agreeing with
+# itself.
+
+mkfixture "$T/w1.dsk"
+printf 'HELLO FROM ITSFS.\nA SECOND LINE.\n' > "$T/put.txt"
+
+out=$("$ITSFS" put "$T/w1.dsk" 'TEST;NEW FILE' "$T/put.txt" 2>&1); rc=$?
+chk "put writes a file" "$rc" "0"
+
+out=$("$ITSFS" check "$T/w1.dsk" 2>&1); rc=$?
+chk "...and the pack still checks clean" "$rc" "0"
+
+"$ITSFS" cat "$T/w1.dsk" 'TEST;NEW FILE' > "$T/back.txt" 2>/dev/null
+if cmp -s "$T/put.txt" "$T/back.txt"; then
+	ok "...and it reads back byte-identical to what went in"
+else
+	no "...and it reads back byte-identical to what went in"
+fi
+
+out=$("$ITSFS" ls -l "$T/w1.dsk" TEST | grep '^NEW')
+chk "...with the right length" "$(echo "$out" | awk '{print $3}')" "7"
+
+# THE NAME AREA IS SORTED, and ITS keeps it that way -- 6,056 entries on the
+# reference pack, none out of order.  A writer that appended instead would
+# produce a directory ITS's own lookup walks wrongly.
+"$ITSFS" put "$T/w1.dsk" 'TEST;AAA FIRST' "$T/put.txt" >/dev/null 2>&1
+"$ITSFS" put "$T/w1.dsk" 'TEST;ZZZ LAST' "$T/put.txt" >/dev/null 2>&1
+out=$("$ITSFS" ls "$T/w1.dsk" TEST | grep -v '^#' | awk '{print $1}' | tr '\n' ' ')
+chk "entries stay in SIXBIT order as files are added" "$out" "A AAA HELLO NEW NUL ZZZ "
+
+out=$("$ITSFS" check "$T/w1.dsk" 2>&1); rc=$?
+chk "...and three more files later it is still clean" "$rc" "0"
+
+# PUT THEN DEL IS A NO-OP AT THE FILE SYSTEM LEVEL.  Not byte-identical -- the
+# descriptor area keeps its hole, as it does under ITS -- but nothing a reader
+# or a checker can see has changed.
+mkfixture "$T/w2.dsk"
+"$ITSFS" manifest "$T/w2.dsk" > "$T/before.mf" 2>/dev/null
+"$ITSFS" put "$T/w2.dsk" 'TEST;TEMP FILE' "$T/put.txt" >/dev/null 2>&1
+"$ITSFS" del "$T/w2.dsk" 'TEST;TEMP FILE' >/dev/null 2>&1
+"$ITSFS" manifest "$T/w2.dsk" > "$T/after.mf" 2>/dev/null
+
+if diff -q "$T/before.mf" "$T/after.mf" >/dev/null 2>&1; then
+	ok "put then del leaves the file system exactly as it was"
+else
+	no "put then del leaves the file system exactly as it was"
+fi
+
+out=$("$ITSFS" check "$T/w2.dsk" 2>&1); rc=$?
+chk "...and clean" "$rc" "0"
+
+# A file of no words at all.  FSDEFS: "A zero length file is described as two
+# bytes: UDWPH then 0."
+mkfixture "$T/w3.dsk"
+: > "$T/empty.txt"
+out=$("$ITSFS" put "$T/w3.dsk" 'TEST;EMPTY FILE' "$T/empty.txt" 2>&1); rc=$?
+chk "a zero-length file can be written" "$rc" "0"
+out=$("$ITSFS" check "$T/w3.dsk" 2>&1); rc=$?
+chk "...and checks clean" "$rc" "0"
+out=$("$ITSFS" ls -l "$T/w3.dsk" TEST | grep '^EMPTY')
+chk "...and holds no blocks" "$(echo "$out" | awk '{print $4}')" "0"
+
+# -w round-trips a file of arbitrary words, which is what makes get/put a pair
+# that survives a binary.
+mkfixture "$T/w4.dsk"
+"$ITSFS" get -w "$T/w4.dsk" 'TEST;HELLO TXT' "$T/words.bin" >/dev/null 2>&1
+"$ITSFS" put -w "$T/w4.dsk" 'TEST;COPY BIN' "$T/words.bin" >/dev/null 2>&1
+"$ITSFS" get -w "$T/w4.dsk" 'TEST;COPY BIN' "$T/words2.bin" >/dev/null 2>&1
+
+if cmp -s "$T/words.bin" "$T/words2.bin"; then
+	ok "get -w then put -w round-trips a file word for word"
+else
+	no "get -w then put -w round-trips a file word for word"
+fi
+
+# --- the refusals.  A writer's refusals matter more than its successes: each
+# one below leaves the pack usable, and the test checks that as well as the exit.
+
+mkfixture "$T/r1.dsk"
+"$ITSFS" manifest "$T/r1.dsk" > "$T/r1.mf" 2>/dev/null
+
+out=$("$ITSFS" put "$T/r1.dsk" 'TEST;HELLO TXT' "$T/put.txt" 2>&1); rc=$?
+chk "put refuses to overwrite an existing file" "$rc" "1"
+has "...saying so" "$out" "already exists"
+
+out=$("$ITSFS" put "$T/r1.dsk" 'TEST;lower case' "$T/put.txt" 2>&1); rc=$?
+chk "put refuses a name that is not SIXBIT" "$rc" "1"
+has "...and says there is no lower case" "$out" "no lower case"
+
+out=$("$ITSFS" put "$T/r1.dsk" 'TEST;TOOLONGNAME X' "$T/put.txt" 2>&1); rc=$?
+chk "put refuses a name too long, rather than truncating it" "$rc" "2"
+
+out=$("$ITSFS" put "$T/r1.dsk" 'NOSUCH;A B' "$T/put.txt" 2>&1); rc=$?
+chk "put refuses a directory that is not in the MFD" "$rc" "1"
+
+printf 'high \377 bit\n' > "$T/bin.txt"
+out=$("$ITSFS" put "$T/r1.dsk" 'TEST;BINARY X' "$T/bin.txt" 2>&1); rc=$?
+chk "put refuses a byte that is not seven-bit rather than masking it" "$rc" "1"
+has "...and says to use -w" "$out" "use -w"
+
+out=$("$ITSFS" del "$T/r1.dsk" 'TEST;NOSUCH FILE' 2>&1); rc=$?
+chk "del refuses a file that is not there" "$rc" "1"
+
+# A DIRECTORY IS ONE BLOCK AND CAN BE FULL.  UDESCP is the free pointer into the
+# descriptor area; setting it just below the name area leaves no room, and ITS
+# has no way to grow a UFD -- so this is a refusal, not an allocation problem.
+mkfixture "$T/r2.dsk"
+poke "$T/r2.dsk" 498 0 5980
+out=$("$ITSFS" put "$T/r2.dsk" 'TEST;NEW FILE' "$T/put.txt" 2>&1); rc=$?
+chk "put refuses when the directory is full" "$rc" "1"
+has "...saying which two numbers met" "$out" "is full"
+
+# AND EVERY REFUSAL LEAVES THE PACK AS IT WAS.  This is the property that makes
+# the others safe to rely on: a writer that half-does something is worse than
+# one that cannot do it.
+"$ITSFS" manifest "$T/r1.dsk" > "$T/r1b.mf" 2>/dev/null
+
+if diff -q "$T/r1.mf" "$T/r1b.mf" >/dev/null 2>&1; then
+	ok "six refusals later, the pack is unchanged"
+else
+	no "six refusals later, the pack is unchanged"
+fi
+
+out=$("$ITSFS" check "$T/r1.dsk" 2>&1); rc=$?
+chk "...and still clean" "$rc" "0"
+
+# THE IN-USE CHECK.  There is no lock to take, so the only signal is that
+# another process holds the file open -- which is what an emulator with the pack
+# attached looks like.
+mkfixture "$T/r3.dsk"
+(
+	exec 9< "$T/r3.dsk"
+	"$ITSFS" put "$T/r3.dsk" 'TEST;NEW FILE' "$T/put.txt" > "$T/inuse.out" 2>&1
+	echo $? > "$T/inuse.rc"
+)
+rc=$(cat "$T/inuse.rc")
+
+if [ "$rc" = "0" ]; then
+	# /proc is how this is detected, so a host without it cannot tell.
+	ok "the in-use check did not fire (no /proc: it cannot tell, and says so in write.c)"
+else
+	chk "put refuses an image another process has open" "$rc" "1"
+	has "...naming the process" "$(cat "$T/inuse.out")" "refusing to write"
+fi
+
+(
+	exec 9< "$T/r3.dsk"
+	ITSFS_IGNORE_INUSE=1 "$ITSFS" put "$T/r3.dsk" 'TEST;NEW FILE' "$T/put.txt" >/dev/null 2>&1
+	echo $? > "$T/inuse2.rc"
+)
+chk "...and ITSFS_IGNORE_INUSE overrides it" "$(cat "$T/inuse2.rc")" "0"
 
 # ------------------------------------------------------------ command lines
 

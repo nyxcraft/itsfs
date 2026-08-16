@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -42,6 +42,9 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#why-both-runs-are-needed">Why both runs are needed</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-comparison-actually-compares">What the comparison actually compares</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-establishes-and-what-it-does-not">What this establishes, and what it does not</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS&#x27;s own salvager accepts what the writer produced</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-the-writer-had-to-get-right-to-earn-that">What the writer had to get right to earn that</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
@@ -66,10 +69,10 @@ has been found by trying.</p>
 <p>Three levels of evidence, in the order they are worth anything:</p>
 <ol>
 <li><strong>Byte-identical</strong> — build something with <code>itsfs</code>, build the same thing with
-ITS, <code>cmp</code>. Nothing here reaches this level, because there is no writer.</li>
+ITS, <code>cmp</code>. Nothing here reaches this level.</li>
 <li><strong>Accepted by native tools</strong> — hand what we produce to <code>NSALV</code>, ITS's own
-salvager, or to the monitor. Nothing here reaches this level either, for the
-same reason.</li>
+salvager, or to the monitor. <strong><code>NSALV</code> accepts what the writer produces</strong>; the
+monitor has never been booted on one. See below.</li>
 <li><strong>Self-consistent</strong> — round trips, and cross-checks against numbers the file
 system maintains independently of the thing being checked.</li>
 </ol>
@@ -277,6 +280,48 @@ about <code>UNTIM</code>, <code>UNBYTE</code>, creation dates, or where a link p
 <a href="../filesystem/index.html#gap-register">the gap register</a>.</p>
 <p>And it grades a <strong>reading</strong>. Nothing here has been written by this project, so it
 is not the level-2 result — that still needs a writer, and it is still phase 8.</p>
+<h2 id="level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS's own salvager accepts what the writer produced</h2>
+<pre><code class="language-console">$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+4. a pack itsfs WROTE to
+  ok   itsfs put wrote 2 files
+  ok   ...and both read back byte-identical to what went in
+  ok   itsfs check: clean
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and the files are still there afterwards
+</code></pre>
+<p>This is a different and stronger claim than the three sections above it, which
+grade a <em>reading</em> of a pack ITS wrote. Here ITS's own salvager walks a file
+system this project made and finds nothing to say about it — the same silence a
+pack it has never touched produces.</p>
+<p><strong>Four checks, in that order, and the order is the argument.</strong> A pack that
+passes a salvager and does not return the file is not a success, so the files are
+read back first. <code>check</code> is asked before <code>NSALV</code> because it is the cheap one. And
+the pack is checked again <em>afterwards</em>, because a salvager that quietly repaired
+something would have hidden a disagreement by fixing it.</p>
+<h3 id="what-the-writer-had-to-get-right-to-earn-that">What the writer had to get right to earn that</h3>
+<ul>
+<li><strong>The name area is sorted</strong>, and stays sorted. 6,056 entries on the reference
+pack, not one out of order and no gaps; after four <code>put</code>s at four different
+sort positions it is 6,060 with the same properties. Insertion shifts the
+entries below the point down by <code>LUNBLK</code> and moves <code>UDNAMP</code> with them — the
+mirror of <code>QSQSH</code>, which is how ITS closes the gap on removal.</li>
+<li><strong><code>UDBLKS</code> is maintained</strong>, so the number ITS keeps and the number the
+descriptors decode to still agree.</li>
+<li><strong>The TUT entry is set to 1</strong>, which is what <code>QGTK2</code> does, rather than
+incremented.</li>
+<li><strong>Blocks come from above <code>QSWAPA</code></strong>, which FSDEFS describes as the line new
+files are not written below.</li>
+</ul>
+<h3 id="what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</h3>
+<p><code>del</code> zeroes the descriptor bytes in place and does not compact the descriptor
+area — because <code>QDEL3</code> does exactly that and leaves the same hole. So <code>put</code> then
+<code>del</code> is <strong>not byte-identical</strong>; it is identical to a fingerprint, which is the
+right test:</p>
+<pre><code class="language-console">$ itsfs manifest w.dsk &gt; before.mf
+$ itsfs put w.dsk 'TEST;TEMP FILE' f.txt &amp;&amp; itsfs del w.dsk 'TEST;TEMP FILE'
+$ itsfs manifest w.dsk | diff before.mf -
+$
+</code></pre>
 <h2 id="the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 fingerprinting it, and verifying that through a different packing ...
@@ -336,7 +381,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>151 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>179 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -347,7 +392,7 @@ is that it <strong>refuses by name</strong> and reads nothing it did not bound f
 sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.</p>
-<p><strong><code>make test-san</code></strong> runs the same 151 under AddressSanitizer and UBSan, which is
+<p><strong><code>make test-san</code></strong> runs the same 179 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader
@@ -387,6 +432,17 @@ of description&quot;. So every file decoded to <strong>zero blocks and no error 
 The check that caught it was <code>UDBLKS</code>: 37 files, 0 blocks, and a header saying
 540. A cross-check against a number somebody else computed is the only thing that
 catches a bug whose symptom is silence.</p>
+<p><strong>The test fixture was never a legal ITS directory, for three phases.</strong> Its name
+area was in reverse SIXBIT order, which no ITS pack is — 6,056 entries on the
+reference pack are sorted and <code>QRELOC</code> in <code>disk.1228</code> is what keeps them that
+way. Nothing noticed until <code>put</code> was written, because every reader walks the area
+linearly and does not care. What noticed was <code>put</code>'s own test: a writer looking
+for an existing name stopped early on an unsorted area and created a <strong>duplicate
+entry</strong> — precisely the bug s5fs shipped, on an image its checker called clean.</p>
+<p>Two things came out of it. The fixture is sorted now, and <code>name_slot</code> no longer
+stops early: the duplicate search scans the whole area while the insertion point
+stops at the first greater entry. On a sorted area those are the same scan; on a
+damaged one, only the full scan is safe.</p>
 <p><strong>Two documented numbers in the MFD are not what they look like.</strong> <code>MDNUDS</code> is
 the number of directory slots the monitor was <em>built</em> for, not the number in use;
 the number in use follows from where <code>MDNAMP</code> points. The first version of <code>info</code>

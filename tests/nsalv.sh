@@ -7,7 +7,7 @@
 # salvager tape and most of ten minutes, none of which belong in a suite that
 # has to run anywhere.
 #
-# WHY THIS IS THE BEST EVIDENCE AVAILABLE BEFORE THERE IS A WRITER.
+# WHY THIS IS THE BEST EVIDENCE THE PROJECT HAS.
 #
 # Everything `make oracle` establishes is the pack agreeing with itself, or a
 # second implementation of OUR reading agreeing with the first.  Both readers
@@ -21,8 +21,9 @@
 # scratch.  Where it agrees with `itsfs check`, that agreement is about the
 # format rather than about our understanding of it.
 #
-# AND IT NEEDS NO WRITER, which is why this runs now rather than in phase 8: a
-# pack this project has only READ is enough to ask the question.
+# THE FIRST THREE SECTIONS NEED NO WRITER, which is why they ran at phase 5: a
+# pack this project has only READ is enough to ask the question.  The fourth was
+# added at phase 7 and is a stronger claim -- see below.
 #
 # THE TWO RUNS, AND WHY BOTH ARE NEEDED.
 #
@@ -40,6 +41,12 @@
 # The comparison below is on the PAIRS: which block, and which file holds it.
 # Not on counts, and not on "both reported something" -- two checkers can agree
 # that a pack is broken and disagree about every detail.
+#
+# AND A THIRD RUN, ADDED AT PHASE 7: a pack this project has WRITTEN to.  That
+# one is level-2 evidence in the project's own taxonomy -- "accepted by native
+# tools" -- and it is a different claim from the other two, which grade a
+# reading.  Here ITS's own salvager is asked whether what `itsfs put` produced
+# is a file system, and the bar is that it says nothing at all.
 #
 set -u
 
@@ -188,8 +195,74 @@ else
 fi
 
 echo
+echo "4. a pack itsfs WROTE to"
+
+# Two files, in two directories, so the name-area insertion is exercised at more
+# than one place in the sort order.
+cp "$IMAGE" "$T/wrote.dsk" || exit 2
+printf 'HELLO FROM ITSFS.\r\nTHIS FILE WAS WRITTEN BY A HOST TOOL,\r\nNOT BY ITS ITSELF.\r\n' \
+	> "$T/msg.txt"
+
+wrote=0
+
+for f in "KSHACK;ITSFS TXT" "SYSENG;ITSFS 2"; do
+	if "$ITSFS" put "$T/wrote.dsk" "$f" "$T/msg.txt" >/dev/null 2>&1; then
+		wrote=$((wrote + 1))
+	else
+		fail "itsfs put '$f' failed"
+	fi
+done
+
+[ "$wrote" -eq 2 ] && ok "itsfs put wrote $wrote files"
+
+# READ THEM BACK BEFORE ASKING ANYBODY ELSE.  A pack that passes a salvager and
+# does not return the file is not a success.
+back=0
+
+for f in "KSHACK;ITSFS TXT" "SYSENG;ITSFS 2"; do
+	"$ITSFS" cat "$T/wrote.dsk" "$f" > "$T/back.txt" 2>/dev/null
+	cmp -s "$T/msg.txt" "$T/back.txt" && back=$((back + 1))
+done
+
+if [ "$back" -eq 2 ]; then
+	ok "...and both read back byte-identical to what went in"
+else
+	fail "only $back of 2 read back identical"
+fi
+
+if "$ITSFS" check "$T/wrote.dsk" > "$T/wrote.itsfs" 2>&1; then
+	ok "itsfs check: clean"
+else
+	fail "itsfs check found problems on a pack itsfs wrote:"
+	sed -n '2,6p' "$T/wrote.itsfs" | sed 's/^/       /'
+fi
+
+echo "   running NSALV on it ..."
+NSALV_PDP10=$PDP10 NSALV_TAPE=$TAPE NSALV_IMAGE=$T/wrote.dsk NSALV_LOG=$T/wrote.log \
+	expect "$EXP" > "$T/wrote.exp" 2>&1
+
+if grep -q "need updating\|Tracking down shared\|unprotected\|Errors in directory" "$T/wrote.log" 2>/dev/null; then
+	fail "NSALV REPORTED PROBLEMS on a pack itsfs wrote:"
+	grep "need updating\|Tracking down shared\|unprotected\|Errors in directory" "$T/wrote.log" |
+		head -5 | sed 's/^/       /'
+elif grep -q "Get user dirs from unit" "$T/wrote.log" 2>/dev/null; then
+	ok "NSALV: ACCEPTED IT -- salvaged, and had nothing to say"
+else
+	fail "NSALV did not get as far as salvaging -- see $T/wrote.log"
+fi
+
+# And it did not repair anything on the way past, which would have hidden a
+# disagreement by silently fixing it.
+if "$ITSFS" check "$T/wrote.dsk" >/dev/null 2>&1; then
+	ok "...and the files are still there afterwards"
+else
+	fail "the pack does not check clean after NSALV saw it"
+fi
+
+echo
 if [ $rc -eq 0 ]; then
-	echo "two checkers with nothing in common but the disk, agreeing block for block"
+	echo "two checkers with nothing in common but the disk, agreeing block for block --"
+	echo "and ITS's own salvager accepting a file system this project wrote"
 else
 	echo "logs are in $T"
 fi

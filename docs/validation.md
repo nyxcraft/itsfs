@@ -8,10 +8,10 @@ has been found by trying.
 Three levels of evidence, in the order they are worth anything:
 
 1. **Byte-identical** — build something with `itsfs`, build the same thing with
-   ITS, `cmp`. Nothing here reaches this level, because there is no writer.
+   ITS, `cmp`. Nothing here reaches this level.
 2. **Accepted by native tools** — hand what we produce to `NSALV`, ITS's own
-   salvager, or to the monitor. Nothing here reaches this level either, for the
-   same reason.
+   salvager, or to the monitor. **`NSALV` accepts what the writer produces**; the
+   monitor has never been booted on one. See below.
 3. **Self-consistent** — round trips, and cross-checks against numbers the file
    system maintains independently of the thing being checked.
 
@@ -248,6 +248,57 @@ about `UNTIM`, `UNBYTE`, creation dates, or where a link points. Those stay in
 And it grades a **reading**. Nothing here has been written by this project, so it
 is not the level-2 result — that still needs a writer, and it is still phase 8.
 
+## Level 2 — ITS's own salvager accepts what the writer produced
+
+```console
+$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+4. a pack itsfs WROTE to
+  ok   itsfs put wrote 2 files
+  ok   ...and both read back byte-identical to what went in
+  ok   itsfs check: clean
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and the files are still there afterwards
+```
+
+This is a different and stronger claim than the three sections above it, which
+grade a *reading* of a pack ITS wrote. Here ITS's own salvager walks a file
+system this project made and finds nothing to say about it — the same silence a
+pack it has never touched produces.
+
+**Four checks, in that order, and the order is the argument.** A pack that
+passes a salvager and does not return the file is not a success, so the files are
+read back first. `check` is asked before `NSALV` because it is the cheap one. And
+the pack is checked again *afterwards*, because a salvager that quietly repaired
+something would have hidden a disagreement by fixing it.
+
+### What the writer had to get right to earn that
+
+- **The name area is sorted**, and stays sorted. 6,056 entries on the reference
+  pack, not one out of order and no gaps; after four `put`s at four different
+  sort positions it is 6,060 with the same properties. Insertion shifts the
+  entries below the point down by `LUNBLK` and moves `UDNAMP` with them — the
+  mirror of `QSQSH`, which is how ITS closes the gap on removal.
+- **`UDBLKS` is maintained**, so the number ITS keeps and the number the
+  descriptors decode to still agree.
+- **The TUT entry is set to 1**, which is what `QGTK2` does, rather than
+  incremented.
+- **Blocks come from above `QSWAPA`**, which FSDEFS describes as the line new
+  files are not written below.
+
+### What put/del does NOT do, deliberately
+
+`del` zeroes the descriptor bytes in place and does not compact the descriptor
+area — because `QDEL3` does exactly that and leaves the same hole. So `put` then
+`del` is **not byte-identical**; it is identical to a fingerprint, which is the
+right test:
+
+```console
+$ itsfs manifest w.dsk > before.mf
+$ itsfs put w.dsk 'TEST;TEMP FILE' f.txt && itsfs del w.dsk 'TEST;TEMP FILE'
+$ itsfs manifest w.dsk | diff before.mf -
+$
+```
+
 ## The fingerprint is of the file system, not of the container
 
 ```console
@@ -327,7 +378,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**151 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**179 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -340,7 +391,7 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 151 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 179 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 
@@ -389,6 +440,19 @@ of description". So every file decoded to **zero blocks and no error at all**.
 The check that caught it was `UDBLKS`: 37 files, 0 blocks, and a header saying
 540. A cross-check against a number somebody else computed is the only thing that
 catches a bug whose symptom is silence.
+
+**The test fixture was never a legal ITS directory, for three phases.** Its name
+area was in reverse SIXBIT order, which no ITS pack is — 6,056 entries on the
+reference pack are sorted and `QRELOC` in `disk.1228` is what keeps them that
+way. Nothing noticed until `put` was written, because every reader walks the area
+linearly and does not care. What noticed was `put`'s own test: a writer looking
+for an existing name stopped early on an unsorted area and created a **duplicate
+entry** — precisely the bug s5fs shipped, on an image its checker called clean.
+
+Two things came out of it. The fixture is sorted now, and `name_slot` no longer
+stops early: the duplicate search scans the whole area while the insertion point
+stops at the first greater entry. On a sorted area those are the same scan; on a
+damaged one, only the full scan is safe.
 
 **Two documented numbers in the MFD are not what they look like.** `MDNUDS` is
 the number of directory slots the monitor was *built* for, not the number in use;

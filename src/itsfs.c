@@ -27,6 +27,8 @@
  *   itsfs manifest  fingerprint a pack: one line per file
  *   itsfs verify    diff a pack against a manifest
  *   itsfs shell     interactive explorer
+ *   itsfs put       write a host file into a directory -- DESTRUCTIVE
+ *   itsfs del       remove a file -- DESTRUCTIVE
  */
 
 #include "cmds.h"
@@ -55,6 +57,9 @@ static const struct subcmd {
 	{ "manifest", cmd_manifest, "fingerprint a pack: one line per file"     },
 	{ "verify",   cmd_verify,   "diff a pack against a manifest"            },
 	{ "shell",    cmd_shell,    "interactive explorer (read-only)"          },
+	{ "put",      cmd_put,      "write a host file into a directory (destructive)" },
+	{ "del",      cmd_del,      "remove a file (destructive)"               },
+	{ "rm",       cmd_del,      "remove a file -- the same command as del"  },
 };
 
 /* clang-format on */

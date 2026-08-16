@@ -3,16 +3,17 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–6 done — a read-only reader, an independent checker, ITS's
-> own salvager agreeing with it, and a fingerprint that survives repacking.** The word layer is proven byte-for-byte
+> **Status: phases 0–7 done — a reader, an independent checker, a writer, and
+> ITS's own salvager accepting what the writer produces.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
 > its own check word, and the reader lists directories, decodes the run-length
 > descriptors that are ITS's block maps, follows links and extracts files.
 > `itsfs check` walks the same pack **sharing no code with the reader**, and
 > **`NSALV` — MIT's own salvager, booted from tape — names exactly the same
 > damaged blocks and the same files.** Every field offset is transcribed from
-> `SYSTEM;FSDEFS 43` with a citation ([sources](docs/sources.md)). There is
-> **no writer**. See [the roadmap](docs/roadmap.md),
+> `SYSTEM;FSDEFS 43` with a citation ([sources](docs/sources.md)). `put` and
+> `del` are the first destructive commands, and every word they change goes
+> through one file. See [the roadmap](docs/roadmap.md),
 > [validation](docs/validation.md) and [PLAN.md](PLAN.md).
 
 ```console
@@ -78,6 +79,8 @@ the design rather than fitting inside it:
 | `itsfs manifest` | fingerprint a pack: one line per directory, file and link |
 | `itsfs verify` | diff a pack against a manifest |
 | `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
+| `itsfs put` | write a host file into a directory — **destructive** |
+| `itsfs del` | remove a file — `rm` is the same command — **destructive** |
 
 Run any of them with no arguments for its own usage.
 
@@ -96,6 +99,44 @@ $ itsfs cat rp0.dsk KSHACK BUILD DOC
 Both spellings go through one parser. A name that cannot be SIXBIT is refused,
 never truncated and never case-folded: SIXBIT has no lower case, and quietly
 mapping `hello` to `HELLO` would match a different file.
+
+### Writing
+
+```console
+$ itsfs put rp0.dsk 'KSHACK;ITSFS TXT' hello.txt
+$ itsfs del rp0.dsk 'KSHACK;ITSFS TXT'
+```
+
+**These change the pack. Work on a copy.** `itsfs` refuses to write an image
+another process has open — an emulator with the pack attached is writing to it
+too and there is no lock to take — comparing by device and inode, overridable
+with `ITSFS_IGNORE_INUSE=1`. Reading is never blocked.
+
+Every store goes through [`src/write.c`](src/write.c), which is the only code in
+the project that mutates a pack. Three rules it enforces, each of which cost
+somebody a pack once in a sibling project:
+
+- **Refuse, do not half-do.** Every check that can fail happens before anything
+  is written. A refusal leaves the pack byte-identical, and says the number it
+  refused at.
+- **The directory entry goes last** — data, then the allocation table, then the
+  descriptor, then the name. An interruption before the last step leaves blocks
+  marked in use that no file claims, which loses nothing. The other order loses
+  a file.
+- **Never write a pack somebody else has open.**
+
+`put` inserts the name in **sorted position**, because an ITS name area is
+sorted — 6,056 entries on the reference pack, not one out of order — and shifts
+the entries below it down, which is the mirror of the `QSQSH` that ITS uses to
+close the gap on delete. `del` frees the blocks and zeroes the descriptor bytes
+in place, exactly as `QDEL3` does; it does not compact the descriptor area,
+because ITS does not either.
+
+What it refuses, by name rather than half-doing: a name SIXBIT cannot hold, a
+file that already exists, a byte that is not seven-bit (use `-w`), a directory
+that is full — **a UFD is one block and there is no way to grow one** — and a
+block the allocation table calls "many or more", whose reference count cannot be
+decremented correctly by anybody.
 
 ### The shell
 
@@ -140,7 +181,7 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 151 checks
+$ make test             # the regression suite (sh + coreutils), 179 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -196,6 +237,25 @@ comparisons; the second would catch a single block skipped or double-counted
 anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 [validation](docs/validation.md).
+
+**Written, and ITS's own salvager accepts the result.** This is the level of
+evidence the project's own taxonomy calls "accepted by native tools", and it is
+a stronger claim than the checkers agreeing about a pack neither of them wrote:
+
+```console
+$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
+4. a pack itsfs WROTE to
+  ok   itsfs put wrote 2 files
+  ok   ...and both read back byte-identical to what went in
+  ok   itsfs check: clean
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and the files are still there afterwards
+```
+
+`put` then `del` leaves the file system exactly as it was, verified by
+fingerprint rather than by inspection — not byte-identical, because the
+descriptor area keeps its hole as it does under ITS, but nothing a reader or a
+checker can see has changed.
 
 **Fingerprinted, and the fingerprint is of the file system rather than of the
 file.** `itsfs manifest` records every file's name, length and content checksum;
@@ -285,16 +345,17 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 151 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 179 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing
 it did not bound first.
 
-**What is NOT proven.** There is no writer, so nothing this project *produced*
-has ever been graded by ITS — `NSALV` has checked its reading of a pack, which is
-a different claim. It was also asked about only one kind of damage, a cleared TUT
-word. No ITS magtape has been read, which is why `core` and `dbd9` are
+**What is NOT proven.** `NSALV` has accepted what the writer produced, but **ITS
+itself has never been booted on a pack this project wrote** — a salvager checks
+the bookkeeping, and a monitor opening the file is a further claim. `mkdir` and
+`mkfs` do not exist, so every write so far has been into a directory ITS made.
+`NSALV` was also asked about only one kind of damage, a cleared TUT word. No ITS magtape has been read, which is why `core` and `dbd9` are
 `corroborated` rather than `confirmed` here even though `t10fs` confirmed both;
 the reference pack is one built from source in 2026, not an artifact recovered
 from MIT; and the version span has a floor and no ceiling — both `FSDEFS`

@@ -23,5 +23,7 @@ int cmd_check(int argc, char **argv);
 int cmd_manifest(int argc, char **argv);
 int cmd_verify(int argc, char **argv);
 int cmd_shell(int argc, char **argv);
+int cmd_put(int argc, char **argv);
+int cmd_del(int argc, char **argv);
 
 #endif /* CMDS_H */

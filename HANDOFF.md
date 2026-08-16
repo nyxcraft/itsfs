@@ -11,10 +11,9 @@ discipline, different file system — and ITS is genuinely different, not TOPS-1
 with other field names. See [PLAN.md §5](PLAN.md#5-what-must-be-designed-fresh)
 for the four places that matter.
 
-Phases 0–6 are done: word layer, geometry, cited constants, a complete read-only
-reader, an independent checker, ITS's own salvager agreeing with it, and a
-manifest/verify pair whose fingerprint survives a repacking. **There is no
-writer.**
+Phases 0–7 are done: word layer, geometry, cited constants, a reader, an
+independent checker, a manifest/verify pair, and a **writer** whose output
+ITS's own salvager accepts. `put` and `del` exist; `mkdir` and `mkfs` do not.
 
 ## Read these, in this order
 
@@ -43,6 +42,8 @@ src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes th
                     block-to-sector conversion out a second time on purpose.
 src/cmd_manifest.c  manifest/verify.  The checksum is over WORDS -- see its header.
 src/cmd_shell.c     the explorer.  Reads stdin, which is why it is testable.
+src/write.[ch]      THE ONE MUTATION PATH.  Nothing else writes to a pack.
+src/cmd_write.c     put/del.  Front ends: the host-file conversion and no more.
 tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
                     damages copies of it on purpose.
 tests/accounting.sh does the space add up?  The same three questions `check`
@@ -89,6 +90,15 @@ reader to agree with the writer rather than with ITS.
 **Do not assume a second reference to a block is corruption.** The TUT is a
 reference count. On the reference pack nothing is referenced twice, which means
 nothing here knows what a legitimate second reference looks like.
+
+**Do not append to a directory's name area.** It is SORTED -- 6,056 entries on
+the reference pack, none out of order -- and `QRELOC` in `disk.1228` is what
+keeps it so. `put` inserts and shifts. A writer that appended would produce a
+directory that reads back fine here and that ITS's own lookup walks wrongly.
+
+**Do not write to a pack an emulator has attached.** There is no lock to take.
+`itsfs` checks /proc for another process holding the file, which works on Linux
+and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
 
 ## Known gaps, stated plainly
 

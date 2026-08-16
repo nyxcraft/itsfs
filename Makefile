@@ -13,10 +13,10 @@ CPPFLAGS += -D_FILE_OFFSET_BITS=64
 BIN := bin
 SRC := src
 
-BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c \
-        util.c image.c structure.c itspack.c itsgeom.c itstext.c
+BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c cmd_write.c \
+        util.c image.c structure.c write.c itspack.c itsgeom.c itstext.c
 HDRS := $(SRC)/cmds.h $(SRC)/util.h $(SRC)/image.h $(SRC)/itspack.h $(SRC)/itsgeom.h \
-        $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h
+        $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h $(SRC)/write.h
 
 OBJSRC := $(addprefix $(SRC)/, $(BASE))
 

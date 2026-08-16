@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -63,7 +63,7 @@
         <div class="prose">
 <p>Where each phase ends, and what has to be true before it can be called done.
 <a href="../plan/index.html">PLAN.md</a> has the same table; this is the detail.</p>
-<p>Phases 0–6 are done. What follows them is written here so that the next person
+<p>Phases 0–7 are done. What follows them is written here so that the next person
 does not have to re-derive the order — and the order matters, because each phase
 is validated by something the previous one built.</p>
 <hr />
@@ -152,20 +152,26 @@ block numbers, and that turned out to matter. 5,431 of the reference pack's 5,65
 files are a single run — a fresh build writes sequentially — but 219 are not, and
 one is 59 runs. A display that printed 1,904 numbers would have hidden that.</p>
 <h3 id="phase-7-the-writer">Phase 7 — the writer</h3>
-<p>One file, one mutation path, every front end calling it. In order:
-<code>put</code>, <code>del</code>, <code>mkdir</code>, <code>mkfs</code>.</p>
-<p>Two ITS-specific things to get right, neither of which has an analogue in
-<code>t10fs</code>:</p>
+<p>One file, one mutation path, every front end calling it. <code>put</code> and <code>del</code> exist;
+<code>mkdir</code> and <code>mkfs</code> do not yet.</p>
+<p><strong>Ended by:</strong> <code>NSALV</code> accepting a file system this project wrote — level 2 in the
+oracle's own terms, and the first time anything here has been graded by ITS
+rather than compared with it. See
+<a href="../validation/index.html#level-2--itss-own-salvager-accepts-what-the-writer-produced">validation</a>.</p>
+<p>The two ITS-specific things it had to get right, neither of which has an
+analogue in <code>t10fs</code>:</p>
 <ul>
 <li><strong>A directory is one block, so it can be full</strong>, and full is a refusal rather
-than an allocation problem. The failure mode is <code>directory full</code>, stated with
-the number it refused at, and the directory left exactly as it was.</li>
-<li><strong>The TUT is a reference count</strong>, so allocation is increment and free is
-decrement — and a block at <code>TUTMNY</code> (&quot;many or more&quot;) cannot be decremented
-correctly at all, which is a property of the format the writer has to have an
-answer for rather than discover.</li>
+than an allocation problem — there is no way to grow a UFD. The message names
+the two numbers that met.</li>
+<li><strong>The TUT is a reference count</strong>, so a block at <code>TUTMNY</code> (&quot;many or more&quot;)
+cannot be decremented correctly by anybody. <code>del</code> refuses it by name rather
+than guessing.</li>
 </ul>
-<p><strong>Ends when:</strong> every mutating flow in the suite ends with <code>check</code> clean.</p>
+<p>And one that was not on the list: <strong>the name area is sorted</strong>, and a writer that
+appended would produce a directory ITS's own lookup walks wrongly. That was
+found by measuring the reference pack rather than by reading the source, and it
+is why <code>put</code> inserts and shifts.</p>
 <h3 id="phase-8-native-tool-interop">Phase 8 — native-tool interop</h3>
 <p>The point of the whole exercise, and ITS makes it unusually approachable because
 it builds from source.</p>
@@ -179,8 +185,9 @@ nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
 are all things <code>itsfs check</code> reports and none has been put to ITS.</li>
 <li><strong>The monitor</strong> — boot ITS on a pack we wrote to, and have it read the file, and
 copy it, and let us read the copy back.</li>
-<li><strong>A pack built from nothing</strong> — <code>mkfs</code>, then <code>DSKDMP</code> or the monitor booting on
-it.</li>
+<li><strong><code>mkdir</code> and <code>mkfs</code>.</strong> Every write so far has been into a directory ITS made;
+a pack built from nothing is the harder claim, and <code>DSKDMP</code> or the monitor
+booting on it is how it would be graded.</li>
 </ul>
 <p><strong>Ends when:</strong> ITS reads what we wrote and <code>NSALV</code> finds nothing wrong with it.</p>
 <h3 id="phase-9-tapes">Phase 9 — tapes</h3>

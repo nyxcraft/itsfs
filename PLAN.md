@@ -228,7 +228,7 @@ validated.
 | **5** | `itsfs check` — an independent checker | clean on a real pack, agreeing with the reader block for block; names the right file on a damaged one | **done** |
 | **5a** | ITS's own salvager, against a pack we only READ | `NSALV` names the same blocks and files as `itsfs check`, at two damage sites | **done** |
 | **6** | manifest / verify, and an interactive shell | a manifest from `le64` verifies against the same file system in `dbd9`, over all 6,303 entries | **done** |
-| **7** | writer core, then the mutation engine | every mutating flow ends `check` clean | |
+| **7** | writer core, then the mutation engine | every mutating flow ends `check` clean, and `NSALV` accepts the result | **put/del done; mkdir/mkfs not** |
 | **8** | native-tool interop: `NSALV`, then the monitor | ITS mounts and reads what we wrote | |
 | **9** | tapes: DUMP save sets, and `.tape` containers | round-trips compare bytes | |
 

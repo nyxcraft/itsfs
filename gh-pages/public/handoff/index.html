@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-6 done: two checkers agreeing, one of them MIT&#x27;s</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-7 done: a writer whose output MIT&#x27;s own salvager accepts</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -47,10 +47,9 @@
 discipline, different file system — and ITS is genuinely different, not TOPS-10
 with other field names. See <a href="../plan/index.html#5-what-must-be-designed-fresh">PLAN.md §5</a>
 for the four places that matter.</p>
-<p>Phases 0–6 are done: word layer, geometry, cited constants, a complete read-only
-reader, an independent checker, ITS's own salvager agreeing with it, and a
-manifest/verify pair whose fingerprint survives a repacking. <strong>There is no
-writer.</strong></p>
+<p>Phases 0–7 are done: word layer, geometry, cited constants, a reader, an
+independent checker, a manifest/verify pair, and a <strong>writer</strong> whose output
+ITS's own salvager accepts. <code>put</code> and <code>del</code> exist; <code>mkdir</code> and <code>mkfs</code> do not.</p>
 <h2 id="read-these-in-this-order">Read these, in this order</h2>
 <ol>
 <li><a href="../plan/index.html">PLAN.md</a> — written before any code, and still accurate.</li>
@@ -76,6 +75,8 @@ src/cmd_check.c     the checker.  Shares NO code with structure.c, and writes th
                     block-to-sector conversion out a second time on purpose.
 src/cmd_manifest.c  manifest/verify.  The checksum is over WORDS -- see its header.
 src/cmd_shell.c     the explorer.  Reads stdin, which is why it is testable.
+src/write.[ch]      THE ONE MUTATION PATH.  Nothing else writes to a pack.
+src/cmd_write.c     put/del.  Front ends: the host-file conversion and no more.
 tests/run.sh        108 checks.  Builds its own ITS file system with dd, and
                     damages copies of it on purpose.
 tests/accounting.sh does the space add up?  The same three questions `check`
@@ -113,6 +114,13 @@ reader to agree with the writer rather than with ITS.</p>
 <p><strong>Do not assume a second reference to a block is corruption.</strong> The TUT is a
 reference count. On the reference pack nothing is referenced twice, which means
 nothing here knows what a legitimate second reference looks like.</p>
+<p><strong>Do not append to a directory's name area.</strong> It is SORTED -- 6,056 entries on
+the reference pack, none out of order -- and <code>QRELOC</code> in <code>disk.1228</code> is what
+keeps it so. <code>put</code> inserts and shifts. A writer that appended would produce a
+directory that reads back fine here and that ITS's own lookup walks wrongly.</p>
+<p><strong>Do not write to a pack an emulator has attached.</strong> There is no lock to take.
+<code>itsfs</code> checks /proc for another process holding the file, which works on Linux
+and cannot tell anywhere else -- so it is a seat belt, not a guarantee.</p>
 <h2 id="known-gaps-stated-plainly">Known gaps, stated plainly</h2>
 <ul>
 <li>No writer, therefore no level-1 or level-2 evidence of any kind.</li>
