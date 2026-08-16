@@ -268,7 +268,7 @@ check_mfd(struct ck *c)
 	namp = c->mfd[ITS_MD_NAMP];
 	c->nudsl = c->mfd[ITS_MD_NUDS];
 
-	if (namp < ITS_LMIBLK || namp >= c->wpb) {
+	if (namp < ITS_LMIBLK || namp > c->wpb) {
 		problem(c, "MDNAMP is %llu, outside a %u-word block", (unsigned long long)namp,
 			c->wpb);
 		return -1;
@@ -565,7 +565,10 @@ check_ufd(struct ck *c, struct ckdir *dir)
 		problem(c, "block %llu was reached as |%s| but its UDNAME is |%s|",
 			(unsigned long long)dir->blk, dir->name, name);
 
-	if (namp < ITS_UD_DESC || namp >= c->wpb) {
+	/* namp == wpb is an EMPTY name area, which is what ITS writes for a new
+	 * directory (QSKON: `MOVEI A,2000 / MOVEM A,UDNAMP-1(B)`).  Refusing it
+	 * was this checker's bug, not a pack's. */
+	if (namp < ITS_UD_DESC || namp > c->wpb) {
 		problem(c, "%s: UDNAMP is %llu, outside the header and the block", dir->name,
 			(unsigned long long)namp);
 		return;
@@ -949,7 +952,7 @@ cmd_check(int argc, char **argv)
 		if (c.dirs[i].w != NULL) {
 			uint64_t namp = c.dirs[i].w[ITS_UD_NAMP];
 
-			c.dirs[i].ok = namp >= ITS_UD_DESC && namp < c.wpb;
+			c.dirs[i].ok = namp >= ITS_UD_DESC && namp <= c.wpb;
 		}
 
 	for (i = 0; i < c.ndirs; i++) {

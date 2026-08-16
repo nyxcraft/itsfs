@@ -238,6 +238,23 @@ interop: $(BIN)/itsfs
 	@test -f "$(IMAGE)" || { echo "no image at $(IMAGE) -- set IMAGE=<path>"; exit 2; }
 	@sh tests/interop.sh $(BIN)/itsfs "$(IMAGE)" "$(NSALV_PDP10)" $(INTEROP_TMP)
 
+#
+# `make mkfs-test` -- build a file system from nothing and let ITS grade it.
+#
+# THE ONE PACK WITH NO ITS IN IT.  Everywhere else the starting point is a pack
+# ITS built; here every word is `itsfs mkfs`'s.  Both graders boot FROM TAPE,
+# because a pack this makes does not boot -- ITS starts from the front end's
+# blocks at the bottom of the disk, which NSALV's own ZAP refuses to touch, and
+# `mkfs` writes a file system rather than a bootable pack.
+#
+# Needs the salvager and dskdmp tapes, which the PDP-10/its build leaves in
+# out/<emulator>/.  Budget five minutes.
+#
+NSALV_DSKDMP ?= $(HOME)/its/out/simh/dskdmp.tape
+MKFS_TMP ?= /tmp/itsfs-mkfs
+mkfs-test: $(BIN)/itsfs
+	@sh tests/mkfs.sh $(BIN)/itsfs "$(NSALV_PDP10)" "$(NSALV_TAPE)" "$(NSALV_DSKDMP)" $(MKFS_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -250,4 +267,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop version-diff
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test version-diff

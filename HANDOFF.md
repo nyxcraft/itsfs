@@ -11,7 +11,7 @@ discipline, different file system — and ITS is genuinely different, not TOPS-1
 with other field names. See [PLAN.md §5](PLAN.md#5-what-must-be-designed-fresh)
 for the four places that matter.
 
-Phases 0–7 are done: word layer, geometry, cited constants, a reader, an
+Phases 0–8 (in part) are done: word layer, geometry, cited constants, a reader, an
 independent checker, a manifest/verify pair, and a **writer** whose output
 ITS's own salvager accepts. `put` and `del` exist; `mkdir` and `mkfs` do not.
 
@@ -56,6 +56,8 @@ tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
 tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
 tests/interop.exp   DSKDMP list the directory.  Two emulator runs, on purpose.
+tests/mkfs.sh       `make mkfs-test`: a pack built from nothing, graded by
+                    NSALV and DSKDMP, both booted from tape.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
@@ -109,8 +111,9 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
   pack and salvages it, and DSKDMP lists the file, but ITS's console stops
   taking input once the system is up -- see tests/interop.sh.
 - `NSALV` has been shown only one kind of damage (a cleared TUT word).
-- `mkdir` and `mkfs` do not exist: every write has been into a directory ITS
-  made.
+- A pack `mkfs` builds does not BOOT: ITS starts from the front end's blocks at
+  the bottom of the disk, which `mkfs` does not write (and NSALV's own ZAP
+  refuses to touch).  Both graders for such a pack come off tape.
 - One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
   RM03, no multi-pack file system, no artifact recovered from MIT.
 - No ITS magtape has been read, which is why `core` and `dbd9` are `corroborated`

@@ -21,6 +21,12 @@
 #             pack, before it will come up.  Reaching "IN OPERATION" means that
 #             pass found nothing to stop for.
 #
+# AND IT ASKS ABOUT A DIRECTORY THIS PROJECT MADE, not only about a file in one
+# of ITS's.  That is the stronger half: the MFD entry, the block it resolves to
+# -- which in this format is the entry's own POSITION, with no pointer anywhere
+# to check it against -- and the UFD header in it are all ours, and DSKDMP
+# resolves them with its own arithmetic.
+#
 # WHAT IT DOES NOT ESTABLISH.  The monitor has not been made to OPEN our file
 # and print it.  ITS's console stops accepting input once the system is up: ^Z,
 # which its own doc/DDT.md says gets you a terminal, produces nothing on the
@@ -47,6 +53,9 @@ T=${4:-/tmp/itsfs-interop}
 DIR=${DIR:-KSHACK}
 FN1=${FN1:-ITSFS}
 FN2=${FN2:-TXT}
+
+# A directory this project makes from nothing, to put beside the one ITS made.
+NEWDIR=${NEWDIR:-ITSFS}
 
 EXP=$(dirname "$0")/interop.exp
 [ -f "$EXP" ] || { echo "interop.sh: no $EXP"; exit 2; }
@@ -88,7 +97,36 @@ else
 fi
 
 echo
-echo "2. DSKDMP, ITS's standalone loader, reads the directory"
+echo "2. make a directory from nothing, and write into that"
+
+if "$ITSFS" mkdir "$T/i.dsk" "$NEWDIR" >/dev/null 2>&1; then
+	ok "mkdir $NEWDIR"
+else
+	fail "itsfs mkdir failed"
+fi
+
+# Three names at three points in the sort order, so the insertion into a
+# brand-new empty name area is exercised at the front, middle and end.
+made=0
+
+for f in "$NEWDIR;FIRST FILE" "$NEWDIR;AAA X" "$NEWDIR;ZZZ X"; do
+	"$ITSFS" put "$T/i.dsk" "$f" "$T/msg.txt" >/dev/null 2>&1 && made=$((made + 1))
+done
+
+if [ "$made" -eq 3 ]; then
+	ok "...and put three files into it"
+else
+	fail "only $made of 3 files went into $NEWDIR"
+fi
+
+if "$ITSFS" check "$T/i.dsk" >/dev/null 2>&1; then
+	ok "itsfs check: still clean"
+else
+	fail "itsfs check found problems after mkdir"
+fi
+
+echo
+echo "3. DSKDMP, ITS's standalone loader, reads the directory"
 
 ITS_PDP10=$PDP10 ITS_IMAGE=$T/i.dsk ITS_LOG=$T/its.log ITS_DIR=$DIR ITS_MODE=dskdmp \
 	expect "$EXP" > "$T/dskdmp.exp" 2>&1
@@ -119,8 +157,31 @@ else
 	diff "$T/dskdmp.names" "$T/dskdmp.sorted" 2>&1 | head -6 | sed 's/^/       /'
 fi
 
+# ...AND THE DIRECTORY WE MADE OURSELVES.  This is the stronger of the two:
+# the MFD entry, the block it resolves to and the UFD header in it are all this
+# project's work, and DSKDMP resolves them with its own arithmetic.
+ITS_PDP10=$PDP10 ITS_IMAGE=$T/i.dsk ITS_LOG=$T/ours.log ITS_DIR=$NEWDIR ITS_MODE=dskdmp \
+	expect "$EXP" > "$T/ours.exp" 2>&1
+
+if grep -q "FIRST *FILE" "$T/ours.log" 2>/dev/null; then
+	ok "DSKDMP read a directory THIS PROJECT MADE, and listed its files"
+else
+	fail "DSKDMP did not list $NEWDIR's files -- see $T/ours.log"
+fi
+
+sed -n 's/^ #[0-9]* \(.*\)$/\1/p' "$T/ours.log" | sed 's/ *$//' > "$T/ours.names"
+n=$(wc -l < "$T/ours.names" | tr -d ' ')
+sort "$T/ours.names" > "$T/ours.sorted"
+
+if [ "$n" -eq 3 ] && cmp -s "$T/ours.names" "$T/ours.sorted"; then
+	ok "...all three, in order"
+else
+	fail "expected three entries in order, got $n"
+	sed 's/^/       /' "$T/ours.names"
+fi
+
 echo
-echo "3. ...and then the monitor itself boots on it"
+echo "4. ...and then the monitor itself boots on it"
 
 ITS_PDP10=$PDP10 ITS_IMAGE=$T/i.dsk ITS_LOG=$T/boot.log ITS_DIR=$DIR ITS_MODE=boot \
 	expect "$EXP" > "$T/boot.exp" 2>&1
@@ -142,14 +203,23 @@ else
 	fail "ITS did not come up"
 fi
 
-# The boot writes to the pack -- a salvage pass is a write -- so the file has to
-# still be there and still be right afterwards.
+# The boot writes to the pack -- a salvage pass is a write -- so the files have
+# to still be there and still be right afterwards.  Both of them: the one in
+# ITS's directory and the one in ours.
 "$ITSFS" cat "$T/i.dsk" "$DIR;$FN1 $FN2" > "$T/back2.txt" 2>/dev/null
 
 if cmp -s "$T/msg.txt" "$T/back2.txt"; then
 	ok "...and the file is still there, unchanged, after ITS had the pack"
 else
 	fail "the file changed while ITS had the pack"
+fi
+
+"$ITSFS" cat "$T/i.dsk" "$NEWDIR;FIRST FILE" > "$T/back3.txt" 2>/dev/null
+
+if cmp -s "$T/msg.txt" "$T/back3.txt"; then
+	ok "...and so is the one in the directory we made"
+else
+	fail "the file in $NEWDIR did not survive"
 fi
 
 if "$ITSFS" check "$T/i.dsk" >/dev/null 2>&1; then
@@ -161,7 +231,8 @@ fi
 echo
 if [ $rc -eq 0 ]; then
 	echo "ITS booted on a file system this project wrote, and its standalone"
-	echo "loader listed the file -- in the right place in the directory."
+	echo "loader listed the files -- including out of a directory this project"
+	echo "made from nothing."
 else
 	echo "logs are in $T"
 fi

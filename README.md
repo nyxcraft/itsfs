@@ -3,8 +3,8 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
-> **Status: phases 0–8 in part — a reader, an independent checker, a writer, and
-> ITS booting on a file system this project wrote.** The word layer is proven byte-for-byte
+> **Status: phases 0–8 done bar one thing — a reader, an independent checker, a
+> writer, and ITS accepting a file system built here from nothing.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
 > its own check word, and the reader lists directories, decodes the run-length
 > descriptors that are ITS's block maps, follows links and extracts files.
@@ -81,6 +81,8 @@ the design rather than fitting inside it:
 | `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
 | `itsfs put` | write a host file into a directory — **destructive** |
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
+| `itsfs mkdir` | make a directory — **destructive** |
+| `itsfs mkfs` | create a file system from nothing — **destructive** |
 
 Run any of them with no arguments for its own usage.
 
@@ -181,12 +183,13 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 179 checks
+$ make test             # the regression suite (sh + coreutils), 217 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 $ make interop IMAGE=... # ...and boot ITS on one this wrote
+$ make mkfs-test        # build a pack from nothing; ITS grades it
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
@@ -239,24 +242,59 @@ anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 [validation](docs/validation.md).
 
-**And ITS boots on it.** `make interop` writes a file, then hands the pack to
-the two ITS programs that *use* a file system rather than inspect one:
+**And a file system with no ITS in it at all.** `itsfs mkfs` follows NSALV's own
+`MFDINN`, `TUTINI` and `MARK69`: a master file directory, an allocation table
+and 500 empty directory blocks. Everywhere else in this project the starting
+point is a pack ITS built; here every word is ours, and both graders are booted
+from tape and pointed at it:
+
+```console
+$ make mkfs-test
+1. build a file system where nothing was
+  ok   itsfs check: clean, with nothing in it
+  ok   ...and 505 blocks locked out: 500 directory slots + 1 MFD + 4 table
+
+3. hand it to NSALV, ITS's own salvager (booted from tape)
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and read the pack ID we wrote: ID is ITSFS, Pack #0
+
+4. and to DSKDMP, a third implementation (also from tape)
+  ok   DSKDMP listed a directory on a pack with no ITS in it
+```
+
+A pack `mkfs` makes **does not boot**, and that is correct rather than a
+shortcoming: ITS starts from the front end's blocks at the very bottom of the
+disk — the ones NSALV's own `ZAP` calls the "8080 HOM sectors" and refuses to
+touch — and then loads a system out of a directory. `mkfs` writes a *file
+system*; the boot area and the system are somebody else's job. Which is why both
+graders come off tape.
+
+**And ITS boots on it.** `make interop` writes a file, **makes a directory from
+nothing and writes into that**, then hands the pack to the two ITS programs that
+*use* a file system rather than inspect one:
 
 ```console
 2. DSKDMP, ITS's standalone loader, reads the directory
   ok   DSKDMP listed our file, reading the directory with its own code
   ok   ...and the whole listing is still in order (40 entries)
 
-3. ...and then the monitor itself boots on it
+  ok   DSKDMP read a directory THIS PROJECT MADE, and listed its files
+  ok   ...all three, in order
+
+4. ...and then the monitor itself boots on it
   ok   the monitor ran its startup salvage over the pack
   ok   ITS CAME UP on a pack itsfs wrote to
   ok   ...and the file is still there, unchanged, after ITS had the pack
+  ok   ...and so is the one in the directory we made
 ```
 
 `DSKDMP` is a **third** implementation of this format — standalone, sharing
 nothing with the monitor or with `NSALV` — and it lists our file *in the right
 place*, which is the check that catches a writer that appended instead of
-inserting. The monitor runs a salvage pass over every directory before it will
+inserting. It also reads a directory this project created: the MFD entry, the
+block it resolves to — which in this format is the entry's own **position**, with
+no pointer anywhere to check it against — and the UFD header in it are all ours,
+and DSKDMP resolves them with its own arithmetic. The monitor runs a salvage pass over every directory before it will
 come up at all, so reaching `IN OPERATION` means that pass found nothing to stop
 for.
 
@@ -367,7 +405,7 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 179 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 217 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses *by name* and reads nothing

@@ -6,7 +6,7 @@
   "branch": "main",
   "copyright": "Nicholas J. Kisseberth",
   "copyright_year": "2026",
-  "status": "phases 0-8 in part: ITS boots on a file system this project wrote",
+  "status": "phases 0-8 bar one: ITS accepts a file system built here from nothing",
   "attribution": [
     "Software Architecture, Design & Engineering by Nicholas J. Kisseberth."
   ],

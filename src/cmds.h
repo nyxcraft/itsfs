@@ -25,5 +25,7 @@ int cmd_verify(int argc, char **argv);
 int cmd_shell(int argc, char **argv);
 int cmd_put(int argc, char **argv);
 int cmd_del(int argc, char **argv);
+int cmd_mkdir(int argc, char **argv);
+int cmd_mkfs(int argc, char **argv);
 
 #endif /* CMDS_H */

@@ -76,8 +76,10 @@ its_mfd_read(its_image *im, its_mfd *m)
 	m->namp = m->w[ITS_MD_NAMP];
 	m->nudsl = m->w[ITS_MD_NUDS];
 
-	/* Both came off the disk and both are about to be used as indices. */
-	if (m->namp >= m->wpb || m->namp < ITS_LMIBLK) {
+	/* Both came off the disk and both are about to be used as indices.
+	 * MDNAMP == wpb is an MFD with no directories in it, which is legal for
+	 * the same reason UDNAMP == wpb is -- see its_ufd_read. */
+	if (m->namp > m->wpb || m->namp < ITS_LMIBLK) {
 		fprintf(stderr, "itsfs: %s: MDNAMP is %llu, outside a %u-word block\n",
 			im->path, (unsigned long long)m->namp, m->wpb);
 		free(m->w);
@@ -152,11 +154,18 @@ its_ufd_read(its_image *im, uint64_t blk, its_ufd *u)
 	/*
 	 * UDNAMP indexes this block, and a UFD that has never been written --
 	 * every slot the MFD has room for exists on the disk whether or not a
-	 * directory was ever made there -- reads as zero.  Both are refused
-	 * here rather than half-accepted: a name area at word 0 would overlap
-	 * the header it is supposed to follow.
+	 * directory was ever made there -- reads as zero.  That is refused: a
+	 * name area at word 0 would overlap the header it is supposed to follow.
+	 *
+	 * BUT UDNAMP == WPB IS LEGAL AND MEANS EMPTY.  ITS writes exactly that
+	 * when it makes a directory -- `MOVEI A,2000 / MOVEM A,UDNAMP-1(B)` in
+	 * QSKON, disk.1228 -- so the name area starts past the end of the block
+	 * and there are no entries yet.  This reader refused it for four phases
+	 * and nobody noticed, because every directory on the reference pack has
+	 * at least one file in it (the lowest UDNAMP there is 1019, which is
+	 * one entry).  Writing `mkdir` is what found it.
 	 */
-	if (u->namp < ITS_UD_DESC || u->namp >= u->wpb) {
+	if (u->namp < ITS_UD_DESC || u->namp > u->wpb) {
 		fprintf(stderr, "itsfs: block %llu is not a UFD: UDNAMP is %llu\n",
 			(unsigned long long)blk, (unsigned long long)u->namp);
 		free(u->w);

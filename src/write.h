@@ -109,4 +109,27 @@ int itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2,
 /* Remove a file: free its blocks, zero its descriptor, close the name gap. */
 int itsw_del(its_writer *w, const char *dir, const char *fn1, const char *fn2);
 
+/*
+ * Make a directory.
+ *
+ * THIS ALLOCATES NO BLOCKS, which is the surprising part.  Every one of the
+ * NUDSL directory blocks is locked out in the TUT whether a directory lives
+ * there or not -- the reference pack has 500 locked out and 247 in use -- so
+ * creating one is an MFD entry and a zeroed block, and the allocation table
+ * does not change at all.
+ */
+int itsw_mkdir(its_writer *w, const char *name);
+
+/*
+ * Create a file system on an image, ITS's own way.
+ *
+ * `nuds` is how many directory slots the MFD has room for -- a monitor
+ * build-time parameter (NUDSL), not something on the disk, and FSDEFS asserts
+ * NUDSL*LMNBLK+LMIBLK <= 2000 octal about it.  `swapa` is the swapping
+ * allocation in blocks; `packnum` and `id` name the pack.
+ *
+ * The writer must already be open on an image of the right size.
+ */
+int itsw_mkfs(its_writer *w, uint64_t nuds, uint64_t swapa, uint64_t packnum, const char *id);
+
 #endif /* WRITE_H */

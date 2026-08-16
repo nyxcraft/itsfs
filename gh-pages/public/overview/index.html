@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="index.html">Overview</a>
@@ -42,8 +42,8 @@
 <p>Host tools for the <strong>ITS file system</strong> — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.</p>
 <blockquote>
-<p><strong>Status: phases 0–8 in part — a reader, an independent checker, a writer, and
-ITS booting on a file system this project wrote.</strong> The word layer is proven byte-for-byte
+<p><strong>Status: phases 0–8 done bar one thing — a reader, an independent checker, a
+writer, and ITS accepting a file system built here from nothing.</strong> The word layer is proven byte-for-byte
 against a real RP06 pack, the geometry layer finds the master file directory by
 its own check word, and the reader lists directories, decodes the run-length
 descriptors that are ITS's block maps, follows links and extracts files.
@@ -173,6 +173,14 @@ the same field, distinguished by one bit.</li>
 <td><code>itsfs del</code></td>
 <td>remove a file — <code>rm</code> is the same command — <strong>destructive</strong></td>
 </tr>
+<tr>
+<td><code>itsfs mkdir</code></td>
+<td>make a directory — <strong>destructive</strong></td>
+</tr>
+<tr>
+<td><code>itsfs mkfs</code></td>
+<td>create a file system from nothing — <strong>destructive</strong></td>
+</tr>
 </tbody>
 </table>
 <p>Run any of them with no arguments for its own usage.</p>
@@ -252,12 +260,13 @@ in front asks for octal.</p>
 <h2 id="build">Build</h2>
 <pre><code class="language-console">$ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 179 checks
+$ make test             # the regression suite (sh + coreutils), 217 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
 $ make nsalv  IMAGE=... # ...and hand that pack to ITS's own salvager
 $ make interop IMAGE=... # ...and boot ITS on one this wrote
+$ make mkfs-test        # build a pack from nothing; ITS grades it
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 </code></pre>
 <h2 id="what-is-proven-and-what-is-only-claimed">What is proven, and what is only claimed</h2>
@@ -296,21 +305,52 @@ comparisons; the second would catch a single block skipped or double-counted
 anywhere on the pack; the third is the only check there is on the MFD-slot
 arithmetic, which has no pointer to verify it against. See
 <a href="../validation/index.html">validation</a>.</p>
-<p><strong>And ITS boots on it.</strong> <code>make interop</code> writes a file, then hands the pack to
-the two ITS programs that <em>use</em> a file system rather than inspect one:</p>
+<p><strong>And a file system with no ITS in it at all.</strong> <code>itsfs mkfs</code> follows NSALV's own
+<code>MFDINN</code>, <code>TUTINI</code> and <code>MARK69</code>: a master file directory, an allocation table
+and 500 empty directory blocks. Everywhere else in this project the starting
+point is a pack ITS built; here every word is ours, and both graders are booted
+from tape and pointed at it:</p>
+<pre><code class="language-console">$ make mkfs-test
+1. build a file system where nothing was
+  ok   itsfs check: clean, with nothing in it
+  ok   ...and 505 blocks locked out: 500 directory slots + 1 MFD + 4 table
+
+3. hand it to NSALV, ITS's own salvager (booted from tape)
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and read the pack ID we wrote: ID is ITSFS, Pack #0
+
+4. and to DSKDMP, a third implementation (also from tape)
+  ok   DSKDMP listed a directory on a pack with no ITS in it
+</code></pre>
+<p>A pack <code>mkfs</code> makes <strong>does not boot</strong>, and that is correct rather than a
+shortcoming: ITS starts from the front end's blocks at the very bottom of the
+disk — the ones NSALV's own <code>ZAP</code> calls the &quot;8080 HOM sectors&quot; and refuses to
+touch — and then loads a system out of a directory. <code>mkfs</code> writes a <em>file
+system</em>; the boot area and the system are somebody else's job. Which is why both
+graders come off tape.</p>
+<p><strong>And ITS boots on it.</strong> <code>make interop</code> writes a file, <strong>makes a directory from
+nothing and writes into that</strong>, then hands the pack to the two ITS programs that
+<em>use</em> a file system rather than inspect one:</p>
 <pre><code class="language-console">2. DSKDMP, ITS's standalone loader, reads the directory
   ok   DSKDMP listed our file, reading the directory with its own code
   ok   ...and the whole listing is still in order (40 entries)
 
-3. ...and then the monitor itself boots on it
+  ok   DSKDMP read a directory THIS PROJECT MADE, and listed its files
+  ok   ...all three, in order
+
+4. ...and then the monitor itself boots on it
   ok   the monitor ran its startup salvage over the pack
   ok   ITS CAME UP on a pack itsfs wrote to
   ok   ...and the file is still there, unchanged, after ITS had the pack
+  ok   ...and so is the one in the directory we made
 </code></pre>
 <p><code>DSKDMP</code> is a <strong>third</strong> implementation of this format — standalone, sharing
 nothing with the monitor or with <code>NSALV</code> — and it lists our file <em>in the right
 place</em>, which is the check that catches a writer that appended instead of
-inserting. The monitor runs a salvage pass over every directory before it will
+inserting. It also reads a directory this project created: the MFD entry, the
+block it resolves to — which in this format is the entry's own <strong>position</strong>, with
+no pointer anywhere to check it against — and the UFD header in it are all ours,
+and DSKDMP resolves them with its own arithmetic. The monitor runs a salvage pass over every directory before it will
 come up at all, so reaching <code>IN OPERATION</code> means that pass found nothing to stop
 for.</p>
 <p><strong>Written, and ITS's own salvager accepts the result.</strong> This is the level of
@@ -398,7 +438,7 @@ predates this project by forty years. Where it agrees, the agreement is about th
 format rather than about our reading of it. It also needs no writer, which is why
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See <a href="../validation/index.html#a-second-opinion-that-is-not-ours">validation</a>.</p>
-<p><strong>Hostile input is bounded.</strong> 179 checks in the suite, a third of them feeding the
+<p><strong>Hostile input is bounded.</strong> 217 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 1,750
 commands over damaged packs under ASan and UBSan without a finding. The bar is
 not that the reader survives — it is that it refuses <em>by name</em> and reads nothing

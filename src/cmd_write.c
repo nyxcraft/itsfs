@@ -303,3 +303,190 @@ cmd_del(int argc, char **argv)
 {
 	return run(argc, argv, 1);
 }
+
+/*
+ * `itsfs mkdir image NAME`
+ *
+ * ITS's own idiom for this is `:print DIR;..new. (udir)` typed at a DDT, which
+ * is a file operation on a magic name rather than a command of its own.  This
+ * is a command of its own, because a host tool has no DDT and the magic name
+ * would be a worse interface than a verb.
+ */
+int
+cmd_mkdir(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	int c, rc;
+
+	while ((c = getopt(argc, argv, "p:d:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	if (optind != argc - 2)
+		goto usage;
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	rc = itsw_mkdir(&w, argv[optind + 1]) == 0 ? 0 : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "made %s\n", argv[optind + 1]);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs mkdir [-p packing] [-d drive] image NAME\n"
+			"       DESTRUCTIVE.  Work on a copy.\n");
+	return 2;
+}
+
+/*
+ * `itsfs mkfs [-f] [-d drive] [-n packnum] [-s blocks] [-u slots] image ID`
+ *
+ * WHAT THIS MAKES IS A FILE SYSTEM, NOT A BOOTABLE PACK.  ITS boots from the
+ * front end's blocks at the very bottom of the disk -- the ones NSALV's ZAP
+ * calls the "8080 'HOM' sectors" and refuses to touch -- and then loads a
+ * system out of a directory.  Neither is here: this writes a master file
+ * directory, an allocation table and NUDS empty directory blocks, which is
+ * exactly what NSALV's own MARK does after it has formatted the platter.
+ *
+ * So the way to check one is NSALV, which boots from tape and does not care
+ * whether the pack can boot.  `make mkfs-test` does that.
+ */
+int
+cmd_mkfs(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	uint64_t packnum = 0, nuds = 500, swapa = 0;
+	int c, force = 0, rc;
+	unsigned nblksc;
+
+	while ((c = getopt(argc, argv, "p:d:n:s:u:f")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		case 'n':
+			if (parse_count(optarg, &packnum) != 0)
+				return 2;
+			break;
+		case 's':
+			if (parse_count(optarg, &swapa) != 0)
+				return 2;
+			break;
+		case 'u':
+			if (parse_count(optarg, &nuds) != 0)
+				return 2;
+			break;
+		case 'f':
+			force = 1;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	if (optind != argc - 2)
+		goto usage;
+
+	if (drv == NULL)
+		drv = its_drive_by_name("rp06");
+
+	if (!force && access(argv[optind], F_OK) == 0) {
+		fprintf(stderr, "itsfs: %s exists (use -f to overwrite -- THIS DESTROYS IT)\n",
+			argv[optind]);
+		return 1;
+	}
+
+	/*
+	 * The image is created at the drive's full size and left sparse: a
+	 * fresh file system is almost entirely zeros, and 300 MB of them on
+	 * disk to say so would be a waste.  An existing file is truncated to
+	 * the same size, which is what makes -f mean "start over" rather than
+	 * "write a file system into whatever was here".
+	 */
+	{
+		uint64_t words = its_nsectors(drv) * ITS_WORDS_PER_SECTOR;
+		uint64_t bytes = (words / pk->words) * pk->bytes;
+		FILE *f = fopen(argv[optind], "wb");
+
+		if (f == NULL) {
+			perror(argv[optind]);
+			return 1;
+		}
+
+		if (fseeko(f, (off_t)bytes - 1, SEEK_SET) != 0 || fputc(0, f) == EOF) {
+			perror(argv[optind]);
+			fclose(f);
+			return 1;
+		}
+
+		fclose(f);
+	}
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	/*
+	 * The swapping allocation defaults to what the ITS build answers MARK's
+	 * "Alloc?" question with -- 3000 octal, 1536 blocks -- rounded up to a
+	 * whole cylinder, because FSDEFS says QSWAPA must be a multiple of
+	 * DECADE and 1536 is not one.  On an RP06 that gives 1551, which is what
+	 * the reference pack carries.
+	 */
+	nblksc = its_blks_per_cyl(drv);
+
+	if (swapa == 0)
+		swapa = 1536;
+	swapa = ((swapa + nblksc - 1) / nblksc) * nblksc;
+
+	rc = itsw_mkfs(&w, nuds, swapa, packnum, argv[optind + 1]) == 0 ? 0 : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "made an %s file system on %s: pack %llu, ID %s, "
+				"%llu directory slots, %llu blocks of swapping\n",
+			drv->name, argv[optind], (unsigned long long)packnum, argv[optind + 1],
+			(unsigned long long)nuds, (unsigned long long)swapa);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs mkfs [-p packing] [-d drive] [-f] [-n packnum]\n"
+			"                  [-s blocks] [-u slots] image ID\n"
+			"       -d   the drive to make it for (default rp06)\n"
+			"       -n   the pack number (default 0)\n"
+			"       -s   blocks of swapping area (default 1536, rounded up\n"
+			"            to a whole cylinder as FSDEFS requires)\n"
+			"       -u   directory slots in the MFD (default 500)\n"
+			"       -f   overwrite an existing image -- THIS DESTROYS IT\n"
+			"\n"
+			"       Makes a FILE SYSTEM, not a bootable pack: the boot blocks\n"
+			"       and the system are somebody else's job.  Check one with\n"
+			"       NSALV, which boots from tape.\n");
+	return 2;
+}

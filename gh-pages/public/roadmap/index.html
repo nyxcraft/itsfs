@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -179,6 +179,9 @@ is why <code>put</code> inserts and shifts.</p>
 <li><strong><code>DSKDMP</code> lists our file</strong>, with its own reader — a third implementation,
 sharing nothing with the monitor or with <code>NSALV</code> — and the listing is still in
 sorted order, which is what catches a writer that appended (<code>make interop</code>).</li>
+<li><strong><code>mkdir</code> exists, and DSKDMP reads what it makes.</strong> The MFD entry's position is
+the address of the directory's block, with no pointer to check it against, so
+a third implementation resolving it is the only way to know it is right.</li>
 <li><strong>ITS boots on a pack we wrote</strong>, running its startup salvage over every
 directory on the way (<code>make interop</code>).</li>
 </ul>
@@ -188,12 +191,14 @@ file system — it is the console: ITS stops accepting input on the CTY once the
 system is up, <code>^Z</code> produces nothing there, and the terminal lines this machine
 profile exposes are not configured for login. Getting a usable terminal is the
 whole task; the file-system half is expected to be uneventful.</p>
-<p>Also still missing: <strong><code>mkdir</code> and <code>mkfs</code>.</strong> Every write so far has been into a
-directory ITS made. A pack built from nothing is the harder claim, and DSKDMP or
-the monitor booting on it is how it would be graded. ITS's own idiom for making a
-directory is worth knowing before starting: <code>:print DIR;..new. (udir)</code>.</p>
-<p><strong>Ends when:</strong> ITS reads a file we wrote, out of a directory we made, on a pack
-we created.</p>
+<ul>
+<li><strong><code>mkfs</code> exists</strong>, and both NSALV and DSKDMP accept a pack built from nothing
+(<code>make mkfs-test</code>). It writes a file system rather than a bootable pack, so
+both are booted from tape; see
+<a href="../validation/index.html#a-file-system-with-no-its-in-it">validation</a>.</li>
+</ul>
+<p><strong>Ends when:</strong> the monitor opens a file we wrote and prints it. Everything else
+in this phase is done.</p>
 <h3 id="phase-9-tapes">Phase 9 — tapes</h3>
 <p>The container (SIMH <code>.tap</code> framing, or ITS's own), and the archive above it (DUMP
 save sets, which <code>itstar</code> also reads). This is where <code>core</code> gets promoted from

@@ -739,3 +739,298 @@ out:
 		its_ufd_free(&u);
 	return rc;
 }
+
+/* ----------------------------------------------------------------- mkdir */
+
+/*
+ * Make a directory, following `QSKON` in disk.1228 step for step, because the
+ * two things it does that are not obvious are both load-bearing:
+ *
+ *   1. IT REUSES A FREED SLOT BEFORE EXTENDING.  QSKONC scans the name area for
+ *      an entry whose name word is zero and takes the first one; only when there
+ *      is none (QSKOND) does it move MDNAMP down.  Always extending would work
+ *      and would waste a directory block per deletion forever, on a pack that
+ *      has a fixed number of them.
+ *
+ *   2. THERE IS A FLOOR.  `CAIGE TT,2 / BUG ;Don't clobber HOM blocks` -- the
+ *      lowest blocks are not available, and the monitor treats reaching them as
+ *      a bug rather than an error.  Here it is a refusal.
+ *
+ * A new UFD is a zeroed block with UDNAMP at the END of it (`MOVEI A,2000 /
+ * MOVEM A,UDNAMP-1(B)`), which is an empty name area, and UDESCP zero, which is
+ * an empty descriptor area.  The two grow towards each other from there.
+ */
+int
+itsw_mkdir(its_writer *w, const char *name)
+{
+	its_mfd m;
+	uint64_t n = 0;
+	uint64_t *ufd = NULL;
+	unsigned slot = 0;
+	int extend = 1, rc = -1;
+	long long blk;
+	char have[ITS_NAME_MAX];
+
+	if (its_sixbit_make(name, &n) != 0 || name[0] == '\0') {
+		fprintf(stderr, "itsfs: '%s' is not a SIXBIT directory name: at most six "
+				"characters, 040..137, and there is no lower case\n",
+			name);
+		return -1;
+	}
+
+	if (its_mfd_read(&w->im, &m) != 0)
+		return -1;
+
+	/* Already there?  The MFD is not sorted -- position is the address, so
+	 * it cannot be -- and the whole area has to be scanned anyway. */
+	for (unsigned i = 0; i < its_mfd_slots(&m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(&m, i, have, &b) != 0)
+			continue;
+
+		if (have[0] != '\0' && strcmp(have, name) == 0) {
+			fprintf(stderr, "itsfs: a directory named '%s' is already in the MFD "
+					"(block %llu)\n",
+				name, (unsigned long long)b);
+			goto out;
+		}
+	}
+
+	/* QSKONC: a slot whose name word is zero, before extending. */
+	for (unsigned i = (unsigned)m.namp; i + ITS_LMNBLK <= m.wpb; i += ITS_LMNBLK)
+		if (m.w[i + ITS_MN_UNAM] == 0) {
+			slot = i;
+			extend = 0;
+			break;
+		}
+
+	if (extend) {
+		if (m.namp < ITS_LMNBLK || m.namp - ITS_LMNBLK < ITS_LMIBLK) {
+			fprintf(stderr, "itsfs: the MFD is full: its name area starts at word %llu "
+					"and the header ends at %d\n",
+				(unsigned long long)m.namp, ITS_LMIBLK);
+			goto out;
+		}
+
+		slot = (unsigned)m.namp - ITS_LMNBLK;
+	}
+
+	/* The position is the address.  See its.h and structure.c: this is the
+	 * same arithmetic the reader uses, and it is signed for the same reason. */
+	blk = (long long)slot - (long long)m.wpb + (long long)ITS_LMNBLK * (long long)m.nudsl;
+
+	if (blk < 0 || blk % ITS_LMNBLK != 0) {
+		fprintf(stderr, "itsfs: MFD slot %u does not resolve to a block\n", slot);
+		goto out;
+	}
+
+	blk /= ITS_LMNBLK;
+
+	/* `CAIGE TT,2 / BUG ;Don't clobber HOM blocks`. */
+	if (blk < 2) {
+		fprintf(stderr, "itsfs: the next directory would land in block %lld, which ITS "
+				"keeps back -- refusing\n",
+			blk);
+		goto out;
+	}
+
+	if ((uint64_t)blk >= m.nudsl) {
+		fprintf(stderr, "itsfs: block %lld is at or past NUDSL (%llu)\n", blk,
+			(unsigned long long)m.nudsl);
+		goto out;
+	}
+
+	ufd = calloc(w->wpb, sizeof *ufd);
+
+	if (ufd == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		goto out;
+	}
+
+	/* An empty directory: both areas at their starting ends. */
+	ufd[ITS_UD_ESCP] = 0;
+	ufd[ITS_UD_NAMP] = w->wpb;
+	ufd[ITS_UD_NAME] = n;
+	ufd[ITS_UD_BLKS] = 0;
+	ufd[ITS_UD_ALLO] = 0;
+
+	/* THE UFD FIRST, THE MFD ENTRY LAST.  An interruption between them leaves
+	 * a zeroed block nothing points at, which is what a spare directory slot
+	 * already is.  The other order leaves the MFD naming a block of rubbish. */
+	if (put_block(w, (uint64_t)blk, ufd, w->wpb) != 0)
+		goto out;
+
+	m.w[slot + ITS_MN_UNAM] = n;
+	m.w[slot + 1] = 0; /* FSDEFS: the second word of a name block is zero, and
+			    * DECUUO depends on it -- see its.h. */
+
+	if (extend)
+		m.w[ITS_MD_NAMP] = m.namp - ITS_LMNBLK;
+
+	if (put_block(w, m.blk, m.w, m.wpb) != 0)
+		goto out;
+
+	rc = 0;
+out:
+	free(ufd);
+	its_mfd_free(&m);
+	return rc;
+}
+
+/* ------------------------------------------------------------------ mkfs */
+
+/*
+ * Create a file system, following NSALV's own MFDINN, TUTINI and MARK69.
+ *
+ * WHAT A FRESH ITS PACK IS, and it is less than it looks: a master file
+ * directory, an allocation table, and NUDS zeroed directory blocks.  There is
+ * no boot area to lay down here and no system files to copy -- both of those
+ * are somebody else's job -- so the whole of this is three structures.
+ *
+ * MFDINN, the blank MFD:
+ *      MDCHK  = SIXBIT "M.F.D."
+ *      MDNUDS = NUDS
+ *      MDNAMP = PG$SIZ, the BLOCK SIZE -- an empty name area, starting past
+ *               the end of the block.  This is the same convention an empty
+ *               UFD uses and the same one this project's reader refused for
+ *               four phases; see its_ufd_read.
+ *
+ * TUTINI, the allocation table:
+ *      QLASTB = NBLKS               "LAST REGULAR BLOCK IS LAST TUT'ED"
+ *      QFRSTB = NBLKS - what the table can hold, or 0 if that is negative
+ *      then LOCK OUT: the directory area (QFRSTB..NUDS-1), the MFD block --
+ *      which TUTINI gets from SBTAB, its "special block table" -- and the
+ *      NTUTBL blocks of the table itself.
+ *
+ * MARK69, the rest:
+ *      QPKNUM, QPAKID, and QTUTP = max(QSWAPA, NUDS) rounded UP to a whole
+ *      cylinder, "in case QSWAPA not on cylinder boundary".
+ *
+ * And ZAP zeroes the directory blocks -- FROM BLOCK 2, not from 0: `ADD
+ * J,[2,,2] ;Protect 8080 'HOM' sectors`.  The lowest two blocks are the front
+ * end's, and this leaves them alone for the same reason mkdir refuses to put a
+ * directory there.
+ */
+int
+itsw_mkfs(its_writer *w, uint64_t nuds, uint64_t swapa, uint64_t packnum, const char *id)
+{
+	const its_drive *d = w->im.drv;
+	unsigned nblksc = its_blks_per_cyl(d);
+	uint64_t nblks = its_nblks(d);
+	uint64_t mfdblk = its_mfd_block(d);
+	uint64_t tutblk = its_tut_block(d);
+	uint64_t first, tutcap, sixid = 0;
+	uint64_t *blk = NULL, *tut = NULL;
+	size_t tutwords = (size_t)w->wpb * d->ntutbl;
+	int rc = -1;
+
+	if (id != NULL && its_sixbit_make(id, &sixid) != 0) {
+		fprintf(stderr, "itsfs: '%s' is not a SIXBIT pack ID: at most six characters, "
+				"040..137, and there is no lower case\n",
+			id);
+		return -1;
+	}
+
+	/* FSDEFS asserts this about NUDSL at assembly time:
+	 *   IF1 IFDEF NUDSL, IFG NUDSL*LMNBLK+LMIBLK-2000,.ERR MFD LOSES */
+	if (nuds < 3 || nuds * ITS_LMNBLK + ITS_LMIBLK > w->wpb) {
+		fprintf(stderr, "itsfs: %llu directory slots will not fit in a %u-word MFD "
+				"(FSDEFS: NUDSL*LMNBLK+LMIBLK must not exceed 2000 octal)\n",
+			(unsigned long long)nuds, w->wpb);
+		return -1;
+	}
+
+	if (swapa >= nblks) {
+		fprintf(stderr, "itsfs: a swapping allocation of %llu is not less than the "
+				"%llu blocks this drive has\n",
+			(unsigned long long)swapa, (unsigned long long)nblks);
+		return -1;
+	}
+
+	blk = calloc(w->wpb, sizeof *blk);
+	tut = calloc(tutwords, sizeof *tut);
+
+	if (blk == NULL || tut == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		goto out;
+	}
+
+	/* ---- ZAP: zero the directory blocks, from 2. */
+	for (uint64_t b = 2; b < nuds; b++)
+		if (put_block(w, b, blk, w->wpb) != 0)
+			goto out;
+
+	/* ---- TUTINI. */
+	tutcap = ((uint64_t)w->wpb * d->ntutbl - ITS_LTIBLK) * ITS_TUTEPW;
+	first = nblks > tutcap ? nblks - tutcap : 0;
+
+	if (first > nuds) {
+		fprintf(stderr, "itsfs: the table cannot map enough blocks for the file area "
+				"(NSALV calls this \"not enough room for file area\")\n");
+		goto out;
+	}
+
+	tut[ITS_Q_FRSTB] = first;
+	tut[ITS_Q_LASTB] = nblks;
+	tut[ITS_Q_SWAPA] = swapa;
+	tut[ITS_Q_PKNUM] = packnum;
+	tut[ITS_Q_PAKID] = sixid;
+
+	/* MARK69: the free-space pointer starts at the file area, rounded up to
+	 * a whole cylinder "in case QSWAPA not on cylinder boundary". */
+	{
+		uint64_t p = swapa > nuds ? swapa : nuds;
+
+		tut[ITS_Q_TUTP] = ((p + nblksc - 1) / nblksc) * nblksc;
+	}
+
+	/* The three locked-out sets, in TUTINI's order. */
+	{
+		/* This writer's TUT is the one in `w`, because tut_set works on
+		 * it and on nothing else.  Point it at the new table for the
+		 * duration, then put it back -- the alternative is a second
+		 * copy of the three-bits-per-block arithmetic, and one of those
+		 * is the whole reason cmd_check.c is a separate program. */
+		its_tut save = w->tut;
+
+		w->tut.w = tut;
+		w->tut.nwords = tutwords;
+		w->tut.first = first;
+		w->tut.last = nblks;
+
+		for (uint64_t b = first; b < nuds; b++)
+			tut_set(w, b, ITS_TUTLK); /* the directory area */
+
+		tut_set(w, mfdblk, ITS_TUTLK); /* SBTAB's one live entry */
+
+		for (unsigned i = 0; i < d->ntutbl; i++)
+			tut_set(w, mfdblk - 1 - i, ITS_TUTLK); /* the table itself */
+
+		w->tut = save;
+	}
+
+	/* ---- MFDINN, and write both.  The MFD LAST, for the same reason a
+	 * directory entry goes last everywhere else here: until its check word
+	 * is on the disk, nothing will mistake this for a file system. */
+	for (unsigned i = 0; i < d->ntutbl; i++)
+		if (put_block(w, tutblk + i, tut + (size_t)i * w->wpb, w->wpb) != 0)
+			goto out;
+
+	memset(blk, 0, (size_t)w->wpb * sizeof *blk);
+	blk[ITS_MD_CHK] = ITS_MFD_MAGIC;
+	blk[ITS_MD_NUDS] = nuds;
+	blk[ITS_MD_NAMP] = w->wpb;
+
+	if (put_block(w, mfdblk, blk, w->wpb) != 0)
+		goto out;
+
+	/* The in-memory table this writer was opened with is now stale, and it
+	 * must not be flushed over the one just written. */
+	w->tut_dirty = 0;
+	rc = 0;
+out:
+	free(blk);
+	free(tut);
+	return rc;
+}

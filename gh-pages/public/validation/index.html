@@ -13,7 +13,7 @@
     <header class="site-header site-header--compact">
       <a class="brand" href="../index.html">
         <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
-        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 in part: ITS boots on a file system this project wrote</span>
+        <span class="brand__name">itsfs</span><span class="brand__badge">phases 0-8 bar one: ITS accepts a file system built here from nothing</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../overview/index.html">Overview</a>
@@ -48,6 +48,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#level-2-again-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 again — ITS boots on it, and a third implementation reads it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-does-not-establish">What this does not establish</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-method-that-looked-right-and-was-not">A method that looked right and was not</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-file-system-with-no-its-in-it">A file system with no ITS in it</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-one-check-that-is-not-the-pack-agreeing-with-itself">The one check that is not the pack agreeing with itself</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
@@ -347,6 +348,12 @@ from the disk on its own, reads the file system with its own code, and
 is still in sorted order</strong>, which is the check that catches a writer that
 appended instead of inserting. A file at the end of the list would be listed
 just as happily.</p>
+<p><strong>And it reads a directory this project made from nothing.</strong> That is the stronger
+of the two, because of what a directory IS here: the MFD entry's own <em>position</em>
+is the address of its block, with no pointer anywhere to check it against. So a
+<code>mkdir</code> that put the entry in the wrong slot would produce a directory this
+project reads back perfectly and ITS looks for somewhere else. DSKDMP resolving
+it with its own arithmetic is the only way to know.</p>
 <p><strong>The monitor's startup salvage is a gate.</strong> ITS runs a salvage pass over every
 directory on the pack before it comes up; reaching <code>IN OPERATION</code> means that pass
 found nothing worth stopping for. And the pack still holds the file, unchanged,
@@ -368,6 +375,47 @@ the original ITS wrote, then verify our copy of it against core. It reported
 Whatever those two commands compare, it is not what it appears to be, and the
 first result said nothing about the writer. Verifying a test against known-good
 input is the rule that caught it.</p>
+<h2 id="a-file-system-with-no-its-in-it">A file system with no ITS in it</h2>
+<pre><code class="language-console">$ make mkfs-test
+1. build a file system where nothing was
+  ok   made an rp06 file system: pack 0, ID ITSFS, 500 directory slots, 1551 blocks of swapping
+   317132800 bytes, 4028 KB actually on disk
+  ok   itsfs check: clean, with nothing in it
+  ok   ...and 505 blocks locked out: 500 directory slots + 1 MFD + 4 table
+
+3. hand it to NSALV, ITS's own salvager (booted from tape)
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and read the pack ID we wrote: ID is ITSFS, Pack #0
+
+4. and to DSKDMP, a third implementation (also from tape)
+  ok   DSKDMP listed a directory on a pack with no ITS in it
+  ok   ...both files, in order
+</code></pre>
+<p>Everywhere else the starting point is a pack ITS built, and the question is
+whether this project reads or extends it correctly. <strong>Here every word was written
+here</strong>: the master file directory, the allocation table, the directory blocks,
+the directories, the files. A structure that is wrong only when nothing else is
+right has nowhere to hide.</p>
+<p><code>mkfs</code> is a transcription like everything else — NSALV's <code>MFDINN</code> for the MFD,
+<code>TUTINI</code> for the table and <code>MARK69</code> for the rest. Three things it takes from
+them that would not have been guessed:</p>
+<ul>
+<li><strong><code>MDNAMP</code> starts at the block size.</strong> <code>MFDINN</code> writes <code>PG$SIZ</code>, which is an
+empty name area beginning past the end of the block — the same convention an
+empty UFD uses, and the one this project's reader refused for four phases.</li>
+<li><strong><code>QFRSTB</code> is not always zero.</strong> <code>TUTINI</code> computes it as the last block minus
+what the table can physically map, which is negative on an RP06 and clamped to
+zero — but would not be on a drive whose table was too small for it.</li>
+<li><strong>The MFD block is locked out via <code>SBTAB</code></strong>, NSALV's &quot;special block table&quot;,
+and not by the loop that locks out the table itself. Reading only the obvious
+loop leaves the MFD marked free.</li>
+</ul>
+<p><strong>It does not boot, and that is correct.</strong> ITS starts from the front end's blocks
+at the very bottom of the disk — the ones <code>ZAP</code> calls the &quot;8080 HOM sectors&quot; and
+explicitly refuses to touch — and then loads a system out of a directory. <code>mkfs</code>
+writes a file system; the boot area and the system are somebody else's job. So
+both graders are booted from tape and pointed at the pack, and ITS coming up on
+one is not claimed anywhere.</p>
 <h2 id="the-fingerprint-is-of-the-file-system-not-of-the-container">The fingerprint is of the file system, not of the container</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 fingerprinting it, and verifying that through a different packing ...
@@ -427,7 +475,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>179 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>217 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -438,7 +486,7 @@ is that it <strong>refuses by name</strong> and reads nothing it did not bound f
 sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.</p>
-<p><strong><code>make test-san</code></strong> runs the same 179 under AddressSanitizer and UBSan, which is
+<p><strong><code>make test-san</code></strong> runs the same 217 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader
@@ -489,6 +537,14 @@ entry</strong> — precisely the bug s5fs shipped, on an image its checker calle
 stops early: the duplicate search scans the whole area while the insertion point
 stops at the first greater entry. On a sorted area those are the same scan; on a
 damaged one, only the full scan is safe.</p>
+<p><strong>The reader could not read an empty directory.</strong> <code>UDNAMP == wpb</code> means the name
+area is empty — it starts past the end of the block — and it is exactly what ITS
+writes when it creates one (<code>QSKON</code>: <code>MOVEI A,2000 / MOVEM A,UDNAMP-1(B)</code>). Both
+the reader and the checker refused it as &quot;outside the block&quot; for four phases, and
+nothing noticed, because <strong>every directory on the reference pack has at least one
+file in it</strong> — the lowest <code>UDNAMP</code> there is 1019, which is one entry. Writing
+<code>mkdir</code> is what found it: the first directory this project created was one its
+own reader would not open.</p>
 <p><strong>Two documented numbers in the MFD are not what they look like.</strong> <code>MDNUDS</code> is
 the number of directory slots the monitor was <em>built</em> for, not the number in use;
 the number in use follows from where <code>MDNAMP</code> points. The first version of <code>info</code>

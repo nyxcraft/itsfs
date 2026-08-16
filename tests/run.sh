@@ -785,6 +785,139 @@ else
 	no "get -w then put -w round-trips a file word for word"
 fi
 
+# --- mkdir.  IT ALLOCATES NO BLOCKS: every one of the NUDSL directory blocks is
+# locked out in the TUT whether a directory lives there or not, so making one is
+# an MFD entry and a zeroed block and the allocation table does not move.
+
+mkfixture "$T/m1.dsk"
+out=$("$ITSFS" mkdir "$T/m1.dsk" NEWDIR 2>&1); rc=$?
+chk "mkdir makes a directory" "$rc" "0"
+
+out=$("$ITSFS" check "$T/m1.dsk" 2>&1); rc=$?
+chk "...and the pack still checks clean" "$rc" "0"
+
+out=$("$ITSFS" dirs "$T/m1.dsk")
+has "...and it is in the MFD" "$out" "NEWDIR"
+has "...which now holds three" "$out" "3 directories"
+
+# AN EMPTY DIRECTORY HAS UDNAMP == the block size, which is what ITS writes
+# (QSKON: `MOVEI A,2000 / MOVEM A,UDNAMP-1(B)`).  This reader REFUSED that for
+# four phases and nothing noticed, because every directory on the reference pack
+# has at least one file in it.  Writing mkdir is what found it.
+out=$("$ITSFS" ls "$T/m1.dsk" NEWDIR 2>&1); rc=$?
+chk "an empty directory reads, rather than being refused as malformed" "$rc" "0"
+has "...as empty" "$out" "0 entries"
+
+out=$("$ITSFS" put "$T/m1.dsk" 'NEWDIR;FIRST FILE' "$T/put.txt" 2>&1); rc=$?
+chk "a file can be put into a directory we made" "$rc" "0"
+"$ITSFS" cat "$T/m1.dsk" 'NEWDIR;FIRST FILE' > "$T/mback.txt" 2>/dev/null
+
+if cmp -s "$T/put.txt" "$T/mback.txt"; then
+	ok "...and reads back byte-identical"
+else
+	no "...and reads back byte-identical"
+fi
+
+"$ITSFS" put "$T/m1.dsk" 'NEWDIR;AAA X' "$T/put.txt" >/dev/null 2>&1
+"$ITSFS" put "$T/m1.dsk" 'NEWDIR;ZZZ X' "$T/put.txt" >/dev/null 2>&1
+out=$("$ITSFS" ls "$T/m1.dsk" NEWDIR | grep -v '^#' | awk '{print $1}' | tr '\n' ' ')
+chk "...and a fresh name area sorts from the first entry on" "$out" "AAA FIRST ZZZ "
+
+out=$("$ITSFS" check "$T/m1.dsk" 2>&1); rc=$?
+chk "...and the pack is still clean" "$rc" "0"
+
+out=$("$ITSFS" mkdir "$T/m1.dsk" NEWDIR 2>&1); rc=$?
+chk "mkdir refuses a name already in the MFD" "$rc" "1"
+has "...saying where it is" "$out" "already in the MFD"
+
+out=$("$ITSFS" mkdir "$T/m1.dsk" 'lower' 2>&1); rc=$?
+chk "mkdir refuses a name that is not SIXBIT" "$rc" "1"
+
+# A FREED SLOT IS REUSED BEFORE THE AREA IS EXTENDED, which is what QSKONC does
+# and what keeps a pack from running out of its fixed number of directory blocks
+# one deletion at a time.
+#
+# The slot freed here belongs to a directory that is EMPTY.  The first version
+# of this test zeroed a live one, and `check` was right to object: nothing then
+# points at that UFD, so the blocks its files hold are marked in use and claimed
+# by nobody.  Removing a directory that still has files in it is a real
+# operation with a real consequence, and it is not this test's subject.
+mkfixture "$T/m2.dsk"
+"$ITSFS" mkdir "$T/m2.dsk" FIRSTD >/dev/null 2>&1
+before=$("$ITSFS" dump -z -w 2 "$T/m2.dsk" $MFDBLK | tail -1 | awk '{print $2}')
+chk "mkdir extended the MFD name area by one slot" "$before" "000000001772"
+
+# Zero the name FIRSTD left behind: an empty directory, so nothing is orphaned.
+poke "$T/m2.dsk" $MFDBLK 1018 0
+"$ITSFS" mkdir "$T/m2.dsk" REUSED >/dev/null 2>&1
+out=$("$ITSFS" dirs "$T/m2.dsk")
+has "mkdir reuses a freed MFD slot" "$out" "REUSED"
+hasnt "...rather than leaving the old name" "$out" "FIRSTD"
+namp=$("$ITSFS" dump -z -w 2 "$T/m2.dsk" $MFDBLK | tail -1 | awk '{print $2}')
+chk "...without extending the name area again" "$namp" "$before"
+
+out=$("$ITSFS" check "$T/m2.dsk" 2>&1); rc=$?
+chk "...and the result checks clean" "$rc" "0"
+
+# --- mkfs.  A file system where nothing was, following NSALV's own MFDINN,
+# TUTINI and MARK69.  The image is sparse: an rp06 is 302 MB of mostly zeros.
+
+out=$("$ITSFS" mkfs "$T/f1.dsk" NEWPAK 2>&1); rc=$?
+chk "mkfs makes a file system" "$rc" "0"
+
+out=$("$ITSFS" check "$T/f1.dsk" 2>&1); rc=$?
+chk "...and it checks clean with nothing in it" "$rc" "0"
+has "...with the whole structural claim in one line" "$out" "505 locked out"
+has "...and nothing allocated" "$out" "claimed        0 blocks, in 0 files"
+
+out=$("$ITSFS" info "$T/f1.dsk")
+has "mkfs writes the MFD check word" "$out" "an ITS master file directory"
+has "...an empty MFD" "$out" "directories   0"
+has "...and the drive it was made for" "$out" "rp06"
+
+out=$("$ITSFS" free "$T/f1.dsk")
+has "mkfs writes the pack ID into the table" "$out" "NEWPAK"
+
+# It is USABLE, which is the part a structural check does not cover.
+"$ITSFS" mkdir "$T/f1.dsk" SYS >/dev/null 2>&1
+"$ITSFS" put "$T/f1.dsk" 'SYS;HELLO TXT' "$T/put.txt" >/dev/null 2>&1
+"$ITSFS" cat "$T/f1.dsk" 'SYS;HELLO TXT' > "$T/fback.txt" 2>/dev/null
+
+if cmp -s "$T/put.txt" "$T/fback.txt"; then
+	ok "a directory and a file can be made on it, and read back"
+else
+	no "a directory and a file can be made on it, and read back"
+fi
+
+out=$("$ITSFS" check "$T/f1.dsk" 2>&1); rc=$?
+chk "...and it is still clean" "$rc" "0"
+
+out=$("$ITSFS" mkfs "$T/f1.dsk" AGAIN 2>&1); rc=$?
+chk "mkfs will not overwrite an image without -f" "$rc" "1"
+has "...and says what -f would do" "$out" "THIS DESTROYS IT"
+
+# FSDEFS asserts NUDSL*LMNBLK+LMIBLK <= 2000 octal at assembly time, so a slot
+# count that breaks it is one no ITS could have been built with.
+out=$("$ITSFS" mkfs -f -u 900 "$T/f2.dsk" TOOBIG 2>&1); rc=$?
+chk "mkfs refuses more directory slots than an MFD holds" "$rc" "1"
+has "...citing the assertion FSDEFS makes" "$out" "NUDSL*LMNBLK+LMIBLK"
+
+out=$("$ITSFS" mkfs -f -s 99999 "$T/f3.dsk" TOOBIG 2>&1); rc=$?
+chk "mkfs refuses a swapping area bigger than the drive" "$rc" "1"
+
+out=$("$ITSFS" mkfs -f "$T/f4.dsk" 'lower' 2>&1); rc=$?
+chk "mkfs refuses a pack ID that is not SIXBIT" "$rc" "1"
+
+# A different drive, to prove the geometry is a parameter rather than rp06
+# baked in.  An rm03 has a different NBLKSC, NTUTBL and MFD block.
+out=$("$ITSFS" mkfs -f -d rm03 "$T/f5.dsk" RM03PK 2>&1); rc=$?
+chk "mkfs makes an rm03 file system too" "$rc" "0"
+out=$("$ITSFS" check "$T/f5.dsk" 2>&1); rc=$?
+chk "...and that checks clean" "$rc" "0"
+out=$("$ITSFS" info "$T/f5.dsk")
+has "...with the rm03's own geometry" "$out" "rm03"
+has "...and its own MFD block" "$out" "MFD           block 7379"
+
 # --- the refusals.  A writer's refusals matter more than its successes: each
 # one below leaves the pack usable, and the test checks that as well as the exit.
 

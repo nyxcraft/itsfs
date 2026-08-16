@@ -29,6 +29,8 @@
  *   itsfs shell     interactive explorer
  *   itsfs put       write a host file into a directory -- DESTRUCTIVE
  *   itsfs del       remove a file -- DESTRUCTIVE
+ *   itsfs mkdir     make a directory -- DESTRUCTIVE
+ *   itsfs mkfs      create a file system -- DESTRUCTIVE
  */
 
 #include "cmds.h"
@@ -60,6 +62,8 @@ static const struct subcmd {
 	{ "put",      cmd_put,      "write a host file into a directory (destructive)" },
 	{ "del",      cmd_del,      "remove a file (destructive)"               },
 	{ "rm",       cmd_del,      "remove a file -- the same command as del"  },
+	{ "mkdir",    cmd_mkdir,    "make a directory (destructive)"            },
+	{ "mkfs",     cmd_mkfs,     "create a file system (destructive)"        },
 };
 
 /* clang-format on */

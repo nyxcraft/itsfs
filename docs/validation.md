@@ -326,6 +326,13 @@ is still in sorted order**, which is the check that catches a writer that
 appended instead of inserting. A file at the end of the list would be listed
 just as happily.
 
+**And it reads a directory this project made from nothing.** That is the stronger
+of the two, because of what a directory IS here: the MFD entry's own *position*
+is the address of its block, with no pointer anywhere to check it against. So a
+`mkdir` that put the entry in the wrong slot would produce a directory this
+project reads back perfectly and ITS looks for somewhere else. DSKDMP resolving
+it with its own arithmetic is the only way to know.
+
 **The monitor's startup salvage is a gate.** ITS runs a salvage pass over every
 directory on the pack before it comes up; reaching `IN OPERATION` means that pass
 found nothing worth stopping for. And the pack still holds the file, unchanged,
@@ -352,6 +359,52 @@ The control run is the only reason that is not written up here as a finding:
 Whatever those two commands compare, it is not what it appears to be, and the
 first result said nothing about the writer. Verifying a test against known-good
 input is the rule that caught it.
+
+## A file system with no ITS in it
+
+```console
+$ make mkfs-test
+1. build a file system where nothing was
+  ok   made an rp06 file system: pack 0, ID ITSFS, 500 directory slots, 1551 blocks of swapping
+   317132800 bytes, 4028 KB actually on disk
+  ok   itsfs check: clean, with nothing in it
+  ok   ...and 505 blocks locked out: 500 directory slots + 1 MFD + 4 table
+
+3. hand it to NSALV, ITS's own salvager (booted from tape)
+  ok   NSALV: ACCEPTED IT -- salvaged, and had nothing to say
+  ok   ...and read the pack ID we wrote: ID is ITSFS, Pack #0
+
+4. and to DSKDMP, a third implementation (also from tape)
+  ok   DSKDMP listed a directory on a pack with no ITS in it
+  ok   ...both files, in order
+```
+
+Everywhere else the starting point is a pack ITS built, and the question is
+whether this project reads or extends it correctly. **Here every word was written
+here**: the master file directory, the allocation table, the directory blocks,
+the directories, the files. A structure that is wrong only when nothing else is
+right has nowhere to hide.
+
+`mkfs` is a transcription like everything else — NSALV's `MFDINN` for the MFD,
+`TUTINI` for the table and `MARK69` for the rest. Three things it takes from
+them that would not have been guessed:
+
+- **`MDNAMP` starts at the block size.** `MFDINN` writes `PG$SIZ`, which is an
+  empty name area beginning past the end of the block — the same convention an
+  empty UFD uses, and the one this project's reader refused for four phases.
+- **`QFRSTB` is not always zero.** `TUTINI` computes it as the last block minus
+  what the table can physically map, which is negative on an RP06 and clamped to
+  zero — but would not be on a drive whose table was too small for it.
+- **The MFD block is locked out via `SBTAB`**, NSALV's "special block table",
+  and not by the loop that locks out the table itself. Reading only the obvious
+  loop leaves the MFD marked free.
+
+**It does not boot, and that is correct.** ITS starts from the front end's blocks
+at the very bottom of the disk — the ones `ZAP` calls the "8080 HOM sectors" and
+explicitly refuses to touch — and then loads a system out of a directory. `mkfs`
+writes a file system; the boot area and the system are somebody else's job. So
+both graders are booted from tape and pointed at the pack, and ITS coming up on
+one is not claimed anywhere.
 
 ## The fingerprint is of the file system, not of the container
 
@@ -432,7 +485,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**179 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**217 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -445,7 +498,7 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 179 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 217 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 
@@ -507,6 +560,15 @@ Two things came out of it. The fixture is sorted now, and `name_slot` no longer
 stops early: the duplicate search scans the whole area while the insertion point
 stops at the first greater entry. On a sorted area those are the same scan; on a
 damaged one, only the full scan is safe.
+
+**The reader could not read an empty directory.** `UDNAMP == wpb` means the name
+area is empty — it starts past the end of the block — and it is exactly what ITS
+writes when it creates one (`QSKON`: `MOVEI A,2000 / MOVEM A,UDNAMP-1(B)`). Both
+the reader and the checker refused it as "outside the block" for four phases, and
+nothing noticed, because **every directory on the reference pack has at least one
+file in it** — the lowest `UDNAMP` there is 1019, which is one entry. Writing
+`mkdir` is what found it: the first directory this project created was one its
+own reader would not open.
 
 **Two documented numbers in the MFD are not what they look like.** `MDNUDS` is
 the number of directory slots the monitor was *built* for, not the number in use;

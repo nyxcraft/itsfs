@@ -159,6 +159,9 @@ Three of the four things here exist:
 - **`DSKDMP` lists our file**, with its own reader — a third implementation,
   sharing nothing with the monitor or with `NSALV` — and the listing is still in
   sorted order, which is what catches a writer that appended (`make interop`).
+- **`mkdir` exists, and DSKDMP reads what it makes.** The MFD entry's position is
+  the address of the directory's block, with no pointer to check it against, so
+  a third implementation resolving it is the only way to know it is right.
 - **ITS boots on a pack we wrote**, running its startup salvage over every
   directory on the way (`make interop`).
 
@@ -169,13 +172,13 @@ system is up, `^Z` produces nothing there, and the terminal lines this machine
 profile exposes are not configured for login. Getting a usable terminal is the
 whole task; the file-system half is expected to be uneventful.
 
-Also still missing: **`mkdir` and `mkfs`.** Every write so far has been into a
-directory ITS made. A pack built from nothing is the harder claim, and DSKDMP or
-the monitor booting on it is how it would be graded. ITS's own idiom for making a
-directory is worth knowing before starting: `:print DIR;..new. (udir)`.
+- **`mkfs` exists**, and both NSALV and DSKDMP accept a pack built from nothing
+  (`make mkfs-test`). It writes a file system rather than a bootable pack, so
+  both are booted from tape; see
+  [validation](validation.md#a-file-system-with-no-its-in-it).
 
-**Ends when:** ITS reads a file we wrote, out of a directory we made, on a pack
-we created.
+**Ends when:** the monitor opens a file we wrote and prints it. Everything else
+in this phase is done.
 
 ### Phase 9 — tapes
 
