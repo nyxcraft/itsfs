@@ -629,7 +629,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**259 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**262 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -642,7 +642,7 @@ sparse image one word at a time with `dd`. There is no writer in this project, a
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.
 
-**`make test-san`** runs the same 259 under AddressSanitizer and UBSan, which is
+**`make test-san`** runs the same 262 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds *read* does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.
 
@@ -727,6 +727,36 @@ argument — and lost them silently. **The cross-check above is what found it**,
 which is exactly the argument for having a piece of evidence that does not come
 from the pack: nothing the pack knows about itself could have caught this, because
 the pack has no opinion about what a character is.
+
+## What a review found, after the phases were done
+
+Reading `write.c` back with the whole thing finished turned up two things worth
+recording, and neither was a live bug — which is itself the useful part of
+saying so.
+
+**A comment that lied about the order of operations.** It claimed the
+directory-full check happened *before* the blocks were allocated, "so a full
+directory does not leave the allocation table marked for a file that was never
+made". The code allocates first. It has to: how many descriptor bytes a file
+needs depends on how fragmented its blocks turn out to be, so the question
+cannot be asked until they are chosen. The invariant does hold — every path out
+calls `itsw_free` and the table ends up byte-identical — but a comment that
+describes a safety property in terms of an order the code does not follow is
+worse than none, because the next person will rely on it.
+
+**A write whose bounds were checked in a different file.** `del` zeroes a
+descriptor in place, and the two bytes after a load address were written without
+a bounds check of their own. They were safe: `its_desc_blocks` in `structure.c`
+walks the same bytes first with a checked reader and refuses anything that runs
+off the block, so `del` never reaches them with a bad offset. Verified by trying
+— a descriptor pointer put in the last word of a directory is refused with
+`truncated load address`, and the file is left alone.
+
+But that is the shape an out-of-bounds write has *before* somebody changes one
+of the two functions. `desc_put` bounds itself now, which costs one comparison
+and turns "unreachable" into "impossible". The corruption fuzzer had never found
+it because it damages descriptor bytes at the *start* of the area, where the
+offsets involved are small.
 
 ## What is not established
 

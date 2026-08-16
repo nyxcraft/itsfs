@@ -350,16 +350,33 @@ itsw_desc_encode(const uint64_t *blocks, long nblocks, unsigned char *bytes, siz
 
 /* ---------------------------------------------------- directory surgery */
 
-/* The i'th six-bit byte of a directory block's descriptor area. */
-static void
-desc_put(uint64_t *u, unsigned off, unsigned val)
+/*
+ * The i'th six-bit byte of a directory block's descriptor area.
+ *
+ * BOUNDS-CHECKED HERE, AND NOT ONLY BY THE CALLERS.  Both callers do in fact
+ * bound `off` -- `put` by the directory-full check, and `del` because
+ * its_desc_blocks has already walked the same bytes with a checked reader and
+ * refused anything that ran off the block.  So this is not a live bug.
+ *
+ * But `del`'s loop writes the two bytes after a load address WITHOUT checking
+ * them itself, and its safety therefore rests on a check in a different
+ * function in a different file.  That is the shape a real out-of-bounds write
+ * has before somebody changes one of the two, and it costs one comparison to
+ * make it impossible instead of merely unreachable.  Returns -1 rather than
+ * writing past the block.
+ */
+static int
+desc_put(uint64_t *u, unsigned wpb, unsigned off, unsigned val)
 {
 	unsigned word = ITS_UD_DESC + off / ITS_UFDBPW;
-	unsigned pos = off % ITS_UFDBPW;
-	unsigned shift = 30 - 6 * pos;
+	unsigned shift = 30 - 6 * (off % ITS_UFDBPW);
 	uint64_t mask = (uint64_t)077 << shift;
 
+	if (word >= wpb)
+		return -1;
+
 	u[word] = (u[word] & ~mask) | ((uint64_t)(val & 077) << shift);
+	return 0;
 }
 
 /*
@@ -489,8 +506,13 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 	 * capacity.  So this is a refusal, with the numbers, rather than an
 	 * allocation problem.
 	 *
-	 * Checked BEFORE the blocks are allocated, so a full directory does not
-	 * leave the TUT marked for a file that was never made.
+	 * It is checked AFTER the blocks are allocated, which an earlier comment
+	 * here claimed it was not.  It has to be: how many descriptor bytes a
+	 * file needs depends on how fragmented its blocks turn out to be, so the
+	 * question cannot be asked until they are chosen.  Every path out of the
+	 * checks below therefore calls itsw_free first, and the TUT ends up
+	 * byte-identical to how it was found -- which the suite checks by
+	 * fingerprinting the pack before and after six refusals.
 	 */
 	if (itsw_alloc(w, (uint64_t)nblocks, blocks) != 0)
 		goto out;
@@ -551,7 +573,16 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 	/* The TUT is already marked by itsw_alloc; itsw_close flushes it. */
 
 	for (size_t i = 0; i < ndesc; i++)
-		desc_put(u.w, descoff + (unsigned)i, desc[i]);
+		if (desc_put(u.w, u.wpb, descoff + (unsigned)i, desc[i]) != 0) {
+			/* The full check above makes this unreachable; if it
+			 * ever is reached, the file has not been named yet and
+			 * the blocks are the only thing to give back. */
+			fprintf(stderr, "itsfs: the descriptor would run off directory block %llu\n",
+				(unsigned long long)dirblk);
+			itsw_free(w, blocks, (uint64_t)nblocks);
+			goto out;
+		}
+
 	u.w[ITS_UD_ESCP] = descoff + ndesc;
 
 	/*
@@ -698,18 +729,23 @@ itsw_del(its_writer *w, const char *dir, const char *fn1, const char *fn2)
 			if (word >= u.wpb)
 				break;
 			c = its_byte6(u.w[word], off % ITS_UFDBPW);
-			desc_put(u.w, off, 0);
-			off++;
+
+			if (desc_put(u.w, u.wpb, off++, 0) != 0)
+				break;
 
 			if (c == 0)
 				break;
 
 			/* A load address is three bytes and the two after it
 			 * may be anything, including zero -- so they are
-			 * consumed rather than tested. */
+			 * consumed rather than tested.  Each is bounded on its
+			 * own; see desc_put. */
 			if (c >= ITS_UD_LOADAD && !e.is_link) {
-				desc_put(u.w, off++, 0);
-				desc_put(u.w, off++, 0);
+				if (desc_put(u.w, u.wpb, off++, 0) != 0)
+					break;
+
+				if (desc_put(u.w, u.wpb, off++, 0) != 0)
+					break;
 			}
 		}
 	}

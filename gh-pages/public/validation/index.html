@@ -60,6 +60,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
 </ul>
         </nav>
@@ -589,7 +590,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>259 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>262 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -600,7 +601,7 @@ is that it <strong>refuses by name</strong> and reads nothing it did not bound f
 sparse image one word at a time with <code>dd</code>. There is no writer in this project, and
 that is exactly why — a suite that used the writer to make its input would be
 asking the reader to agree with the writer rather than with ITS.</p>
-<p><strong><code>make test-san</code></strong> runs the same 259 under AddressSanitizer and UBSan, which is
+<p><strong><code>make test-san</code></strong> runs the same 262 under AddressSanitizer and UBSan, which is
 where those checks have teeth: an out-of-bounds <em>read</em> does not fault on a normal
 build. It returns whatever was next in memory, and the test passes.</p>
 <p><strong><code>make fuzz</code></strong> damages one random word of a valid pack, in a structure the reader
@@ -671,6 +672,31 @@ argument — and lost them silently. <strong>The cross-check above is what found
 which is exactly the argument for having a piece of evidence that does not come
 from the pack: nothing the pack knows about itself could have caught this, because
 the pack has no opinion about what a character is.</p>
+<h2 id="what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</h2>
+<p>Reading <code>write.c</code> back with the whole thing finished turned up two things worth
+recording, and neither was a live bug — which is itself the useful part of
+saying so.</p>
+<p><strong>A comment that lied about the order of operations.</strong> It claimed the
+directory-full check happened <em>before</em> the blocks were allocated, &quot;so a full
+directory does not leave the allocation table marked for a file that was never
+made&quot;. The code allocates first. It has to: how many descriptor bytes a file
+needs depends on how fragmented its blocks turn out to be, so the question
+cannot be asked until they are chosen. The invariant does hold — every path out
+calls <code>itsw_free</code> and the table ends up byte-identical — but a comment that
+describes a safety property in terms of an order the code does not follow is
+worse than none, because the next person will rely on it.</p>
+<p><strong>A write whose bounds were checked in a different file.</strong> <code>del</code> zeroes a
+descriptor in place, and the two bytes after a load address were written without
+a bounds check of their own. They were safe: <code>its_desc_blocks</code> in <code>structure.c</code>
+walks the same bytes first with a checked reader and refuses anything that runs
+off the block, so <code>del</code> never reaches them with a bad offset. Verified by trying
+— a descriptor pointer put in the last word of a directory is refused with
+<code>truncated load address</code>, and the file is left alone.</p>
+<p>But that is the shape an out-of-bounds write has <em>before</em> somebody changes one
+of the two functions. <code>desc_put</code> bounds itself now, which costs one comparison
+and turns &quot;unreachable&quot; into &quot;impossible&quot;. The corruption fuzzer had never found
+it because it damages descriptor bytes at the <em>start</em> of the area, where the
+offsets involved are small.</p>
 <h2 id="what-is-not-established">What is not established</h2>
 <p>Stated plainly, because a validation document that only lists successes is
 marketing:</p>

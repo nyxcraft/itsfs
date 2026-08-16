@@ -978,6 +978,23 @@ fi
 out=$("$ITSFS" check "$T/r1.dsk" 2>&1); rc=$?
 chk "...and still clean" "$rc" "0"
 
+# A DESCRIPTOR POINTER AT THE VERY END OF THE BLOCK.  UNDSCP is 13 bits and is
+# not bounded by anything on the disk, so it can name a byte in the last word of
+# a directory -- and a load address there wants two more bytes that are not in
+# the block at all.  `del` refuses, because the block list is decoded with a
+# bounded reader before anything is zeroed; the zeroing loop bounds itself as
+# well now, so its safety no longer rests on a check in another file.
+mkfixture "$T/r4.dsk"
+poke "$T/r4.dsk" 498 1016 $(((3 << 24) | 6076))
+poke "$T/r4.dsk" 498 1023 $((040 << 6))
+out=$("$ITSFS" del "$T/r4.dsk" 'TEST;HELLO TXT' 2>&1); rc=$?
+chk "a descriptor running off the end of the block is refused by del" "$rc" "1"
+has "...rather than zeroing past it" "$out" "truncated load address"
+
+# ...and the file is still there, because a refusal does not half-delete.
+out=$("$ITSFS" ls "$T/r4.dsk" TEST 2>&1)
+has "...leaving the entry alone" "$out" "HELLO  TXT"
+
 # THE IN-USE CHECK.  There is no lock to take, so the only signal is that
 # another process holds the file open -- which is what an emulator with the pack
 # attached looks like.
