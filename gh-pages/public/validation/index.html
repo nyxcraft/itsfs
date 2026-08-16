@@ -35,21 +35,21 @@
         <nav class="section-nav" aria-label="On this page">
 <ul class="section-nav__list">
 <li><a class="section-nav__link section-nav__link--l2" href="#the-standard">The standard</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-3a-the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-3b-the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-3c-a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-3a--the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-3b--the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-3c--a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-opinion-that-is-not-ours">A second opinion that is not ours</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#why-both-runs-are-needed">Why both runs are needed</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-third-kind-of-agreement-found-by-accident">A third kind of agreement, found by accident</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-comparison-actually-compares">What the comparison actually compares</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-establishes-and-what-it-does-not">What this establishes, and what it does not</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS&#x27;s own salvager accepts what the writer produced</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2--itss-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS&#x27;s own salvager accepts what the writer produced</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-writer-had-to-get-right-to-earn-that">What the writer had to get right to earn that</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-2-completely-the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-putdel-does-not-do-deliberately">What put/del does NOT do, deliberately</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2-completely--the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#the-obstacle-was-never-the-file-system">The obstacle was never the file system</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#it-is-reproducible-and-it-is-not-reliable">It is reproducible, and it is not reliable</a></li>
-<li><a class="section-nav__link section-nav__link--l2" href="#level-2-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-2--its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-does-not-establish">What this does not establish</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-method-that-looked-right-and-was-not">A method that looked right and was not</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-file-system-with-no-its-in-it">A file system with no ITS in it</a></li>
@@ -67,6 +67,7 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-it-does-not-prove">What it does not prove</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
 </ul>
         </nav>
@@ -104,7 +105,7 @@ other opinion is MIT's.</p>
 interesting question is how strong a level-3 result can be made. The answer turns
 out to be: quite strong, if the numbers you check against were computed by
 somebody else.</p>
-<h2 id="level-3a-the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</h2>
+<h2 id="level-3a--the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 IDENTICAL: the word layer round-trips the real pack
 IDENTICAL: cross-packing round trip
@@ -117,7 +118,7 @@ then the same through <code>core</code> (five bytes to the word, a different str
 word to 36 bits, byte identity over the whole image also proves that <strong>nothing on
 the pack sets any of the 28 bits outside the word</strong> — an invariant everything
 above depends on, established by measurement rather than assertion.</p>
-<h2 id="level-3b-the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</h2>
+<h2 id="level-3b--the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</h2>
 <pre><code class="language-console">1. 247 directories walked, 247 whose descriptors agree with their own UDBLKS
 2. 30940 blocks described by files == 30940 blocks the TUT calls in use
 3. 505 blocks locked out == 500 directories + 1 MFD + 4 TUT blocks
@@ -139,7 +140,7 @@ from an MFD entry to its directory — the position <em>is</em> the address — 
 way to know the formula is right is that the blocks it says are directories are
 exactly the blocks the TUT refuses to allocate. 500 directories, one MFD, four
 TUT blocks, 505 locked out.</p>
-<h2 id="level-3c-a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</h2>
+<h2 id="level-3c--a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</h2>
 <pre><code class="language-console">$ itsfs check rp0.dsk
 checking rp0.dsk: rp06, 38305 blocks, MFD at 19081, TUT at 19077
 
@@ -317,7 +318,7 @@ about <code>UNTIM</code>, <code>UNBYTE</code>, creation dates, or where a link p
 <a href="../filesystem/index.html#gap-register">the gap register</a>.</p>
 <p>And it grades a <strong>reading</strong>. Nothing here has been written by this project, so it
 is not the level-2 result — that still needs a writer, and it is still phase 8.</p>
-<h2 id="level-2-its-s-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS's own salvager accepts what the writer produced</h2>
+<h2 id="level-2--itss-own-salvager-accepts-what-the-writer-produced">Level 2 — ITS's own salvager accepts what the writer produced</h2>
 <pre><code class="language-console">$ make nsalv IMAGE=~/its/out/simh/rp0.dsk
 4. a pack itsfs WROTE to
   ok   itsfs put wrote 2 files
@@ -349,7 +350,7 @@ incremented.</li>
 <li><strong>Blocks come from above <code>QSWAPA</code></strong>, which FSDEFS describes as the line new
 files are not written below.</li>
 </ul>
-<h3 id="what-put-del-does-not-do-deliberately">What put/del does NOT do, deliberately</h3>
+<h3 id="what-putdel-does-not-do-deliberately">What put/del does NOT do, deliberately</h3>
 <p><code>del</code> zeroes the descriptor bytes in place and does not compact the descriptor
 area — because <code>QDEL3</code> does exactly that and leaves the same hole. So <code>put</code> then
 <code>del</code> is <strong>not byte-identical</strong>; it is identical to a fingerprint, which is the
@@ -359,7 +360,7 @@ $ itsfs put w.dsk 'TEST;TEMP FILE' f.txt &amp;&amp; itsfs del w.dsk 'TEST;TEMP F
 $ itsfs manifest w.dsk | diff before.mf -
 $
 </code></pre>
-<h2 id="level-2-completely-the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</h2>
+<h2 id="level-2-completely--the-monitor-opens-the-file-and-prints-it">Level 2, completely — the monitor opens the file and prints it</h2>
 <pre><code class="language-console">$ make interop IMAGE=~/its/out/simh/rp0.dsk
 5. ...and the monitor opens the file and prints it
   ok   removed the job that owns the console (itsfs del)
@@ -409,7 +410,7 @@ varies with the host's load.</li>
 which is what the ITS build's scripts do — deadlocks against a running system.
 Sending the line in one burst loses it.</li>
 </ul>
-<h2 id="level-2-its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</h2>
+<h2 id="level-2--its-boots-on-it-and-a-third-implementation-reads-it">Level 2 — ITS boots on it, and a third implementation reads it</h2>
 <pre><code class="language-console">$ make interop IMAGE=~/its/out/simh/rp0.dsk
 2. DSKDMP, ITS's standalone loader, reads the directory
   ok   DSKDMP listed our file, reading the directory with its own code
@@ -848,6 +849,83 @@ compare <em>equal</em>, so without that guard the check would have printed <code
 the check work rather than merely fail honestly.</p>
 <p><code>tests/crosscheck.sh</code> was never exposed — it compares with <code>cmp</code> and <code>tr</code>, and
 already forces <code>LC_ALL=C</code>.</p>
+<h3 id="it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</h3>
+<p>Within one working session, three separate tools this project verifies <em>with</em>
+silently discarded the thing they were asked about and then reported an answer
+with no hint anything was missing:</p>
+<table>
+<thead>
+<tr>
+<th>tool</th>
+<th>what it silently dropped</th>
+<th>what it reported</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>grep</code> (ugrep)</td>
+<td>any file with a non-UTF-8 byte — 13.5% of the ITS tree</td>
+<td>&quot;no matches&quot;, exit 1</td>
+</tr>
+<tr>
+<td><code>check_links.py</code></td>
+<td>every <code>#fragment</code> — it stripped them before resolving</td>
+<td>&quot;no broken internal links&quot;</td>
+</tr>
+<tr>
+<td><code>expect</code></td>
+<td>the console banner it was waiting for, somehow</td>
+<td>&quot;NO CONSOLE&quot;</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>expect</code> one is the sharpest, and it comes with a correction attached. The
+script waits for ITS's console banner; the log shows <code>Happy hacking!</code> printed,
+then eleven more retries, then <code>NO CONSOLE</code> — the evidence and the denial four
+lines apart.</p>
+<p>Two explanations were written down before either was tested, and <strong>both were
+wrong</strong>, which is the real story here.</p>
+<p><em>First:</em> <code>match_max</code>, which defaults to <strong>2000 bytes</strong> and discards the oldest
+data on overflow without saying so — and this script <code>sleep</code>s while ITS is
+producing output, so the pty backs up. Plausible. Measured: only 312 bytes
+separate <code>IN OPERATION</code> — the previous successful match, which clears the buffer
+— from the banner. Nowhere near the limit.</p>
+<p><em>Second:</em> that the banner prints <strong>once</strong>, so a retry loop keyed on it can only
+win on the attempt that happens to be listening. Also plausible; the fix was to
+also accept <code>??</code>, ITS's answer to a ^Z at the DDT prompt, which every retry
+produces. The next run sent eleven more ^Z and still reported <code>NO CONSOLE</code>, with
+<code>^Z?? ^Z?? ^Z??…</code> in the log. So <code>??</code> was there, being read, and not matched
+either.</p>
+<p>At that point the thing to do is stop reasoning about the emulator and reproduce
+it in ten lines:</p>
+<pre><code class="language-tcl">spawn sh -c &quot;while :; do sleep 1; printf 'Happy hacking!\n'; done&quot;
+expect { &quot;Happy&quot; {} timeout { exit 1 } }
+set got 0
+expect { &quot;Happy hacking&quot; { set got 1 } timeout {} }   ;# got=0
+expect {
+	&quot;Happy hacking&quot; { set got 1 }
+	timeout {}
+}                                                     ;# got=1
+</code></pre>
+<p>Same build (<code>expect 5.45.4</code>), same spawned process, same pattern. The one-line
+pattern list does not match; the multi-line one does. <code>tests/klh10.exp</code> was
+written multi-line and has always worked — which is exactly why the interop runs
+succeeded while the tape script, written one-line, never got past the console.</p>
+<p>The mechanism is <em>still</em> not established, and this document is not going to guess
+at it a third time. What is established is reproducible, which is enough to fix
+the code and enough to warn the next person. Two wrong mechanisms in one
+afternoon, on top of the <code>MFDCLB</code> note further up, is a good argument for a rule:
+<strong>a cause you have not made fail on demand is a hypothesis, and belongs in the
+notes labelled as one.</strong></p>
+<p>None of these produced a wrong <em>answer</em>. Each produced a <strong>confident empty one</strong>,
+which is worse, because an empty result reads as a fact about the world: &quot;there
+is no DEFSYM for this&quot;, &quot;no link is broken&quot;, &quot;the console never came&quot;. A tool
+that cannot distinguish <em>absence</em> from <em>its own failure to look</em> will
+occasionally hand you the second while you record the first.</p>
+<p>The defence is the same each time and it is cheap: <strong>make the check fail on
+purpose.</strong> Point a link at a heading that does not exist. Grep for a string you
+know is on line 1. If the check still passes, it was never checking. Every guard
+added in this session was verified that way before being believed.</p>
 <h2 id="what-is-not-established">What is not established</h2>
 <p>Stated plainly, because a validation document that only lists successes is
 marketing:</p>

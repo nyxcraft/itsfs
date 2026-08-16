@@ -944,6 +944,76 @@ the check work rather than merely fail honestly.
 `tests/crosscheck.sh` was never exposed — it compares with `cmp` and `tr`, and
 already forces `LC_ALL=C`.
 
+### It happened three times, which makes it a pattern rather than an anecdote
+
+Within one working session, three separate tools this project verifies *with*
+silently discarded the thing they were asked about and then reported an answer
+with no hint anything was missing:
+
+| tool | what it silently dropped | what it reported |
+|---|---|---|
+| `grep` (ugrep) | any file with a non-UTF-8 byte — 13.5% of the ITS tree | "no matches", exit 1 |
+| `check_links.py` | every `#fragment` — it stripped them before resolving | "no broken internal links" |
+| `expect` | the console banner it was waiting for, somehow | "NO CONSOLE" |
+
+The `expect` one is the sharpest, and it comes with a correction attached. The
+script waits for ITS's console banner; the log shows `Happy hacking!` printed,
+then eleven more retries, then `NO CONSOLE` — the evidence and the denial four
+lines apart.
+
+Two explanations were written down before either was tested, and **both were
+wrong**, which is the real story here.
+
+*First:* `match_max`, which defaults to **2000 bytes** and discards the oldest
+data on overflow without saying so — and this script `sleep`s while ITS is
+producing output, so the pty backs up. Plausible. Measured: only 312 bytes
+separate `IN OPERATION` — the previous successful match, which clears the buffer
+— from the banner. Nowhere near the limit.
+
+*Second:* that the banner prints **once**, so a retry loop keyed on it can only
+win on the attempt that happens to be listening. Also plausible; the fix was to
+also accept `??`, ITS's answer to a ^Z at the DDT prompt, which every retry
+produces. The next run sent eleven more ^Z and still reported `NO CONSOLE`, with
+`^Z?? ^Z?? ^Z??…` in the log. So `??` was there, being read, and not matched
+either.
+
+At that point the thing to do is stop reasoning about the emulator and reproduce
+it in ten lines:
+
+```tcl
+spawn sh -c "while :; do sleep 1; printf 'Happy hacking!\n'; done"
+expect { "Happy" {} timeout { exit 1 } }
+set got 0
+expect { "Happy hacking" { set got 1 } timeout {} }   ;# got=0
+expect {
+	"Happy hacking" { set got 1 }
+	timeout {}
+}                                                     ;# got=1
+```
+
+Same build (`expect 5.45.4`), same spawned process, same pattern. The one-line
+pattern list does not match; the multi-line one does. `tests/klh10.exp` was
+written multi-line and has always worked — which is exactly why the interop runs
+succeeded while the tape script, written one-line, never got past the console.
+
+The mechanism is *still* not established, and this document is not going to guess
+at it a third time. What is established is reproducible, which is enough to fix
+the code and enough to warn the next person. Two wrong mechanisms in one
+afternoon, on top of the `MFDCLB` note further up, is a good argument for a rule:
+**a cause you have not made fail on demand is a hypothesis, and belongs in the
+notes labelled as one.**
+
+None of these produced a wrong *answer*. Each produced a **confident empty one**,
+which is worse, because an empty result reads as a fact about the world: "there
+is no DEFSYM for this", "no link is broken", "the console never came". A tool
+that cannot distinguish *absence* from *its own failure to look* will
+occasionally hand you the second while you record the first.
+
+The defence is the same each time and it is cheap: **make the check fail on
+purpose.** Point a link at a heading that does not exist. Grep for a string you
+know is on line 1. If the check still passes, it was never checking. Every guard
+added in this session was verified that way before being believed.
+
 ## What is not established
 
 Stated plainly, because a validation document that only lists successes is

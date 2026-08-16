@@ -206,6 +206,27 @@ case $pr_rc in
 	;;
 esac
 
+# AND THE FILE MUST SURVIVE ITS HAVING THE PACK.  A running ITS writes to the
+# disk -- it salvages at startup, it keeps its own state -- so "the monitor read
+# it" and "the monitor left it alone" are two questions.  The SIMH run asks both
+# and so does this one.
+echo
+echo "4. and the pack afterwards"
+
+if "$ITSFS" check -p dbd9 -d rp06 "$T/run/rp0.dsk" > "$T/check2.out" 2>&1; then
+	ok "the pack still checks clean after ITS had it"
+else
+	no "check reports problems after ITS ran:"
+	sed 's/^/       /' "$T/check2.out" | tail -8
+fi
+
+if "$ITSFS" cat -p dbd9 -d rp06 "$T/run/rp0.dsk" "$DIR;$FN1 $FN2" 2>/dev/null |
+	cmp -s - "$T/msg.txt"; then
+	ok "...and our file is there, byte for byte, unchanged"
+else
+	no "our file changed or vanished while ITS had the pack"
+fi
+
 echo
 if [ "$rc" -eq 0 ]; then
 	echo "$pass checks passed -- a second emulator, a second packing, same answers"

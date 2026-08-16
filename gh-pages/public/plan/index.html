@@ -162,9 +162,11 @@ out-of-bounds read does not fault on a normal build, and a corruption fuzzer.</l
 pair, analysis tools.</li>
 <li><strong>The evidence markers.</strong> <code>confirmed</code> / <code>corroborated</code> / <code>structural</code> /
 <code>unverified</code> on packings, <code>[v]</code> / <code>[s]</code> on fields. Both were lifted verbatim,
-and both immediately earned their place: <code>core</code> and <code>dbd9</code> are <code>corroborated</code>
-here where <code>t10fs</code> has them <code>confirmed</code>, because no <em>ITS</em> artifact in either
-packing has been read yet.</li>
+and both immediately earned their place: <code>core</code> and <code>dbd9</code> started
+<code>corroborated</code> here where <code>t10fs</code> had them <code>confirmed</code>, because no <em>ITS</em>
+artifact in either packing had been read. Both were promoted later, on this
+project's own measurements rather than on the sibling's -- which is exactly
+what the markers existed to force.</li>
 </ul>
 <p><code>.clang-format</code>, the workflow files and <code>gh-pages/</code> were lifted essentially
 as-is.</p>
@@ -172,7 +174,7 @@ as-is.</p>
 <h2 id="5-what-must-be-designed-fresh">5. What must be designed fresh</h2>
 <p>Four differences are deep enough that copying <code>t10fs</code> would produce something
 wrong. The first has no analogue in either sibling.</p>
-<h3 id="5-1-block-numbers-are-not-offsets-there-is-a-geometry-layer">5.1 Block numbers are not offsets — there is a geometry layer</h3>
+<h3 id="51-block-numbers-are-not-offsets--there-is-a-geometry-layer">5.1 Block numbers are not offsets — there is a geometry layer</h3>
 <p><code>t10fs</code> needs no such layer: a TOPS-10 block is <code>n * 128</code> words into the image
 and the pack's geometry is bookkeeping the monitor keeps but the addressing does
 not use.</p>
@@ -187,7 +189,7 @@ and there is no remainder at all.</p>
 <p>So there is a third layer between the packing and the structure, and it is not
 optional: linear block numbering puts the MFD 3,244 sectors from where it is.
 See <a href="https://github.com/nyxcraft/itsfs/blob/main/src/itsgeom.h"><code>src/itsgeom.h</code></a> and <a href="../geometry/index.html">docs/geometry.md</a>.</p>
-<h3 id="5-2-free-space-is-a-reference-count-not-a-bitmap-or-a-chain">5.2 Free space is a reference count, not a bitmap or a chain</h3>
+<h3 id="52-free-space-is-a-reference-count-not-a-bitmap-or-a-chain">5.2 Free space is a reference count, not a bitmap or a chain</h3>
 <p>The TUT is <strong>three bits per block</strong>: 0 free, 1 through 5 that many references, 6
 &quot;many or more&quot;, 7 locked out.</p>
 <ul>
@@ -200,7 +202,7 @@ treats a second reference as corruption until it is known what makes one.</li>
 directories and the tables. That is a checkable invariant and
 <code>tests/accounting.sh</code> checks it.</li>
 </ul>
-<h3 id="5-3-a-directory-is-one-block-and-that-is-the-whole-capacity">5.3 A directory is one block, and that is the whole capacity</h3>
+<h3 id="53-a-directory-is-one-block-and-that-is-the-whole-capacity">5.3 A directory is one block, and that is the whole capacity</h3>
 <p>No growth, no chaining, no second cluster. 1013 words hold <strong>both</strong> the
 descriptor area (growing up from word 11) and the five-word name blocks (growing
 down from the end), and the directory is full when they meet.</p>
@@ -208,7 +210,7 @@ down from the end), and the directory is full when they meet.</p>
 convention for doing so. Here there is nothing to match: the capacity is fixed
 when the block is, and a writer's failure mode is <code>directory full</code>, which is a
 refusal rather than an allocation problem.</p>
-<h3 id="5-4-a-file-s-block-list-is-a-program-and-a-link-s-is-a-string">5.4 A file's block list is a program, and a link's is a string</h3>
+<h3 id="54-a-files-block-list-is-a-program-and-a-links-is-a-string">5.4 A file's block list is a program, and a link's is a string</h3>
 <p>The same 13-bit <code>UNDSCP</code> field points at either, and one bit in the name block
 says which. The block list is run-length coded with a load-address escape; the
 link is the target's name in SIXBIT with its own quoting rules. Consequences:</p>

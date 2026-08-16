@@ -30,6 +30,20 @@
 set timeout 300
 log_user 1
 
+# Expect's buffer defaults to 2000 bytes and discards the oldest data when it
+# overflows, silently, and this script `sleep`s while ITS is producing output.
+# A precaution, not a fix for anything observed: the one time a match WAS missed
+# here, only 312 bytes separated it from the previous match, so this was not it.
+match_max -d 100000
+
+# KEEP EVERY `expect` PATTERN LIST MULTI-LINE, one pattern and action per line.
+# On expect 5.45.4 the same list written on ONE line does not match at all --
+# reproduced in ten lines against `while :; do printf 'Happy hacking!'; done`,
+# where the one-line form gives got=0 and the multi-line form got=1, same build,
+# same pattern.  The mechanism is not established.  The behaviour is, and it
+# cost an afternoon: a tape script written one-line sent twelve ^Z at a console
+# that was answering every one of them and then reported NO CONSOLE.
+
 set kn10 $env(KN10)
 set ini  $env(INI)
 set mode $env(MODE)
@@ -123,14 +137,34 @@ expect {
 # terminal at best.  SYS;ATSIGN DRAGON must already be off the pack or the job
 # it names owns the CTY and no ^Z is ever seen.
 sleep 45
+
+# A SHORT TIMEOUT FOR THE RETRIES, and restored afterwards.  The global one is
+# 300s because the salvage pass legitimately takes minutes -- but a ^Z that was
+# going to be answered is answered in seconds, so at 300s eight tries cost 40
+# minutes and the run is killed long before the loop can finish.  The SIMH
+# script sets 45 globally and gets this right by accident; here the boot needs
+# the long one, so the loop gets its own.
+set outer $timeout
+set timeout 45
+# AND MATCH WHAT IS ACTUALLY RELIABLE -- which is the fix that worked, arrived
+# at empirically after the buffer theory above failed to survive a measurement.
+#
+# The banner prints ONCE, so a retry loop keyed on it can only ever win on the
+# attempt that happens to be listening; miss it once and every later retry is
+# waiting for something that will never be said again.  `??` is ITS answering a
+# ^Z at the DDT prompt -- not a failure, but proof the console is there and
+# listening -- and it is produced by EVERY retry.  A retry loop should key on
+# something each retry produces.
 set got 0
 for {set i 0} {$i < 8 && $got == 0} {incr i} {
 	send "\032"
 	expect {
 		"Happy hacking" { set got 1 }
+		"??" { set got 1 }
 		timeout {}
 	}
 }
+set timeout $outer
 
 if {$got == 0} {
 	# COULD NOT TEST is not FAILED, and the caller is told which.  A harness
@@ -140,7 +174,20 @@ if {$got == 0} {
 	exit 3
 }
 
-sleep 8
+# DRAIN WHAT THE RETRIES LEFT BEHIND.  Every ^Z sent after the one that worked
+# is still in flight; ITS answers each with `??` at the DDT prompt, and that
+# eats the first characters of whatever is typed next.  Wait for the echoes to
+# stop, swallow them, and start from a clean line.  Seen as `^Z??` immediately
+# before a command that then went nowhere.
+sleep 10
+set timeout 5
+expect { -re ".+" { exp_continue } timeout {} }
+send "\r"
+sleep 3
+expect { -re ".+" { exp_continue } timeout {} }
+set timeout $outer
+
+sleep 3
 slow ":print $file"
 send "\r"
 

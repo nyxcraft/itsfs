@@ -35,9 +35,27 @@ HEADER_LOGO = "assets/logo-itsfs.svg"
 
 
 def slugify(text: str) -> str:
+    """GitHub's heading-anchor rules, deliberately.
+
+    These docs are read in two places -- on GitHub, and on this site -- from the
+    SAME markdown, so a `](file.md#section)` link has to mean the same thing in
+    both. It did not. This collapsed every run of non-alphanumerics to one
+    hyphen, where GitHub *deletes* punctuation and then replaces each remaining
+    space with a hyphen:
+
+        "Level 3b - the space"   GitHub level-3b--the-space   here level-3b-the-space
+        "ITS's own salvager"     GitHub itss-own-salvager     here its-s-own-salvager
+
+    (that dash is an em dash in the source). So links written against GitHub --
+    which is where the docs are usually read, and where the anchor is whatever
+    you copied out of the address bar -- 404'd on the published site. Four of
+    them did, and the link checker did not look at fragments at all.
+    """
     normalized = unicodedata.normalize("NFKD", text)
     ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_text.lower()).strip("-")
+    slug = ascii_text.strip().lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)      # DELETE punctuation, not replace
+    slug = slug.replace(" ", "-")             # each space, runs NOT collapsed
     return slug or "section"
 
 

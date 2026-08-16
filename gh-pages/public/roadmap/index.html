@@ -35,18 +35,18 @@
         <nav class="section-nav" aria-label="On this page">
 <ul class="section-nav__list">
 <li><a class="section-nav__link section-nav__link--l2" href="#done">Done</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-0-the-repository">Phase 0 — the repository</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-1-the-word-layer">Phase 1 — the word layer</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-2-geometry">Phase 2 — geometry</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-3-the-constants">Phase 3 — the constants</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-4-the-reader">Phase 4 — the reader</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-5-itsfs-check">Phase 5 — `itsfs check`</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-5a-nsalv-out-of-order-and-on-purpose">Phase 5a — `NSALV`, out of order and on purpose</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-0--the-repository">Phase 0 — the repository</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-1--the-word-layer">Phase 1 — the word layer</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-2--geometry">Phase 2 — geometry</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-3--the-constants">Phase 3 — the constants</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-4--the-reader">Phase 4 — the reader</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-5--itsfs-check">Phase 5 — `itsfs check`</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-5a--nsalv-out-of-order-and-on-purpose">Phase 5a — `NSALV`, out of order and on purpose</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#next">Next</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-7-the-writer">Phase 7 — the writer</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-8-native-tool-interop">Phase 8 — native-tool interop</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#phase-9-tapes">Phase 9 — tapes</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-6--manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-7--the-writer">Phase 7 — the writer</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-8--native-tool-interop">Phase 8 — native-tool interop</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#phase-9--tapes">Phase 9 — tapes</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#not-on-the-roadmap">Not on the roadmap</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#open-questions-that-could-reorder-this">Open questions that could reorder this</a></li>
 </ul>
@@ -68,34 +68,34 @@ does not have to re-derive the order — and the order matters, because each pha
 is validated by something the previous one built.</p>
 <hr />
 <h2 id="done">Done</h2>
-<h3 id="phase-0-the-repository">Phase 0 — the repository</h3>
+<h3 id="phase-0--the-repository">Phase 0 — the repository</h3>
 <p><code>.clang-format</code>, CI, the docs site, a <code>make test</code> skeleton. Lifted from <code>t10fs</code>
 and stripped, which is the correct amount of originality for a build system.</p>
 <p><strong>Ended by:</strong> CI green.</p>
-<h3 id="phase-1-the-word-layer">Phase 1 — the word layer</h3>
+<h3 id="phase-1--the-word-layer">Phase 1 — the word layer</h3>
 <p>Four packings behind one group-based interface, and SIXBIT one layer above it.</p>
 <p><strong>Ended by:</strong> every word of a real 300 MB pack round-tripping byte-for-byte,
 including through a packing with a different stride and one that shares a byte
 between two words.</p>
-<h3 id="phase-2-geometry">Phase 2 — geometry</h3>
+<h3 id="phase-2--geometry">Phase 2 — geometry</h3>
 <p>The layer neither sibling project needs: block numbers are cylinder-major and the
 blocks-per-cylinder division truncates.</p>
 <p><strong>Ended by:</strong> the MFD being found where the formula says it is, and identifying
 itself with its own check word. Also by <code>itsfs dump -s</code>, which addresses raw
 sectors and lets the two be compared.</p>
-<h3 id="phase-3-the-constants">Phase 3 — the constants</h3>
+<h3 id="phase-3--the-constants">Phase 3 — the constants</h3>
 <p><code>its.h</code>, transcribed from <code>SYSTEM;FSDEFS 43</code> with a citation and an evidence
 marker per field.</p>
 <p><strong>Ended by:</strong> the MFD, a UFD and the TUT all decoding into values that are sane
 in more than one way at once — dates in two plausible eras, names that match
 between the MFD and each UFD's own header.</p>
-<h3 id="phase-4-the-reader">Phase 4 — the reader</h3>
+<h3 id="phase-4--the-reader">Phase 4 — the reader</h3>
 <p>Directories, name blocks, the descriptor bytecode, links, file extraction, and
 the TUT.</p>
 <p><strong>Ended by:</strong> <code>tests/accounting.sh</code> — the space on a real pack accounting for
 exactly, three ways, against numbers this project did not compute. See
 <a href="../validation/index.html#level-3b--the-space-on-a-real-pack-accounts-for-exactly">validation</a>.</p>
-<h3 id="phase-5-itsfs-check">Phase 5 — <code>itsfs check</code></h3>
+<h3 id="phase-5--itsfs-check">Phase 5 — <code>itsfs check</code></h3>
 <p>An independent checker: it shares no code with the reader. <code>cmd_check.c</code>
 includes neither <code>structure.h</code> nor <code>itsgeom.c</code>'s conversion, and re-derives the
 block-to-sector arithmetic, the MFD-slot formula, the UFD layout, the descriptor
@@ -115,7 +115,7 @@ opinion.</p>
 that is not there. Seven on the reference pack do, and a live system is like
 that. They are notes, they are listed under <code>-v</code>, and they do not change the
 exit status.</p>
-<h3 id="phase-5a-nsalv-out-of-order-and-on-purpose">Phase 5a — <code>NSALV</code>, out of order and on purpose</h3>
+<h3 id="phase-5a--nsalv-out-of-order-and-on-purpose">Phase 5a — <code>NSALV</code>, out of order and on purpose</h3>
 <p><strong>This needed no writer</strong>, which is why it ran before phase 6 rather than as part
 of phase 8. <code>NSALV</code> is ITS's own salvager: it boots standalone from a tape, walks
 every directory on a pack, rebuilds the allocation table from scratch and reports
@@ -134,7 +134,7 @@ code confirms the encoding that FSDEFS's <em>comment</em> gets wrong. See
 <a href="../sources/index.html#two-traps">sources</a>.</p>
 <hr />
 <h2 id="next">Next</h2>
-<h3 id="phase-6-manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</h3>
+<h3 id="phase-6--manifest-verify-and-a-shell">Phase 6 — manifest, verify, and a shell</h3>
 <p><code>manifest</code> fingerprints a pack — one line per directory, file and link, with a
 checksum over <strong>words</strong> rather than bytes. <code>verify</code> diffs a pack against one. The
 shell keeps the image path and the current directory so that exploring is three
@@ -151,7 +151,7 @@ visible rather than assumed.</p>
 block numbers, and that turned out to matter. 5,431 of the reference pack's 5,650
 files are a single run — a fresh build writes sequentially — but 219 are not, and
 one is 59 runs. A display that printed 1,904 numbers would have hidden that.</p>
-<h3 id="phase-7-the-writer">Phase 7 — the writer</h3>
+<h3 id="phase-7--the-writer">Phase 7 — the writer</h3>
 <p>One file, one mutation path, every front end calling it. <code>put</code> and <code>del</code> exist;
 <code>mkdir</code> and <code>mkfs</code> do not yet.</p>
 <p><strong>Ended by:</strong> <code>NSALV</code> accepting a file system this project wrote — level 2 in the
@@ -172,7 +172,7 @@ than guessing.</li>
 appended would produce a directory ITS's own lookup walks wrongly. That was
 found by measuring the reference pack rather than by reading the source, and it
 is why <code>put</code> inserts and shifts.</p>
-<h3 id="phase-8-native-tool-interop">Phase 8 — native-tool interop</h3>
+<h3 id="phase-8--native-tool-interop">Phase 8 — native-tool interop</h3>
 <p>Everything here exists:</p>
 <ul>
 <li>
@@ -210,7 +210,7 @@ both are booted from tape; see
 </ul>
 <p><strong>Ended by:</strong> <code>make interop</code> — five stages, from <code>itsfs put</code> to <code>:print</code> on an
 ITS console.</p>
-<h3 id="phase-9-tapes">Phase 9 — tapes</h3>
+<h3 id="phase-9--tapes">Phase 9 — tapes</h3>
 <p><code>itsfs tape</code> reads the SIMH <code>.tap</code> container: records with their lengths on both
 sides, tape marks, end of medium. It checks the two lengths against each other,
 which is the one thing the format itself lets a reader notice, and <code>-x</code> extracts
@@ -250,13 +250,15 @@ already solved.</li>
 <li><strong>A pack recovered from MIT</strong> would be worth more than any two phases here, and
 would immediately exercise <code>UNBYTE</code> encodings that nothing has written since the
 1980s. If one turns up, read it before writing anything.</li>
-<li><strong>A KLH10-built ITS pack</strong> would promote <code>dbd9</code> the way a tape promoted
-<code>core</code>. <code>make EMULATOR=klh10</code> in the ITS tree produces one, and it has to be a
-full build: the shortcut of repacking an existing pack and pointing KLH10's
-DSKDMP at it does not work, and the reason is recorded in
-<a href="../word-packing/index.html#the-attempt-to-promote-it-and-why-it-failed">word packing</a> so
-nobody spends the afternoon on it twice. The codec itself is now checked
-against KLH10's own <code>cvtfr_dbd9</code>, exhaustively.</li>
+<li><s><strong>A KLH10-built ITS pack</strong> would promote <code>dbd9</code></s> — <strong>settled</strong>, and not the
+way this bullet expected. It said a full <code>make EMULATOR=klh10</code> was required
+because &quot;the shortcut of repacking an existing pack and pointing KLH10's DSKDMP
+at it does not work&quot;. The shortcut works fine; what did not work was a KLH10
+missing its <code>dprpxx</code> device process, which had left it running with no disk at
+all. Building KLH10 also turned out to ship <code>vdkfmt</code>, its own format converter,
+so the first half needed no emulator run at all. <code>make klh10</code> compares the
+bytes; <code>make interop-klh10</code> boots ITS on one. The story is in
+<a href="../word-packing/index.html#the-attempt-that-failed-and-why--which-took-two-goes-to-get-right">word packing</a>.</li>
 <li><strong>A <code>FSDEFS</code> from before September 1979.</strong> <code>make version-diff</code> already compares
 versions 40 and 43 and finds all 71 symbols identical, but both postdate the
 TUT format change both of them mention, so the span this reader covers has a
