@@ -68,6 +68,9 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-one-more-on-the-code-the-day-changed-most">And one more, on the code the day changed most</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-then-the-same-question-asked-of-every-file-at-once">And then the same question asked of every file at once</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#one-more-class-chosen-because-no-tool-here-covers-it">One more class, chosen because no tool here covers it</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#two-clean-ones-which-are-also-results">Two clean ones, which are also results</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-machine-and-a-second-packing">A second machine, and a second packing</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</a></li>
@@ -1064,6 +1067,98 @@ of the two functions. <code>desc_put</code> bounds itself now, which costs one c
 and turns &quot;unreachable&quot; into &quot;impossible&quot;. The corruption fuzzer had never found
 it because it damages descriptor bytes at the <em>start</em> of the area, where the
 offsets involved are small.</p>
+<h3 id="and-one-more-on-the-code-the-day-changed-most">And one more, on the code the day changed most</h3>
+<p><code>cmd_saveset.c</code> was read back last, because it is what today rewrote: an
+eight-word header where it wrote seven, <code>UNREF</code> copied whole, a link header
+built from four constants, and a computation hoisted above the header to make
+any of that possible.</p>
+<p><strong>One finding, and it is the same shape as the two above.</strong> The link target is
+taken apart with <code>strchr</code> for the <code>;</code> and the space, and the three name buffers
+are zeroed first. If either separator were missing, or a component too long, the
+old code simply skipped the copy — and <code>its_sixbit_make</code> succeeds on an empty
+string. So a target that failed to parse would have been written as an <strong>empty
+target, with no complaint</strong>.</p>
+<p>It could not happen: <code>its_link_target</code> formats <code>&quot;%s;%s %s&quot;</code> from three components
+of at most six characters, so the separators are always present and the lengths
+always fit. But that guarantee lives in <code>structure.c</code>, and a silently-zeroed
+field is precisely the bug that cost an afternoon today — a SIXBIT name shifted
+off the end of its own word, which no reader noticed and only <code>cmp</code> caught. It
+refuses now, by name.</p>
+<p>Verified after the change: the tape is still byte-identical to the one ITS's own
+DUMP wrote, all 5,016 bytes of it, link included.</p>
+<h3 id="and-then-the-same-question-asked-of-every-file-at-once">And then the same question asked of every file at once</h3>
+<p>Three reviews had found three instances of one shape — a write whose bound was
+established in another file — so the fourth pass was a search rather than a
+reading: every <code>memcpy</code>, <code>strcpy</code>, <code>strcat</code> and <code>sprintf</code> in the tree, and where
+each one's bound comes from.</p>
+<p>Fourteen sites. <strong>Thirteen carry their own bound</strong>, most of them immediately
+above the copy:</p>
+<table>
+<thead>
+<tr>
+<th>site</th>
+<th>bound</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>util.c</code> ×2</td>
+<td><code>n &gt;= sizeof lh</code> / <code>n &gt;= sizeof head</code>, with an error</td>
+</tr>
+<tr>
+<td><code>image.c</code> ×2</td>
+<td><code>take</code> clamped to <code>n</code>; <code>stage[8192]</code> against at most 1,820 words for any packing</td>
+</tr>
+<tr>
+<td><code>cmd_fs.c</code>, <code>cmd_write.c</code> ×4</td>
+<td><code>n &gt;= ITS_NAME_MAX</code>, with an error</td>
+</tr>
+<tr>
+<td><code>cmd_manifest.c</code> ×2</td>
+<td><code>malloc(strlen + 1)</code>; <code>n &gt;= sizeof out-&gt;path</code></td>
+</tr>
+<tr>
+<td><code>cmd_check.c</code></td>
+<td><code>malloc(strlen + 1)</code></td>
+</tr>
+<tr>
+<td><code>cmd_saveset.c</code> argv ×2</td>
+<td><code>goto toolong</code></td>
+</tr>
+<tr>
+<td><code>write.c</code></td>
+<td><code>n</code> clamped to <code>wpb</code>, <code>left</code> decremented so the source stays in range</td>
+</tr>
+</tbody>
+</table>
+<p>The fourteenth was the link target above, and it is fixed. <code>cmd_fs.c</code> is worth
+singling out as the pattern the rest should match: it checks, it errors by name,
+and the check is on the line before the copy.</p>
+<p>There is no <code>strcpy</code> into a fixed buffer anywhere, no <code>strcat</code> at all, and no
+<code>sprintf</code> — the two <code>strcpy</code>s that exist follow a <code>malloc</code> of the measured
+length. That is not an accident of style; it is the property that makes a
+fourteen-site audit take twenty minutes instead of a day.</p>
+<h3 id="one-more-class-chosen-because-no-tool-here-covers-it">One more class, chosen because no tool here covers it</h3>
+<p>The sanitizers catch out-of-bounds and leaks on paths the tests reach,
+<code>-Wconversion</code> catches truncation, and the fuzzer covers damaged input. <strong>An
+ignored I/O return value is invisible to all three</strong>, so that was the next
+search: every <code>fread</code>, <code>fwrite</code>, <code>fseeko</code>, <code>ftruncate</code>, <code>fflush</code> and <code>fclose</code> in
+the tree — 53 call sites.</p>
+<p>Two were unchecked, and one of them mattered. <code>verify</code> writes a manifest to a
+temporary file and reads it straight back to compare against. It did</p>
+<pre><code class="language-c">fflush(tmp);
+fclose(tmp);
+</code></pre>
+<p>with neither result examined. A write that failed part way — a full disk is the
+ordinary way — would not produce an error there. It would produce a <strong>shorter
+manifest</strong>, and every file missing from the truncated end would be reported as a
+difference. <code>verify</code> would answer the question wrongly rather than decline to
+answer it.</p>
+<p><code>fclose</code> is where that surfaces, because a deferred write error is reported when
+the stream is flushed and not when <code>fprintf</code> returned; the <code>fflush</code> was doing the
+same job twice and checking neither. It errors by name now. (The other unchecked
+call is <code>fflush(stdout)</code> before reading a line in the shell, where a failure
+means the prompt did not appear on a stream that is going nowhere anyway.)</p>
 <h3 id="two-clean-ones-which-are-also-results">Two clean ones, which are also results</h3>
 <p><code>structure.c</code> and <code>cmd_check.c</code> got the same reading afterwards — the reader
 every command depends on, and the independent checker. <strong>Nothing was found in

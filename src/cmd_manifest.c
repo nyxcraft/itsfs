@@ -49,6 +49,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -600,8 +601,22 @@ verify(its_image *im, const char *mfpath)
 		goto out;
 	}
 
-	fflush(tmp);
-	fclose(tmp);
+	/*
+	 * CHECK THE CLOSE.  This manifest is written to a temporary file and
+	 * read straight back to compare against, so a write that failed half
+	 * way -- a full disk is the ordinary way -- would not produce an error
+	 * here, it would produce a SHORTER MANIFEST, and every file missing
+	 * from the truncated end would be reported as a difference.
+	 *
+	 * fclose is where that surfaces: a deferred write error is reported
+	 * when the stream is flushed, not when fprintf returned.  The fflush
+	 * that used to be here was unchecked and did the same job twice.
+	 */
+	if (fclose(tmp) != 0) {
+		fprintf(stderr, "itsfs: %s: %s\n", tmpname, strerror(errno));
+		unlink(tmpname);
+		goto out;
+	}
 
 	if (load_manifest(tmpname, &have, &nhave) != 0) {
 		unlink(tmpname);

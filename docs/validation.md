@@ -1036,6 +1036,87 @@ and turns "unreachable" into "impossible". The corruption fuzzer had never found
 it because it damages descriptor bytes at the *start* of the area, where the
 offsets involved are small.
 
+### And one more, on the code the day changed most
+
+`cmd_saveset.c` was read back last, because it is what today rewrote: an
+eight-word header where it wrote seven, `UNREF` copied whole, a link header
+built from four constants, and a computation hoisted above the header to make
+any of that possible.
+
+**One finding, and it is the same shape as the two above.** The link target is
+taken apart with `strchr` for the `;` and the space, and the three name buffers
+are zeroed first. If either separator were missing, or a component too long, the
+old code simply skipped the copy — and `its_sixbit_make` succeeds on an empty
+string. So a target that failed to parse would have been written as an **empty
+target, with no complaint**.
+
+It could not happen: `its_link_target` formats `"%s;%s %s"` from three components
+of at most six characters, so the separators are always present and the lengths
+always fit. But that guarantee lives in `structure.c`, and a silently-zeroed
+field is precisely the bug that cost an afternoon today — a SIXBIT name shifted
+off the end of its own word, which no reader noticed and only `cmp` caught. It
+refuses now, by name.
+
+Verified after the change: the tape is still byte-identical to the one ITS's own
+DUMP wrote, all 5,016 bytes of it, link included.
+
+### And then the same question asked of every file at once
+
+Three reviews had found three instances of one shape — a write whose bound was
+established in another file — so the fourth pass was a search rather than a
+reading: every `memcpy`, `strcpy`, `strcat` and `sprintf` in the tree, and where
+each one's bound comes from.
+
+Fourteen sites. **Thirteen carry their own bound**, most of them immediately
+above the copy:
+
+| site | bound |
+|---|---|
+| `util.c` ×2 | `n >= sizeof lh` / `n >= sizeof head`, with an error |
+| `image.c` ×2 | `take` clamped to `n`; `stage[8192]` against at most 1,820 words for any packing |
+| `cmd_fs.c`, `cmd_write.c` ×4 | `n >= ITS_NAME_MAX`, with an error |
+| `cmd_manifest.c` ×2 | `malloc(strlen + 1)`; `n >= sizeof out->path` |
+| `cmd_check.c` | `malloc(strlen + 1)` |
+| `cmd_saveset.c` argv ×2 | `goto toolong` |
+| `write.c` | `n` clamped to `wpb`, `left` decremented so the source stays in range |
+
+The fourteenth was the link target above, and it is fixed. `cmd_fs.c` is worth
+singling out as the pattern the rest should match: it checks, it errors by name,
+and the check is on the line before the copy.
+
+There is no `strcpy` into a fixed buffer anywhere, no `strcat` at all, and no
+`sprintf` — the two `strcpy`s that exist follow a `malloc` of the measured
+length. That is not an accident of style; it is the property that makes a
+fourteen-site audit take twenty minutes instead of a day.
+
+### One more class, chosen because no tool here covers it
+
+The sanitizers catch out-of-bounds and leaks on paths the tests reach,
+`-Wconversion` catches truncation, and the fuzzer covers damaged input. **An
+ignored I/O return value is invisible to all three**, so that was the next
+search: every `fread`, `fwrite`, `fseeko`, `ftruncate`, `fflush` and `fclose` in
+the tree — 53 call sites.
+
+Two were unchecked, and one of them mattered. `verify` writes a manifest to a
+temporary file and reads it straight back to compare against. It did
+
+```c
+fflush(tmp);
+fclose(tmp);
+```
+
+with neither result examined. A write that failed part way — a full disk is the
+ordinary way — would not produce an error there. It would produce a **shorter
+manifest**, and every file missing from the truncated end would be reported as a
+difference. `verify` would answer the question wrongly rather than decline to
+answer it.
+
+`fclose` is where that surfaces, because a deferred write error is reported when
+the stream is flushed and not when `fprintf` returned; the `fflush` was doing the
+same job twice and checking neither. It errors by name now. (The other unchecked
+call is `fflush(stdout)` before reading a line in the shell, where a failure
+means the prompt did not appear on a stream that is going nowhere anyway.)
+
 ### Two clean ones, which are also results
 
 `structure.c` and `cmd_check.c` got the same reading afterwards — the reader

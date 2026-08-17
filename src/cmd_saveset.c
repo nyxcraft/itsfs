@@ -472,15 +472,36 @@ cmd_save(int argc, char **argv)
 			semi2 = strchr(tgt, ';');
 			sp2 = semi2 ? strchr(semi2 + 1, ' ') : NULL;
 
-			if (semi2 != NULL && sp2 != NULL) {
-				size_t a = (size_t)(semi2 - tgt), b = (size_t)(sp2 - semi2 - 1);
-
-				if (a < sizeof td && b < sizeof t1 && strlen(sp2 + 1) < sizeof t2) {
-					memcpy(td, tgt, a);
-					memcpy(t1, semi2 + 1, b);
-					snprintf(t2, sizeof t2, "%s", sp2 + 1);
-				}
+			/*
+			 * AND IF IT DOES NOT PARSE, SAY SO.  The three buffers
+			 * are zeroed above, and its_sixbit_make succeeds on an
+			 * empty string -- so every path that skipped this
+			 * parse used to write a link with an EMPTY target and
+			 * no complaint.
+			 *
+			 * It cannot happen today: its_link_target formats
+			 * "%s;%s %s" from three components of at most six
+			 * characters, so the separators are always there and
+			 * the lengths always fit.  But that guarantee lives in
+			 * structure.c, and a silently-zeroed field is exactly
+			 * the shape of the bug that cost an afternoon here --
+			 * a SIXBIT name shifted off the end of its own word,
+			 * which no reader noticed and only cmp caught.
+			 */
+			if (semi2 == NULL || sp2 == NULL ||
+			    (size_t)(semi2 - tgt) >= sizeof td ||
+			    (size_t)(sp2 - semi2 - 1) >= sizeof t1 ||
+			    strlen(sp2 + 1) >= sizeof t2) {
+				fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot "
+						"take apart: %s\n",
+					dir, fn1, fn2, tgt);
+				its_ufd_free(&u);
+				goto out;
 			}
+
+			memcpy(td, tgt, (size_t)(semi2 - tgt));
+			memcpy(t1, semi2 + 1, (size_t)(sp2 - semi2 - 1));
+			snprintf(t2, sizeof t2, "%s", sp2 + 1);
 
 			if (its_sixbit_make(td, &twd) != 0 || its_sixbit_make(t1, &tw1) != 0 ||
 			    its_sixbit_make(t2, &tw2) != 0) {
