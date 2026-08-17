@@ -71,6 +71,7 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#and-then-it-was-pointed-at-the-writer">And then it was pointed at the writer</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#and-at-the-containers-which-are-what-you-download">And at the containers, which are what you download</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-maximally-damaged-pack-prints">What a maximally damaged pack prints</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-path-traversal-found-by-reviewing-rather-than-by-testing">A path traversal, found by reviewing rather than by testing</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
@@ -213,7 +214,7 @@ This is the index.</p>
 <td><code>make tape-test</code></td>
 </tr>
 <tr>
-<td>271 checks, a third of them on packs damaged on purpose</td>
+<td>275 checks, a third of them on packs damaged on purpose</td>
 <td>level 3</td>
 <td><code>make test</code></td>
 </tr>
@@ -1130,7 +1131,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>271 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>275 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -1234,6 +1235,33 @@ two directories and four file blocks give six problems, nowhere near the cap. So
 it verifies the output stays short and the count is exact — six, one per claimed
 block — and the cap itself is the measurement above. A test that claimed to
 exercise <code>CK_MAXPRINT</code> on a six-problem pack would pass without testing anything.</p>
+<h2 id="a-path-traversal-found-by-reviewing-rather-than-by-testing">A path traversal, found by reviewing rather than by testing</h2>
+<p>The one security defect in this tree, and it was not found by the fuzzer, the
+sanitizers, or any of the emulators. It was found by asking where data from
+outside the program becomes a filename.</p>
+<p><strong>SIXBIT decodes to ASCII 040..0137, and that range contains <code>/</code> and <code>.</code>.</strong>
+<code>saveset -x</code> built a host path out of three names taken off the tape:</p>
+<pre><code class="language-c">snprintf(path, sizeof path, &quot;%s/%s;%s&quot;, extract, dir, name);
+</code></pre>
+<p>A save set whose directory is <code>../..</code> therefore escapes:</p>
+<pre><code class="language-console">$ itsfs saveset -x out/sub/deep evil.tap
+../..;OWNED TXT -&gt; out/sub/deep/../..;OWNED.TXT
+$ find out -type f
+out/sub/..;OWNED.TXT          &lt;- one level above where -x pointed
+</code></pre>
+<p>Demonstrated, not deduced — the tape was hand-built from the format documented
+above, and <code>tests/run.sh</code> now builds the same one and checks the refusal.</p>
+<p>The reach is bounded: six characters a component, so a few levels at most. But
+bounded escape is still escape, and <strong>a tape is the one artifact in this project
+that arrives from somewhere else</strong> — a real one was downloaded from
+<code>pdp-10.trailing-edge.com</code> earlier the same day to test the reader against.</p>
+<p><strong>Refused by name rather than sanitised.</strong> Rewriting <code>/</code> to something else would
+silently produce a file whose name is not the one on the tape, and the point of
+<code>-x</code> is to get out what is in there. Listing is untouched: refusing to <em>write</em> a
+name is not refusing to <em>read</em> it, and <code>saveset</code> without <code>-x</code> still shows the
+entry.</p>
+<p><code>tape -x</code> was checked at the same time and is safe — it names its output
+<code>fileN.words</code> from a counter, never from the container.</p>
 <h2 id="lint">Lint</h2>
 <p><code>make lint</code> compiles the tree under <strong>16 warning options</strong> — including
 <code>-Wconversion</code> and <code>-Wsign-conversion</code>, which are the two that catch a 36-bit

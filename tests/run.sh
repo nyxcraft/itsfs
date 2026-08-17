@@ -509,6 +509,53 @@ out=$("$ITSFS" check "$T/k5.dsk" 2>&1)
 has "a descriptor area that has reached the name area is a problem" "$out" \
 	"has overrun the name area"
 
+# A TAPE THAT TRIES TO ESCAPE THE EXTRACTION DIRECTORY.
+#
+# SIXBIT decodes to ASCII 040..0137, a range that CONTAINS `/` and `.`, and
+# `saveset -x` builds a host path out of three names off the tape.  Before this
+# check existed, a save set whose directory was `../..` wrote one level above
+# where -x pointed.  Bounded escape -- six characters a component -- but a tape
+# is the one artifact here that arrives from somewhere else.
+#
+# The tape is built here rather than shipped: four words of volume header, eight
+# of file header, two of data, in core packing inside .tap framing.
+python3 - "$T/evil.tap" <<'PY' 2>/dev/null || SKIPEVIL=1
+import struct, sys
+def sixbit(s):
+    w = 0
+    for c in s.ljust(6)[:6]:
+        w = (w << 6) | ((ord(c) - 32) & 0o77)
+    return w
+def core(ws):
+    b = bytearray()
+    for w in ws:
+        b += bytes([(w >> 28) & 0xFF, (w >> 20) & 0xFF, (w >> 12) & 0xFF,
+                    (w >> 4) & 0xFF, w & 0x0F])
+    return bytes(b)
+def rec(d):
+    n = len(d)
+    return struct.pack("<I", n) + d + (b"\x00" if n & 1 else b"") + struct.pack("<I", n)
+vol = [(0o1000000 - 4) << 18, 1 << 18, 0o777777777777, 0]
+hdr = [(0o1000000 - 8) << 18, sixbit("../.."), sixbit("OWNED"), sixbit("TXT"),
+       0, 0, 0o777777777000, 2]
+open(sys.argv[1], "wb").write(rec(core(vol + hdr + [0o101101101101, 0o102102102102]))
+                              + struct.pack("<I", 0) * 2)
+PY
+
+if [ -z "${SKIPEVIL:-}" ]; then
+	mkdir -p "$T/vic/sub"
+	out=$("$ITSFS" saveset -x "$T/vic/sub" "$T/evil.tap" 2>&1); rc=$?
+	chk "a tape whose name escapes the extract directory is refused" "$rc" "1"
+	has "...naming the component it refused" "$out" "which is not a file name this can write"
+
+	n=$(find "$T/vic" -type f 2>/dev/null | wc -l | tr -d ' ')
+	chk "...and nothing was written anywhere" "$n" "0"
+
+	# Listing must still work: refusing to WRITE a name is not refusing to READ it.
+	out=$("$ITSFS" saveset "$T/evil.tap" 2>&1)
+	has "...but the tape can still be listed" "$out" "OWNED"
+fi
+
 # A PACK WHERE EVERYTHING IS WRONG AT ONCE, to check that the output stays
 # readable.  Clearing QLASTB makes the TUT map the range 0..0, so every block on
 # the pack falls outside it -- which on the reference pack is 30,942 problems.

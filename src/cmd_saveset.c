@@ -207,6 +207,42 @@ hostname(char *out, size_t sz, const char *dir, const char *fn1, const char *fn2
 	(void)dir;
 }
 
+/*
+ * A NAME OFF A TAPE IS NOT A PATH, and this is the one place that difference
+ * can hurt.
+ *
+ * SIXBIT decodes to ASCII 040..0137, and that range CONTAINS `/` (057) and `.`
+ * (056).  So a name on a tape may legitimately hold either -- and `-x` builds a
+ * host path out of three of them.  A save set whose directory is `../..` makes
+ *
+ *      itsfs saveset -x out/sub/deep evil.tap
+ *
+ * write `out/sub/..;OWNED.TXT`, one level ABOVE where it was pointed.  Demon-
+ * strated, not deduced: tests/run.sh builds that tape and checks the refusal.
+ * The reach is bounded -- six characters per component -- but bounded escape is
+ * still escape, and a tape is the one artifact here that arrives from
+ * elsewhere.  This project downloaded one from the internet to test a reader
+ * against.
+ *
+ * REFUSED BY NAME rather than sanitised.  Rewriting `/` to something else would
+ * silently produce a file whose name is not the one on the tape, and the whole
+ * point of `-x` is to get out what is in there.  A tape that cannot be
+ * extracted safely should say so and stop.
+ */
+static int
+safe_component(const char *s, const char *what, const char *dir, const char *fn1,
+	       const char *fn2)
+{
+	if (strchr(s, '/') == NULL && strcmp(s, "..") != 0 && strcmp(s, ".") != 0)
+		return 0;
+
+	fprintf(stderr,
+		"itsfs: refusing to extract '%s;%s %s': its %s is |%s|, which is not a "
+		"file name this can write\n",
+		dir, fn1, fn2, what, s);
+	return -1;
+}
+
 /* --------------------------------------------------------------- writing */
 
 /*
@@ -891,6 +927,11 @@ cmd_saveset(int argc, char **argv)
 			char path[512], name[64];
 			FILE *out;
 			unsigned long long nw = 0;
+
+			if (safe_component(dir, "directory", dir, fn1, fn2) != 0 ||
+			    safe_component(fn1, "first name", dir, fn1, fn2) != 0 ||
+			    safe_component(fn2, "second name", dir, fn1, fn2) != 0)
+				goto out;
 
 			hostname(name, sizeof name, dir, fn1, fn2);
 			snprintf(path, sizeof path, "%s/%s;%s", extract, dir, name);

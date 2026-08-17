@@ -59,7 +59,7 @@ This is the index.
 | 137 extracted files are byte-identical to their host originals | level 3 | `make oracle` |
 | `dbd9` matches a pack KLH10's own converter wrote | level 3 | `make klh10` |
 | a real ITS tape decodes to the exact words its own program prints | level 3 | `make tape-test` |
-| 271 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| 275 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
 | 5,400 commands over damaged packs and damaged tapes | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
@@ -1082,7 +1082,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**271 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**275 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -1214,6 +1214,45 @@ two directories and four file blocks give six problems, nowhere near the cap. So
 it verifies the output stays short and the count is exact — six, one per claimed
 block — and the cap itself is the measurement above. A test that claimed to
 exercise `CK_MAXPRINT` on a six-problem pack would pass without testing anything.
+
+## A path traversal, found by reviewing rather than by testing
+
+The one security defect in this tree, and it was not found by the fuzzer, the
+sanitizers, or any of the emulators. It was found by asking where data from
+outside the program becomes a filename.
+
+**SIXBIT decodes to ASCII 040..0137, and that range contains `/` and `.`.**
+`saveset -x` built a host path out of three names taken off the tape:
+
+```c
+snprintf(path, sizeof path, "%s/%s;%s", extract, dir, name);
+```
+
+A save set whose directory is `../..` therefore escapes:
+
+```console
+$ itsfs saveset -x out/sub/deep evil.tap
+../..;OWNED TXT -> out/sub/deep/../..;OWNED.TXT
+$ find out -type f
+out/sub/..;OWNED.TXT          <- one level above where -x pointed
+```
+
+Demonstrated, not deduced — the tape was hand-built from the format documented
+above, and `tests/run.sh` now builds the same one and checks the refusal.
+
+The reach is bounded: six characters a component, so a few levels at most. But
+bounded escape is still escape, and **a tape is the one artifact in this project
+that arrives from somewhere else** — a real one was downloaded from
+`pdp-10.trailing-edge.com` earlier the same day to test the reader against.
+
+**Refused by name rather than sanitised.** Rewriting `/` to something else would
+silently produce a file whose name is not the one on the tape, and the point of
+`-x` is to get out what is in there. Listing is untouched: refusing to *write* a
+name is not refusing to *read* it, and `saveset` without `-x` still shows the
+entry.
+
+`tape -x` was checked at the same time and is safe — it names its output
+`fileN.words` from a counter, never from the container.
 
 ## Lint
 
