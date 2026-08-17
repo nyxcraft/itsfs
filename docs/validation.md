@@ -832,6 +832,24 @@ and turns "unreachable" into "impossible". The corruption fuzzer had never found
 it because it damages descriptor bytes at the *start* of the area, where the
 offsets involved are small.
 
+### And a clean one, which is also a result
+
+`structure.c` got the same reading afterwards — it is the reader every command
+depends on, and it had never had one. **Nothing was found**, and that is worth
+one paragraph rather than none, so the next person knows it has been looked at
+and where.
+
+What was checked: the descriptor decoder's opcode ranges against `FSDEFS`
+(0 ends, 1–12 take, 13–30 skip, 31 write-placeholder, 32+ load address) and the
+branch order that distinguishes them — get that wrong and a load address is
+silently read as a "take"; the `run` count each branch contributes; the hard step
+cap that stops a corrupt descriptor looping; and `its_link_target`'s
+`comp[ncomp][n] = '\0'`, which writes at index `ITS_SIXBIT_CHARS` into a buffer
+of `ITS_NAME_MAX` — 6 into 7, safe, but only because those two constants are
+defined in terms of each other in different headers. Its `goto done` path leaves
+a component unterminated and relies on the opening `memset` for that, which
+holds.
+
 ## A second machine, and a second packing
 
 Everything in `make interop` runs under SIMH. When ITS boots there and prints a
