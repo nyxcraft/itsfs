@@ -232,11 +232,13 @@ and the command behind it.
 
 **What is cheap and still open.** Both reuse harnesses that already exist:
 
-- **Show `NSALV` other kinds of damage.** It has seen a cleared TUT word, at two
-  sites, and a miscount after an abrupt halt. It has *not* been shown a broken
-  descriptor, a damaged directory header or a corrupt MFD — all of which
-  `itsfs check` reports and none of which has had a second opinion.
-  `tests/nsalv.sh` needs a different damage step and nothing else.
+- **Show `NSALV` still other kinds of damage.** It has now seen a cleared TUT
+  word at two sites, a miscount after an abrupt halt, a zeroed directory
+  (stage 5) and a garbaged MFD check word (stage 6), agreeing on all of them.
+  and a broken descriptor putting two files on one block (stage 7). All four
+  directions the checker distinguishes now have a second opinion. Anything
+  further is a new *kind* of structure rather than a new direction — a damaged
+  TUT header, say, or a name area out of order.
 - **A `FSDEFS` from before September 1979** would put a ceiling on the version
   span. `make version-diff` has the harness; it needs an artifact, and none is in
   the ITS tree.

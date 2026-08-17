@@ -133,8 +133,53 @@ expect {
 		send "n"
 		exp_continue
 	}
+	-re "needs update - Write" {
+		# A DIFFERENT WORDING FOR A DIFFERENT STRUCTURE.  "TUT #0 ...
+		# need updating" is the allocation table; "UFD needs update" is
+		# a DIRECTORY, and it is what NSALV asks first when two files
+		# hold the same block -- having printed both files' descriptors,
+		# identical, one under each name.
+		#
+		# It comes BEFORE "Tracking down shared blocks", which this
+		# script has anticipated since it was written and could never
+		# reach, because this prompt stopped the run every time.  Answer
+		# it and the expected message arrives immediately after.
+		set verdict "a directory needs update"
+		sleep 1
+		send "n"
+		exp_continue
+	}
 	-re "Tracking down shared blocks" {
 		set verdict "found shared blocks"
+		exp_continue
+	}
+	-re "UFD on unit \[0-9\]+ block (\[0-9\]+) is (\[^ ,\]+), but expected" {
+		# A DIRECTORY WHOSE OWN NAME DOES NOT MATCH THE MFD ENTRY that
+		# reached it -- the damage class `itsfs check` calls "reached as
+		# |X| but its UDNAME is |Y|".  NSALV names the block and the
+		# name, which is what makes this comparable line for line.
+		#
+		# `n`, for the reason above: this is asking what it thinks, not
+		# asking it to rewrite somebody's directory.
+		set verdict "directory mismatch at block $expect_out(1,string) ($expect_out(2,string))"
+		sleep 1
+		send "n"
+		exp_continue
+	}
+	-re "Correct it\\?" {
+		sleep 1
+		send "n"
+		exp_continue
+	}
+	-re "MFD check word garbaged\\?" {
+		# The MFD's own check word, MDCHK, does not read |M.F.D.| --
+		# and the MFD is the one structure every other reading depends
+		# on.  NSALV asks whether to carry on regardless; `n`, because
+		# its refusal IS the answer being compared, and going on over a
+		# garbaged index produces noise rather than evidence.
+		set verdict "MFD check word garbaged"
+		sleep 1
+		send "n"
 		exp_continue
 	}
 	-re "Do you want to see all the UNIBUS registers" {

@@ -260,9 +260,167 @@ else
 fi
 
 echo
+echo "5. a DIFFERENT kind of damage: a directory, not the table"
+
+# EVERYTHING ABOVE IS ONE DAMAGE CLASS.  A cleared TUT word makes the table
+# under-claim: blocks a file holds are marked free, and the allocator will hand
+# them out again.  That is the dangerous direction, which is why it was first --
+# but it is one direction, and NSALV had never been shown any other.
+#
+# Zeroing a directory block is the opposite.  The table still claims the blocks
+# its files held; nothing claims them back.  `itsfs check` separates the two by
+# name -- "free but claimed" against "in use but unclaimed" -- and that
+# distinction had no second opinion until this stage existed.
+#
+# KMP is chosen because it is small: three files, one link, three blocks.  The
+# expected result is enumerable rather than approximate.
+cp "$IMAGE" "$T/dir.dsk" || exit 2
+
+DIRBLK=${DIRBLK:-384}
+dirbyte=$(( $(blk_sector "$DIRBLK") * 128 * 8 ))
+dd if=/dev/zero of="$T/dir.dsk" bs=1 seek="$dirbyte" count=8192 conv=notrunc 2>/dev/null
+echo "   zeroed the directory in block $DIRBLK"
+
+"$ITSFS" check "$T/dir.dsk" > "$T/dir.itsfs" 2>&1
+
+if grep -aq "block $DIRBLK was reached as" "$T/dir.itsfs"; then
+	ok "itsfs check: $(grep -a "block $DIRBLK was reached as" "$T/dir.itsfs" | sed 's/^ *//')"
+else
+	fail "itsfs check did not report the damaged directory"
+fi
+
+NSALV_PDP10=$PDP10 NSALV_TAPE=$TAPE NSALV_IMAGE=$T/dir.dsk NSALV_LOG=$T/dir.log \
+	expect "$EXP" > "$T/dir.exp" 2>&1
+
+# NSALV names the block and the directory in its own message, which is what
+# makes this comparable rather than merely both-complained.
+if grep -aq "block $DIRBLK is" "$T/dir.log" 2>/dev/null; then
+	ok "NSALV: $(grep -a "block $DIRBLK is" "$T/dir.log" | head -1 | sed 's/Correct it.*//')"
+else
+	fail "NSALV did not name block $DIRBLK -- see $T/dir.log"
+fi
+
+if grep -aq "NSALV VERDICT: directory mismatch at block $DIRBLK" "$T/dir.exp" 2>/dev/null; then
+	ok "IDENTICAL: the same block, and the same directory, from both"
+else
+	fail "the two do not agree about the damage"
+	grep -a "NSALV VERDICT" "$T/dir.exp" 2>/dev/null | sed 's/^/       /'
+fi
+
+# AND THE TWO DISAGREE ABOUT WHAT IT MEANS, which is worth stating rather than
+# smoothing over.  NSALV, having been told not to repair it, declares
+# "*** ERROR *** THE SYSTEM MAY NOT BE BROUGHT UP" and stops; `itsfs check`
+# reports its five problems and goes on to give the whole account.  Different
+# jobs: one is deciding whether to boot, the other is diagnosing.
+if grep -aq "MAY NOT BE BROUGHT UP" "$T/dir.log" 2>/dev/null; then
+	ok "...and NSALV calls it fatal, where check calls it five problems"
+fi
+
+echo
+echo "6. and the MFD itself, which everything else depends on"
+
+# THE ONE STRUCTURE WITH NOTHING ABOVE IT.  A damaged directory is one
+# directory; a damaged MFD is every directory, because the MFD is how they are
+# found at all.  So both programs stop rather than guess, and what each says
+# when it stops is the comparison.
+cp "$IMAGE" "$T/mfd.dsk" || exit 2
+
+mfdbyte=$(( ($(blk_sector "$MFDBLK") * 128 + 5) * 8 ))
+dd if=/dev/zero of="$T/mfd.dsk" bs=1 seek="$mfdbyte" count=8 conv=notrunc 2>/dev/null
+echo "   cleared MDCHK, word 5 of the MFD in block $MFDBLK"
+
+"$ITSFS" check "$T/mfd.dsk" > "$T/mfd.itsfs" 2>&1
+
+if grep -aq "is not an MFD: MDCHK is" "$T/mfd.itsfs"; then
+	ok "itsfs check: $(grep -a "is not an MFD" "$T/mfd.itsfs" | sed 's/^ *//')"
+else
+	fail "itsfs check did not report the garbaged MFD"
+fi
+
+if grep -aq "nothing below it could be checked" "$T/mfd.itsfs"; then
+	ok "...and stops there rather than reporting counts it cannot stand behind"
+else
+	fail "itsfs check carried on past a bad MFD"
+fi
+
+NSALV_PDP10=$PDP10 NSALV_TAPE=$TAPE NSALV_IMAGE=$T/mfd.dsk NSALV_LOG=$T/mfd.log \
+	expect "$EXP" > "$T/mfd.exp" 2>&1
+
+if grep -aq "MFD check word garbaged" "$T/mfd.log" 2>/dev/null; then
+	ok "NSALV: 'MFD check word garbaged?' -- the same word, named the same way"
+else
+	fail "NSALV did not report the garbaged MFD -- see $T/mfd.log"
+fi
+
+echo
+echo "7. a broken descriptor: two files holding one block"
+
+# THE LAST DIRECTION.  Stage 2 has the table under-claiming, stage 5 has it
+# over-claiming, stage 6 has the index itself gone.  This is the file side: a
+# descriptor that points somewhere it should not, so two files hold one block.
+#
+# The damage is a single field.  KMP;GOTO 12's UNDSCP is set to KMP;BABYL 19's,
+# so both files read the same descriptor -- BABYL's block is claimed twice and
+# GOTO's own is claimed by nobody.
+cp "$IMAGE" "$T/shared.dsk" || exit 2
+
+python3 - "$T/shared.dsk" <<'PY' || { echo "   (needs python3 -- skipped)"; SKIP7=1; }
+import struct, sys
+NHEDS, NSECS, SECBLK, NBLKSC = 19, 20, 8, 47
+b = 384
+cyl = b // NBLKSC; w = (b - cyl * NBLKSC) * SECBLK; srf = w // NSECS
+sec = (cyl * NHEDS + srf) * NSECS + (w - srf * NSECS)
+f = open(sys.argv[1], "r+b")
+f.seek((sec * 128 + 1011) * 8)
+got = struct.unpack("<Q", f.read(8))[0] & 0o777777777777
+
+# VERIFY BEFORE WRITING.  The first attempt at this wrote to the entry's first
+# word instead of its third -- an entry is FN1, FN2, RNDM, DATE, REF -- and
+# renamed a file rather than damaging it, which `check` correctly called no
+# problem at all.  A convincing false negative, from one wrong offset.
+if got != 0o467700000045:
+    print("   word 1011 is %012o, not the UNRNDM expected -- refusing" % got)
+    sys.exit(1)
+
+f.seek((sec * 128 + 1011) * 8)
+f.write(struct.pack("<Q", got & ~0o17777))
+f.close()
+PY
+
+if [ -z "${SKIP7:-}" ]; then
+	echo "   KMP;GOTO 12 now shares KMP;BABYL 19's descriptor"
+
+	"$ITSFS" check "$T/shared.dsk" > "$T/shared.itsfs" 2>&1
+
+	if grep -aq "and already by" "$T/shared.itsfs"; then
+		ok "itsfs check: $(grep -a "and already by" "$T/shared.itsfs" | sed 's/^ *//')"
+	else
+		fail "itsfs check did not report a doubly-claimed block"
+	fi
+
+	NSALV_PDP10=$PDP10 NSALV_TAPE=$TAPE NSALV_IMAGE=$T/shared.dsk \
+		NSALV_LOG=$T/shared.log expect "$EXP" > "$T/shared.exp" 2>&1
+
+	if grep -aq "Tracking down shared blocks" "$T/shared.log" 2>/dev/null; then
+		ok "NSALV: 'Tracking down shared blocks.'"
+	else
+		fail "NSALV did not report shared blocks -- see $T/shared.log"
+	fi
+
+	# It prints both files' descriptors, one under each name, and they are
+	# identical -- which is the shared block made visible.
+	if grep -aq "GOTO 12" "$T/shared.log" && grep -aq "BABYL 19" "$T/shared.log"; then
+		ok "...naming both files, the same two itsfs check names"
+	else
+		fail "NSALV did not name both files"
+	fi
+fi
+
+echo
 if [ $rc -eq 0 ]; then
 	echo "two checkers with nothing in common but the disk, agreeing block for block --"
-	echo "and ITS's own salvager accepting a file system this project wrote"
+	echo "on four kinds of damage -- and ITS's own salvager accepting a file system"
+	echo "this project wrote"
 else
 	echo "logs are in $T"
 fi

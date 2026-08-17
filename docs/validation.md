@@ -421,6 +421,109 @@ Same category — the dangerous one, where the allocator would hand the block ou
 again — same block, same file, and `NSALV` renders the name in the same
 `DIR;FN1 FN2` form this project chose from reading the format.
 
+### A second kind of damage
+
+Everything above is one damage class. A cleared TUT word makes the table
+*under*-claim: blocks a file holds are marked free, and the allocator will hand
+them out again. That is the dangerous direction, which is why it came first —
+but it is one direction, and `NSALV` had never been shown any other.
+
+Zeroing a directory block is the opposite. The table still claims the blocks its
+files held; nothing claims them back. `itsfs check` separates the two by name —
+**free but claimed** against **in use but unclaimed** — and that distinction had
+no second opinion until `make nsalv` grew a fifth stage.
+
+```console
+5. a DIFFERENT kind of damage: a directory, not the table
+   zeroed the directory in block 384
+  ok   itsfs check: block 384 was reached as |KMP| but its UDNAME is ||
+  ok   NSALV: UFD on unit 0 block 384 is KMP, but expected .
+  ok   IDENTICAL: the same block, and the same directory, from both
+  ok   ...and NSALV calls it fatal, where check calls it five problems
+```
+
+`KMP` is chosen because it is small — three files, one link, three blocks — so
+the expected result is *enumerable* rather than approximate. "They agree" here
+means the same block number and the same directory name, not merely that both
+complained.
+
+**And they disagree about what it means, which is worth recording rather than
+smoothing over.** Told not to repair it, `NSALV` declares `*** ERROR *** THE
+SYSTEM MAY NOT BE BROUGHT UP` and stops. `itsfs check` reports its five problems
+and goes on to give the whole account, including the three orphaned blocks —
+37507, 37559, 37604 — that `NSALV` never reaches, because it has already decided
+the pack will not boot. That is not a conflict. One is deciding whether to bring
+a machine up; the other is diagnosing. A test that recorded only the agreement
+would have hidden something true about both.
+
+### And the MFD, which everything else depends on
+
+A damaged directory is one directory. A damaged MFD is *every* directory,
+because the MFD is how they are found at all — so both programs stop rather than
+guess, and what each says when it stops is the comparison.
+
+```console
+6. and the MFD itself, which everything else depends on
+   cleared MDCHK, word 5 of the MFD in block 19081
+  ok   itsfs check: block 19081 is not an MFD: MDCHK is |      | (000000000000), not |M.F.D.|
+  ok   ...and stops there rather than reporting counts it cannot stand behind
+  ok   NSALV: 'MFD check word garbaged?' -- the same word, named the same way
+```
+
+The second line is the one worth defending. `check` reports its counts only when
+the structure they are derived from verified; a tool that answered "5,657 files"
+from a pack whose index did not check would be confidently wrong, which is the
+failure this document keeps returning to.
+
+`nsalv.sh` had `garbaged` in its list of messages to watch for from the day it
+was written — taken from reading NSALV's source, and never actually seen until
+this stage existed.
+
+**It also closes a loop from the start of the day.** `MFDCLB` — "M.F.D.
+clobbered" — is what KLH10's DSKDMP said at a `dbd9` pack, and it is recorded
+further up as a false alarm with an invented cause. The real reason was a device
+process that never started: no disk, so the loader read zeros where the MFD
+should be and reported the MFD clobbered. Which, from where it stood, it was.
+Here the MFD is genuinely clobbered, and both programs say so by name.
+
+### And the file side: two files holding one block
+
+Three directions were covered by then — the table under-claiming, the table
+over-claiming, and the index itself gone. The fourth is the file side: a
+descriptor that points where it should not.
+
+The damage is a single field. `KMP;GOTO 12`'s `UNDSCP` is set to
+`KMP;BABYL 19`'s, so both files read the same descriptor: BABYL's block is
+claimed twice and GOTO's own is claimed by nobody.
+
+```console
+7. a broken descriptor: two files holding one block
+   KMP;GOTO 12 now shares KMP;BABYL 19's descriptor
+  ok   itsfs check: block 37507 is claimed by KMP;GOTO 12 and already by KMP;BABYL 19
+  ok   NSALV: 'Tracking down shared blocks.'
+  ok   ...naming both files, the same two itsfs check names
+```
+
+NSALV shows it a different way: it prints both files' descriptors, one under each
+name, and they are **identical** — `51 12 03 (JUMP 111203)` under both. The
+shared block made visible.
+
+**Two things about getting there are worth more than the result.**
+
+The first attempt wrote to the entry's first word instead of its third — an
+entry is FN1, FN2, RNDM, DATE, REF — and so renamed a file rather than damaging
+it. `check` reported **no problems**, correctly, because a renamed file is not
+damage. Stopping there would have produced a finding that `check` misses shared
+blocks: a fabricated defect in working code, from one wrong offset. The stage now
+verifies the word reads `467700000045` before writing and refuses otherwise.
+
+And `Tracking down shared blocks` had been in this harness's watch-list since the
+day it was written, taken from NSALV's source and never once observed. It turns
+out to be exactly right — it simply comes *after* `UFD needs update - Write`, a
+prompt nothing here answered, so every run stopped before reaching it. The
+anticipated message was correct; the thing in front of it was missing. It was
+briefly written up here as "still unseen", which was wrong and is corrected.
+
 ### A third kind of agreement, found by accident
 
 Halting the emulator abruptly on a pack ITS had been running left 50 blocks whose

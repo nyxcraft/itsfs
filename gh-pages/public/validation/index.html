@@ -45,6 +45,9 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#level-3c--a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-opinion-that-is-not-ours">A second opinion that is not ours</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#why-both-runs-are-needed">Why both runs are needed</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#a-second-kind-of-damage">A second kind of damage</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-the-mfd-which-everything-else-depends-on">And the MFD, which everything else depends on</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#and-the-file-side-two-files-holding-one-block">And the file side: two files holding one block</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-third-kind-of-agreement-found-by-accident">A third kind of agreement, found by accident</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-the-comparison-actually-compares">What the comparison actually compares</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-this-establishes-and-what-it-does-not">What this establishes, and what it does not</a></li>
@@ -578,6 +581,85 @@ speaks, in terms that can be compared line for line:</p>
 <p>Same category — the dangerous one, where the allocator would hand the block out
 again — same block, same file, and <code>NSALV</code> renders the name in the same
 <code>DIR;FN1 FN2</code> form this project chose from reading the format.</p>
+<h3 id="a-second-kind-of-damage">A second kind of damage</h3>
+<p>Everything above is one damage class. A cleared TUT word makes the table
+<em>under</em>-claim: blocks a file holds are marked free, and the allocator will hand
+them out again. That is the dangerous direction, which is why it came first —
+but it is one direction, and <code>NSALV</code> had never been shown any other.</p>
+<p>Zeroing a directory block is the opposite. The table still claims the blocks its
+files held; nothing claims them back. <code>itsfs check</code> separates the two by name —
+<strong>free but claimed</strong> against <strong>in use but unclaimed</strong> — and that distinction had
+no second opinion until <code>make nsalv</code> grew a fifth stage.</p>
+<pre><code class="language-console">5. a DIFFERENT kind of damage: a directory, not the table
+   zeroed the directory in block 384
+  ok   itsfs check: block 384 was reached as |KMP| but its UDNAME is ||
+  ok   NSALV: UFD on unit 0 block 384 is KMP, but expected .
+  ok   IDENTICAL: the same block, and the same directory, from both
+  ok   ...and NSALV calls it fatal, where check calls it five problems
+</code></pre>
+<p><code>KMP</code> is chosen because it is small — three files, one link, three blocks — so
+the expected result is <em>enumerable</em> rather than approximate. &quot;They agree&quot; here
+means the same block number and the same directory name, not merely that both
+complained.</p>
+<p><strong>And they disagree about what it means, which is worth recording rather than
+smoothing over.</strong> Told not to repair it, <code>NSALV</code> declares <code>*** ERROR *** THE SYSTEM MAY NOT BE BROUGHT UP</code> and stops. <code>itsfs check</code> reports its five problems
+and goes on to give the whole account, including the three orphaned blocks —
+37507, 37559, 37604 — that <code>NSALV</code> never reaches, because it has already decided
+the pack will not boot. That is not a conflict. One is deciding whether to bring
+a machine up; the other is diagnosing. A test that recorded only the agreement
+would have hidden something true about both.</p>
+<h3 id="and-the-mfd-which-everything-else-depends-on">And the MFD, which everything else depends on</h3>
+<p>A damaged directory is one directory. A damaged MFD is <em>every</em> directory,
+because the MFD is how they are found at all — so both programs stop rather than
+guess, and what each says when it stops is the comparison.</p>
+<pre><code class="language-console">6. and the MFD itself, which everything else depends on
+   cleared MDCHK, word 5 of the MFD in block 19081
+  ok   itsfs check: block 19081 is not an MFD: MDCHK is |      | (000000000000), not |M.F.D.|
+  ok   ...and stops there rather than reporting counts it cannot stand behind
+  ok   NSALV: 'MFD check word garbaged?' -- the same word, named the same way
+</code></pre>
+<p>The second line is the one worth defending. <code>check</code> reports its counts only when
+the structure they are derived from verified; a tool that answered &quot;5,657 files&quot;
+from a pack whose index did not check would be confidently wrong, which is the
+failure this document keeps returning to.</p>
+<p><code>nsalv.sh</code> had <code>garbaged</code> in its list of messages to watch for from the day it
+was written — taken from reading NSALV's source, and never actually seen until
+this stage existed.</p>
+<p><strong>It also closes a loop from the start of the day.</strong> <code>MFDCLB</code> — &quot;M.F.D.
+clobbered&quot; — is what KLH10's DSKDMP said at a <code>dbd9</code> pack, and it is recorded
+further up as a false alarm with an invented cause. The real reason was a device
+process that never started: no disk, so the loader read zeros where the MFD
+should be and reported the MFD clobbered. Which, from where it stood, it was.
+Here the MFD is genuinely clobbered, and both programs say so by name.</p>
+<h3 id="and-the-file-side-two-files-holding-one-block">And the file side: two files holding one block</h3>
+<p>Three directions were covered by then — the table under-claiming, the table
+over-claiming, and the index itself gone. The fourth is the file side: a
+descriptor that points where it should not.</p>
+<p>The damage is a single field. <code>KMP;GOTO 12</code>'s <code>UNDSCP</code> is set to
+<code>KMP;BABYL 19</code>'s, so both files read the same descriptor: BABYL's block is
+claimed twice and GOTO's own is claimed by nobody.</p>
+<pre><code class="language-console">7. a broken descriptor: two files holding one block
+   KMP;GOTO 12 now shares KMP;BABYL 19's descriptor
+  ok   itsfs check: block 37507 is claimed by KMP;GOTO 12 and already by KMP;BABYL 19
+  ok   NSALV: 'Tracking down shared blocks.'
+  ok   ...naming both files, the same two itsfs check names
+</code></pre>
+<p>NSALV shows it a different way: it prints both files' descriptors, one under each
+name, and they are <strong>identical</strong> — <code>51 12 03 (JUMP 111203)</code> under both. The
+shared block made visible.</p>
+<p><strong>Two things about getting there are worth more than the result.</strong></p>
+<p>The first attempt wrote to the entry's first word instead of its third — an
+entry is FN1, FN2, RNDM, DATE, REF — and so renamed a file rather than damaging
+it. <code>check</code> reported <strong>no problems</strong>, correctly, because a renamed file is not
+damage. Stopping there would have produced a finding that <code>check</code> misses shared
+blocks: a fabricated defect in working code, from one wrong offset. The stage now
+verifies the word reads <code>467700000045</code> before writing and refuses otherwise.</p>
+<p>And <code>Tracking down shared blocks</code> had been in this harness's watch-list since the
+day it was written, taken from NSALV's source and never once observed. It turns
+out to be exactly right — it simply comes <em>after</em> <code>UFD needs update - Write</code>, a
+prompt nothing here answered, so every run stopped before reaching it. The
+anticipated message was correct; the thing in front of it was missing. It was
+briefly written up here as &quot;still unseen&quot;, which was wrong and is corrected.</p>
 <h3 id="a-third-kind-of-agreement-found-by-accident">A third kind of agreement, found by accident</h3>
 <p>Halting the emulator abruptly on a pack ITS had been running left 50 blocks whose
 allocation-table count was 2 and which only one file claimed. <code>itsfs check</code>

@@ -238,11 +238,13 @@ compares a save set with one ITS's own DUMP wrote and they are equal to the byte
 and the command behind it.</p>
 <p><strong>What is cheap and still open.</strong> Both reuse harnesses that already exist:</p>
 <ul>
-<li><strong>Show <code>NSALV</code> other kinds of damage.</strong> It has seen a cleared TUT word, at two
-sites, and a miscount after an abrupt halt. It has <em>not</em> been shown a broken
-descriptor, a damaged directory header or a corrupt MFD — all of which
-<code>itsfs check</code> reports and none of which has had a second opinion.
-<code>tests/nsalv.sh</code> needs a different damage step and nothing else.</li>
+<li><strong>Show <code>NSALV</code> still other kinds of damage.</strong> It has now seen a cleared TUT
+word at two sites, a miscount after an abrupt halt, a zeroed directory
+(stage 5) and a garbaged MFD check word (stage 6), agreeing on all of them.
+and a broken descriptor putting two files on one block (stage 7). All four
+directions the checker distinguishes now have a second opinion. Anything
+further is a new <em>kind</em> of structure rather than a new direction — a damaged
+TUT header, say, or a name area out of order.</li>
 <li><strong>A <code>FSDEFS</code> from before September 1979</strong> would put a ceiling on the version
 span. <code>make version-diff</code> has the harness; it needs an artifact, and none is in
 the ITS tree.</li>
