@@ -313,6 +313,34 @@ check_mfd(struct ck *c)
 			continue;
 
 		/*
+		 * AN EMPTY SLOT IS NOT A TERMINATOR, and this comment exists
+		 * because a check was briefly added here saying it was.
+		 *
+		 * QFL, the monitor's directory lookup in `disk.1228`, is
+		 *
+		 *      QFL1:   LDB J,[1200,,Q]
+		 *              JUMPE J,QFL3    ;give up
+		 *              CAMN C,MNUNAM(Q)
+		 *               JRST QFL2      ;found
+		 *              ADDI Q,LMNBLK
+		 *              JRST QFL1
+		 *
+		 * which reads as "stop at the first zero entry" -- and is not.
+		 * `Q=10` in `its.1652`: Q is an ACCUMULATOR, so `[1200,,Q]`
+		 * addresses the register, and the LDB takes the low ten bits of
+		 * THE ENTRY'S ADDRESS, not of the entry.  That is why QFL2 can
+		 * use J as the address; it is the same "position is the
+		 * address" this file relies on further down.  The loop ends
+		 * when the offset walks off the block, and an empty slot simply
+		 * fails to match.
+		 *
+		 * The measurement said so before the source did: 105 of the
+		 * reference pack's 247 directory names have zero in their low
+		 * ten bits -- names shorter than six characters, NUL-padded --
+		 * and the first is the eleventh entry.  A scan that stopped
+		 * there would leave ITS with eleven directories.
+		 */
+		/*
 		 * THE POSITION IS THE ADDRESS: block = (A - 2000 + 2*NUDSL)/2,
 		 * which is QFL2 in disk.1228.  Done signed, because on unsigned
 		 * words a negative result is an enormous block number rather
@@ -552,6 +580,8 @@ check_ufd(struct ck *c, struct ckdir *dir)
 {
 	const uint64_t *u = dir->w;
 	uint64_t namp = u[ITS_UD_NAMP];
+	uint64_t prev1, prev2;
+	int seen;
 	uint64_t descp = u[ITS_UD_ESCP];
 	uint64_t udblks = ITS_RH(u[ITS_UD_BLKS]);
 	uint64_t descwords;
@@ -596,6 +626,50 @@ check_ufd(struct ck *c, struct ckdir *dir)
 
 	dir->ok = 1;
 
+	/*
+	 * THE NAME AREA IS SORTED, AND ITS DEPENDS ON IT.
+	 *
+	 * That it is sorted was measured first: 6,056 entries on the reference
+	 * pack, none out of order.  That the order is LOAD-BEARING took reading
+	 * the monitor.  QLOOK does not scan -- it calls QLGLK, which is a binary
+	 * search over the name area (`disk.1228`):
+	 *
+	 *      ADDI J,600      ;128. NAME BLOCKS FROM END
+	 *      REPEAT 7,[      ;THIS CODE DELIBERATELY NOT INDENTED.
+	 *              ...
+	 *              CAML A,D
+	 *              ADDI J,<1_<7-.RPCNT>>*LUNBLK
+	 *              SUBI J,<1_<6-.RPCNT>>*LUNBLK
+	 *      ]
+	 *
+	 * -- seven halving steps over 128 name blocks.  An out-of-order name
+	 * area therefore makes files UNFINDABLE by the monitor while every block
+	 * is still accounted for.
+	 *
+	 * AND NSALV DOES NOT CHECK IT.  Swapping two entries on the reference
+	 * pack and handing it to the salvager produces no complaint at all: it
+	 * walks the pack and returns to DDT.  So this is the one kind of damage
+	 * where the second opinion is silent and the pack is still broken, which
+	 * is exactly the kind worth checking here.
+	 *
+	 * THIS IS STRICTER THAN THE MONITOR REQUIRES, and the difference is
+	 * worth stating rather than leaving for somebody to trip over.  QLGLK
+	 * searches on FN1 alone; QLOOK then walks BACKWARDS through the run of
+	 * equal FN1s comparing both names -- `SUBI Q,LUNBLK / CAML Q,J / JRST
+	 * QLK1`, commented "SEARCH THROUGH * FILES".  So two entries sharing an
+	 * FN1 could be in any FN2 order and still be found.
+	 *
+	 * They never are.  On the reference pack 1,913 adjacent pairs share an
+	 * FN1 and not one has its FN2 out of order: QRELOC sorts on the whole
+	 * name.  So this checks what ITS WRITES rather than the minimum ITS can
+	 * READ, which is the more useful of the two for spotting a writer that
+	 * has gone wrong -- but a pack that failed only on FN2 order would still
+	 * work, and the message should be read in that light.
+	 */
+	prev1 = 0;
+	prev2 = 0;
+	seen = 0;
+
 	for (j = (unsigned)namp; j + ITS_LUNBLK <= c->wpb; j += ITS_LUNBLK) {
 		char fn1[ITS_SIXBIT_CHARS + 1], fn2[ITS_SIXBIT_CHARS + 1];
 		char who[64];
@@ -603,6 +677,7 @@ check_ufd(struct ck *c, struct ckdir *dir)
 		unsigned dscp = (unsigned)ITS_FIELD(rndm, ITS_UN_DSCP_P, ITS_UN_DSCP_S);
 		int is_link = (int)ITS_FIELD(rndm, ITS_UN_LNK_P, ITS_UN_LNK_S);
 		long n;
+		uint64_t k1 = u[j + ITS_UN_FN1], k2 = u[j + ITS_UN_FN2];
 
 		its_sixbit_name(u[j + ITS_UN_FN1], fn1);
 		its_sixbit_name(u[j + ITS_UN_FN2], fn2);
@@ -611,6 +686,21 @@ check_ufd(struct ck *c, struct ckdir *dir)
 			c->nzero++;
 			continue;
 		}
+
+		if (seen && (k1 < prev1 || (k1 == prev1 && k2 < prev2))) {
+			char was[ITS_SIXBIT_CHARS + 1], was2[ITS_SIXBIT_CHARS + 1];
+
+			its_sixbit_name(prev1, was);
+			its_sixbit_name(prev2, was2);
+			problem(c,
+				"%s;%s %s follows |%s %s| in the name area, out of order "
+				"-- QLOOK binary-searches it, so this file is unfindable",
+				dir->name, fn1, fn2, was, was2);
+		}
+
+		prev1 = k1;
+		prev2 = k2;
+		seen = 1;
 
 		snprintf(who, sizeof who, "%s;%s %s", dir->name, fn1, fn2);
 

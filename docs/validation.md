@@ -59,7 +59,7 @@ This is the index.
 | 137 extracted files are byte-identical to their host originals | level 3 | `make oracle` |
 | `dbd9` matches a pack KLH10's own converter wrote | level 3 | `make klh10` |
 | a real ITS tape decodes to the exact words its own program prints | level 3 | `make tape-test` |
-| 264 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| 269 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
 | 5,400 commands over damaged packs and damaged tapes | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
@@ -524,6 +524,152 @@ prompt nothing here answered, so every run stopped before reaching it. The
 anticipated message was correct; the thing in front of it was missing. It was
 briefly written up here as "still unseen", which was wrong and is corrected.
 
+### A check ITS's own salvager does not make
+
+The four damage classes above all end in agreement. This one began as a question
+and ended in a **missing check**.
+
+The name area is sorted — measured early, 6,056 entries on the reference pack
+with none out of place. But "always observed sorted" and "required to be sorted"
+are different claims, and only the second makes an unsorted pack *damaged*. So
+two entries were swapped and the pack handed to `NSALV`.
+
+**It said nothing.** Walked the pack, returned to DDT, no complaint. And
+`itsfs check` said nothing either — which looked like a match, and was the wrong
+conclusion to draw from it.
+
+`QLOOK` in `disk.1228` does not scan the name area. It calls `QLGLK`, which is a
+binary search:
+
+```
+	ADDI J,600	;128. NAME BLOCKS FROM END
+REPEAT 7,[		;THIS CODE DELIBERATELY NOT INDENTED.
+	...
+	CAML A,D
+	ADDI J,<1_<7-.RPCNT>>*LUNBLK
+	SUBI J,<1_<6-.RPCNT>>*LUNBLK
+]
+```
+
+Seven halving steps over 128 name blocks. **The order is load-bearing.** Two
+entries in the wrong places make a file unfindable by the monitor while every
+block on the pack is still accounted for — and the salvager will not tell you,
+because it is checking the allocation, not the ordering.
+
+So this is the one kind of damage where the second opinion is silent and the pack
+is broken anyway, which makes it exactly the kind worth checking here. `check`
+now reports it:
+
+```
+KMP;BABYL 19 follows |GOTO 12| in the name area, out of order
+  -- QLOOK binary-searches it, so this file is unfindable
+```
+
+The reference pack is still clean under the new check, which is the earlier
+measurement made again by a different route: all 247 directories, all 6,056
+entries, in order.
+
+**The check is deliberately stricter than the monitor requires.** `QLGLK`
+searches on FN1 alone; `QLOOK` then walks *backwards* through the run of equal
+FN1s comparing both names — `SUBI Q,LUNBLK / CAML Q,J / JRST QLK1`, commented
+"SEARCH THROUGH * FILES". So two entries sharing an FN1 could be in any FN2
+order and still be found. They never are: on the reference pack **1,913 adjacent
+pairs share an FN1 and not one has its FN2 out of order**, because `QRELOC` sorts
+on the whole name. Checking what ITS *writes* rather than the minimum ITS can
+*read* is the more useful of the two for catching a writer that has gone wrong —
+but a pack failing only on FN2 order would still work, and the message deserves
+to be read in that light.
+
+**And it closes a loop on the writer.** That `put` inserts in the right place has
+been checked since phase 8 by watching `DSKDMP` list a directory under an
+emulator — a strong test that costs ten minutes and a PDP-10. Now that `check`
+knows the invariant, the same property is testable in the ordinary suite: write
+`ZULU`, `MIKE`, `ALPHA`, `TANGO`, `BRAVO` in that order, read back
+`ALPHA BRAVO MIKE TANGO ZULU`, and have `check` agree. Appending, prepending, or
+stopping the duplicate search early would each show up in that sequence.
+
+The emulator test still earns its place — it is ITS's own code doing the reading
+— but the invariant no longer goes unchecked between one run of it and the next.
+
+**And the check was put to ITS's own writing before being trusted.** Every pack
+it had been validated against was written by ITS *before* today and read cold;
+none exercised an insertion made by a running monitor into a directory already in
+use. `make interop-klh10` does exactly that — ITS creates `.BATCH;BATCHN LOG` and
+`.BATCH;BATCHN NEXTUP` while it is up, `QRELOC` places them, and stage 4 then
+runs `check` over the result. Eleven checks, all passing, the new one included.
+
+So the invariant holds for the writer that defines it, not only for artifacts
+that happen to satisfy it. That distinction is the same one that cost a
+retraction two hours earlier: a claim verified only against things that already
+existed is weaker than one tested against the process that makes them.
+
+**The general point is worth more than the check.** Agreement with a second
+implementation is the strongest evidence this project has, and it is still
+bounded by what that implementation looks at. `NSALV` and `itsfs check` agreed
+here — both silent — and both were wrong. Only the source of the program that
+*uses* the structure settled it.
+
+### And the same question one level up, where I got it wrong
+
+If the monitor binary-searches a directory's name area, what does it do with the
+MFD's? `QFL` in `disk.1228`:
+
+```
+QFL1:	LDB J,[1200,,Q]
+	JUMPE J,QFL3	;give up
+	CAMN C,MNUNAM(Q)
+	 JRST QFL2	;found
+	ADDI Q,LMNBLK
+	JRST QFL1
+```
+
+A **linear scan**, not a search — so the MFD's name area need not be sorted, and
+it is not: `itsfs dirs` lists `.TAPE0`, `BACKUP`, `(INIT)`, `SHARE2` in that
+order. That much is right, and the asymmetry is real.
+
+Then I read `JUMPE J,QFL3` as "stop at the first zero slot", concluded that a gap
+in the MFD hides every directory beyond it, added a check for it, wrote a test,
+and committed the lot. **It is wrong.**
+
+`Q=10` in `its.1652`. **Q is an accumulator**, so `[1200,,Q]` addresses the
+*register*, and the `LDB` takes the low ten bits of the entry's **address**, not
+of the entry. That is exactly why `QFL2` can then use `J` as the address — it is
+the same "position is the address" this project relies on everywhere else. The
+loop ends when the offset walks off the block; an empty slot simply fails to
+match.
+
+**The measurement said so before the source did, and I nearly overrode it.** 105
+of the reference pack's 247 directory names have zero in their low ten bits —
+names shorter than six characters, NUL-padded — and the first is the *eleventh*
+entry. A scan that stopped there would leave ITS with eleven directories on a
+pack that demonstrably has 247. The contradiction was on the screen before the
+check was written; what saved it was going back to the source rather than
+explaining the measurement away.
+
+The check and its two tests are gone. What remains is this note, and the
+`Q=10` that makes the difference, so the next reader of `QFL1` does not spend
+the afternoon the same way.
+
+**And the pattern across the day is worth having**, because this was not the
+only claim taken from reading MIDAS. Every other one turned out to be anchored to
+something that could contradict it:
+
+| claim, from reading assembly | what could have contradicted it |
+|---|---|
+| `DUMP` writes links under a `LINKS` switch | ran it — a link appeared on the tape |
+| a link header is 8 words, `HDATE` `400000,,0`, `HLEN` 3 | `cmp` against a tape ITS wrote |
+| `NSALV`'s drive is fixed at assembly | the same tape accepted an RP06 and refused an RM03 |
+| `FESET` writes `HOM` at word 0, address at `0103` | the bytes on the reference pack |
+| `UNAUTH` all-ones means "none" | every file on the pack has `777` there |
+| `QLGLK` binary-searches the name area | 6,056 entries, none out of order — and the search would fail if they were |
+| **`QFL1` stops at an empty slot** | **nothing — and it was wrong** |
+
+The one claim with no measurement behind it is the one that failed. That is not
+a coincidence and it is not a rule about assembly: it is that a reading which
+*cannot* be contradicted by an artifact will not be, however carefully it is
+done. Five times today a plausible mechanism turned out to be invented, and
+every time what settled it was making the system produce something.
+
 ### A third kind of agreement, found by accident
 
 Halting the emulator abruptly on a pack ITS had been running left 50 blocks whose
@@ -936,7 +1082,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**264 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**269 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

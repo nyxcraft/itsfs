@@ -509,6 +509,29 @@ out=$("$ITSFS" check "$T/k5.dsk" 2>&1)
 has "a descriptor area that has reached the name area is a problem" "$out" \
 	"has overrun the name area"
 
+# AN OUT-OF-ORDER NAME AREA, which is the one kind of damage where NSALV is
+# silent and the pack is still broken.  ITS's monitor does not scan the name
+# area, it BINARY-SEARCHES it -- QLGLK in disk.1228, seven halving steps over
+# 128 name blocks -- so two entries in the wrong order make a file unfindable
+# while every block is still accounted for.  Handing such a pack to the salvager
+# produces no complaint at all; it walks it and returns to DDT.
+#
+# The fixture's name area is sorted, so swapping two entries makes it wrong.
+mkfixture "$T/k6.dsk"
+poke "$T/k6.dsk" 498 1009 "$(sb HELLO)" "$(sb TXT)" $((3 << 24)) 0 0
+poke "$T/k6.dsk" 498 1014 "$(sb A)" "$(sb LINK)" $(((1 << 18) | 6)) 0 0
+
+out=$("$ITSFS" check "$T/k6.dsk" 2>&1); rc=$?
+chk "an out-of-order name area is a problem" "$rc" "1"
+has "...and says why it matters" "$out" "out of order"
+has "...naming what it follows" "$out" "unfindable"
+
+# A GAP IN THE MFD NAME AREA IS NOT DAMAGE, and there is no check for it here
+# on purpose.  One was added and removed within the hour: QFL's `JUMPE J,QFL3`
+# reads as "stop at the first zero slot", but `Q=10` makes Q an ACCUMULATOR, so
+# the LDB takes the low ten bits of the entry's ADDRESS.  The loop ends at the
+# block boundary and an empty slot merely fails to match.  See cmd_check.c.
+
 mkfixture "$T/k6.dsk"
 poke "$T/k6.dsk" 498 1011 $(((3 << 24) | 20))
 out=$("$ITSFS" check "$T/k6.dsk" 2>&1)
@@ -968,6 +991,27 @@ poke "$T/r2.dsk" 498 0 5980
 out=$("$ITSFS" put "$T/r2.dsk" 'TEST;NEW FILE' "$T/put.txt" 2>&1); rc=$?
 chk "put refuses when the directory is full" "$rc" "1"
 has "...saying which two numbers met" "$out" "is full"
+
+# AND THE WRITER MAINTAINS THE ORDER ITS DEPENDS ON.  The monitor does not scan
+# a name area, it binary-searches it (QLGLK, disk.1228), so a writer that
+# appended instead of inserting would produce a directory whose files ITS cannot
+# find -- while every block stayed accounted for and NSALV stayed silent.
+#
+# `make interop` has watched DSKDMP list an insertion in the right place since
+# phase 8, but that needs an emulator.  Now that `check` knows the invariant,
+# the same property is testable here: write five names in an order chosen so
+# that appending, prepending, or stopping the search early would each show.
+"$ITSFS" mkfs -f "$T/ord.dsk" ORDTST >/dev/null 2>&1
+"$ITSFS" mkdir "$T/ord.dsk" TEST >/dev/null 2>&1
+for n in ZULU MIKE ALPHA TANGO BRAVO; do
+	"$ITSFS" put "$T/ord.dsk" "TEST;$n TXT" "$T/put.txt" >/dev/null 2>&1
+done
+
+out=$("$ITSFS" ls "$T/ord.dsk" TEST 2>&1 | sed -n 's/^\([A-Z][A-Z]*\) .*/\1/p' | tr '\n' ' ')
+chk "put inserts in order, whatever order it is given" "$out" "ALPHA BRAVO MIKE TANGO ZULU "
+
+"$ITSFS" check "$T/ord.dsk" >/dev/null 2>&1
+chk "...and check agrees the name area is sorted" "$?" "0"
 
 # AND EVERY REFUSAL LEAVES THE PACK AS IT WAS.  This is the property that makes
 # the others safe to rely on: a writer that half-does something is worse than
