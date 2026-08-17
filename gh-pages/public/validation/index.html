@@ -35,6 +35,10 @@
         <nav class="section-nav" aria-label="On this page">
 <ul class="section-nav__list">
 <li><a class="section-nav__link section-nav__link--l2" href="#the-standard">The standard</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#level-1--a-tape-its-wrote-and-a-tape-we-wrote-byte-for-byte">Level 1 — a tape ITS wrote, and a tape we wrote, byte for byte</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-cmp-found-that-nine-phases-of-round-trips-had-not">What `cmp` found that nine phases of round trips had not</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#a-links-header-and-the-switch-that-produces-one">A link&#x27;s header, and the switch that produces one</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#so-ask-its-the-other-way-round">So ask ITS the other way round</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#level-3a--the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#level-3b--the-space-on-a-real-pack-accounts-for-exactly">Level 3b — the space on a real pack accounts for exactly</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#level-3c--a-second-implementation-over-the-same-pack">Level 3c — a second implementation, over the same pack</a></li>
@@ -89,11 +93,13 @@ has been found by trying.</p>
 <p>Three levels of evidence, in the order they are worth anything:</p>
 <ol>
 <li><strong>Byte-identical</strong> — build something with <code>itsfs</code>, build the same thing with
-ITS, <code>cmp</code>. Nothing here reaches this level.</li>
+ITS, <code>cmp</code>. <strong>Reached, once: a DUMP save set.</strong> ITS's own DUMP writes a tape
+of one directory; <code>itsfs save</code> writes the same files; the two files are equal
+over all 2,667,188 bytes. <code>make itsdump</code>.</li>
 <li><strong>Accepted by native tools</strong> — hand what we produce to <code>NSALV</code>, ITS's own
 salvager, or to the monitor. <strong><code>NSALV</code> accepts what the writer produces, ITS
-boots on it, and DSKDMP lists the file.</strong> What is still missing is the
-monitor <em>opening</em> the file. See below.</li>
+boots on it, DSKDMP lists the file, and the monitor opens it and prints it</strong>
+— under two unrelated emulators, in two packings.</li>
 <li><strong>Self-consistent</strong> — round trips, and cross-checks against numbers the file
 system maintains independently of the thing being checked.</li>
 </ol>
@@ -103,10 +109,187 @@ But a native tool can also be asked to grade something we only <strong>read</str
 ITS's own salvager at a pack, ask it what is wrong, and compare its answer with
 ours. That needs no writer, and it is not self-consistency either, because the
 other opinion is MIT's.</p>
-<p>It has its own section below. Everything else here is level 3, and the
-interesting question is how strong a level-3 result can be made. The answer turns
-out to be: quite strong, if the numbers you check against were computed by
+<p>It has its own section below. Most of what follows is level 3, and the
+interesting question was how strong a level-3 result can be made. The answer
+turned out to be: quite strong, if the numbers you check against were computed by
 somebody else.</p>
+<p><strong>And the one level-1 result is the argument for wanting them anyway.</strong> Nothing
+below caught the three things <code>cmp</code> caught in a single run — a header a word
+short, an author field being zeroed, and a date written as zero where ITS writes
+all ones. Every one of them had been read back correctly by two independent
+readers for nine phases. A round trip cannot see a field that neither end uses,
+and a second opinion cannot see one that both readers agree to ignore. Only the
+original can.</p>
+<h2 id="level-1--a-tape-its-wrote-and-a-tape-we-wrote-byte-for-byte">Level 1 — a tape ITS wrote, and a tape we wrote, byte for byte</h2>
+<pre><code class="language-console">$ make itsdump
+2. ITS writes the tape
+  ok   ITS booted, ran :dump, and returned to its prompt
+  ok   ...leaving 2667188 bytes of tape
+
+3. what is on it
+  ok   itsfs saveset reads a tape ITS wrote: 37 files
+  ok   all 37 files on it are byte-identical to the same files off the pack
+
+4. and ours, beside it
+  ok   the same size, to the byte: 2667188
+  ok   IDENTICAL: every byte of a tape ITS's own DUMP wrote
+</code></pre>
+<p>ITS boots under KLH10, <code>:dump</code> runs ITS's own DUMP program, and it writes a save
+set of one directory to a tape the emulator has mounted. Then <code>itsfs save</code> writes
+the same files from the same pack, and the two files are compared. There is
+nothing to interpret in the answer.</p>
+<p>Getting a tape out of ITS took more than the documentation admits.
+<code>.INFO.;DUMP INFO</code> — read off the pack with <code>itsfs cat</code>, which is a pleasing way
+to find out how to drive the program that made the pack — gives the <code>_</code> prompt
+and <code>FILE =</code> and stops there. DUMP then asks <strong><code>TAPE NO=</code></strong>, because it keeps a
+record per tape on disk in <code>.TAPE0</code> and <code>.TAPE1</code>. Miss that and the run sits at a
+prompt until it is killed, with an empty tape and no error anywhere.</p>
+<h3 id="what-cmp-found-that-nine-phases-of-round-trips-had-not">What <code>cmp</code> found that nine phases of round trips had not</h3>
+<p>The first comparison was <strong>not</strong> byte-identical, and every difference was ours.</p>
+<p><strong>The file header is eight words, not seven.</strong> The eighth is the file's length in
+words. This wrote seven, on the strength of <code>itstar</code>'s reader, which takes six or
+seven and never objected. All 37 headers on the tape ITS wrote are eight, and in
+every one the eighth word equals the count of data words that follow it —
+<code>-READ- -THIS-</code> says <code>0164</code> and has 116 words, <code>BUILD DOC</code> says <code>016364</code> and has
+7,412.</p>
+<p><strong><code>UNREF</code> is copied whole.</strong> This masked off its low 18 bits, throwing away
+<code>UNAUTH</code> — and <code>its.h</code> had already recorded, from <code>FSDEFS</code> and marked <code>[v]</code>, that
+<code>UNAUTH</code> is <em>&quot;all ones = none&quot;</em>. Zeroing it does not say &quot;no author&quot;; it says
+<strong>author 0</strong>. The control matters here: before changing anything, the pack's own
+<code>UNREF</code> for <code>KSHACK;CMDS M80</code> was read and it is <code>176333777000</code> — exactly the
+word ITS put in the header. So DUMP copies it rather than substituting something,
+and the fix is to stop masking.</p>
+<p><strong>An unknown date is all ones.</strong> ITS wrote <code>777777777777</code>, SIXBIT <code>______</code>, from
+a machine whose clock was unset — the same case this writer is in, since today's
+date is not available to that layer. This wrote zero, SIXBIT six spaces. Both
+render as <code>__/__/__</code> in both readers, so nothing depended on it; one of the two
+is what ITS does.</p>
+<p>With those three, the tapes are equal over all 2,667,188 bytes.</p>
+<p><strong>Why none of this was visible before.</strong> <code>itstar</code> reads what we write, we read
+what <code>itstar</code> writes, and both round trips were byte-perfect the whole time. But
+a round trip cannot see a field that neither end uses, and a second opinion
+cannot see one that both readers agree to ignore. Two readers had been agreeing
+about a header that was a word short. Only the original disagrees.</p>
+<h3 id="a-links-header-and-the-switch-that-produces-one">A link's header, and the switch that produces one</h3>
+<p>The first tape held 37 files and <strong>no links</strong>, which left an obvious loose end:
+what does ITS put in a link header? The pack has directories with links in them,
+so this is answerable rather than academic — <code>KMP</code> has three files and one link,
+<code>KMP;TS DUMPT -&gt; SYS;TS NT</code>, and is small enough to dump in a few minutes.</p>
+<p>The answer is that there is nothing to measure, because <strong>ITS's DUMP does not
+write links at all</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>directory</th>
+<th>on the pack</th>
+<th>on the tape ITS wrote</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KSHACK</code></td>
+<td>37 files, 3 links</td>
+<td>37 files, 0 links</td>
+</tr>
+<tr>
+<td><code>KMP</code></td>
+<td>3 files, 1 link</td>
+<td>3 files, 0 links</td>
+</tr>
+</tbody>
+</table>
+<p>Every file, no links, twice. This is <code>DUMP E</code> on a single directory, which is
+the only mode driven here; a full dump may well differ.</p>
+<p>That looked like &quot;DUMP does not write links&quot;, and it was written down that way.
+It is wrong, and the source says so in one line:</p>
+<pre><code>DMPLNK:	0	;-1 =&gt; DUMP LINKS
+</code></pre>
+<p>It is a <strong>switch</strong>, default off, and DUMP's own help text lists it —
+<code>LINKS    Dump links as well as files</code>. The pack's <code>.INFO.;DUMP INFO</code>, which is
+where the recipe for driving DUMP came from, does not mention it: the program's
+built-in help is ahead of the documentation beside it. Both earlier runs used
+<code>DUMP E</code>, so the tapes had no links because none had been asked for.</p>
+<p><code>ITS_SWITCHES=&quot;E LINKS&quot; ITS_DIR=KMP make itsdump</code> produces one, and the answer is
+that a link's header is the <strong>same eight words as a file's</strong>, with three of them
+different — every value named outright in <code>syseng/dump.449</code> rather than deduced
+from the bytes:</p>
+<table>
+<thead>
+<tr>
+<th>word</th>
+<th>a file</th>
+<th>a link</th>
+<th>source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HPKN</code></td>
+<td>pack number</td>
+<td>the target's directory, SIXBIT, whole</td>
+<td><code>MOVE A,PACKN / MOVEM A,HPKN</code></td>
+</tr>
+<tr>
+<td><code>HDATE</code></td>
+<td>creation date</td>
+<td><code>400000,,0</code></td>
+<td><code>;CREATION DATE OF LINK IS 400000,,0</code></td>
+</tr>
+<tr>
+<td><code>HRDATE</code></td>
+<td><code>UNREF</code></td>
+<td><code>777777,,777000</code></td>
+<td><code>; Unknown author, 36. bit bytes</code></td>
+</tr>
+<tr>
+<td><code>HLEN</code></td>
+<td>length in words</td>
+<td><code>3</code></td>
+<td><code>; Length of link is always 3</code></td>
+</tr>
+</tbody>
+</table>
+<p>The three words that follow are the target as FN1, FN2, SNAME. With those, a
+tape this project writes is byte-identical to one ITS wrote, link and all.</p>
+<p><strong>And one of the four was a bug entirely of my own</strong>, which <code>cmp</code> caught and
+nothing else could have. The target directory was written as <code>twd &lt;&lt; 18</code>, on the
+assumption that it needed shifting into the left half. A SIXBIT name is <em>already</em>
+left-justified — <code>SYS</code> is <code>637163,,0</code> — so the shift pushed it off the end of the
+word and the mask in <code>sw_word</code> ate it, leaving that field zero. The tenth word of
+the same record carried the same name, correctly, which is what pointed at the
+shift. One word wrong on a 5,016-byte tape, invisible to every reader that has
+ever read it, and found only by comparing against the original.</p>
+<h3 id="so-ask-its-the-other-way-round">So ask ITS the other way round</h3>
+<p>If ITS will not write a link, it will still <em>read</em> one. <code>make itsload</code> writes a
+tape here, mounts it, and runs DUMP's own <code>LOAD</code>:</p>
+<pre><code class="language-console">2. ITS loads it
+  ok   ITS booted, ran DUMP's LOAD, and returned to its prompt
+  ok   ...having read our volume header: TAPE NO      1 CREATION DATE  ______
+
+3. what came back
+  ok   the FILE is back: KMP;GOTO 12
+  ok   THE LINK IS BACK, AND STILL A LINK: TS DUMPT -&gt; SYS;TS NT
+  ok   ...and the file's words are what they were before the round trip
+  ok   no block is both free and claimed after ITS wrote to the pack
+</code></pre>
+<p><strong>The control is on the tape.</strong> It carries two entries — an ordinary file and a
+link — and both are deleted from the pack before ITS is started, so anything
+that comes back came off our tape. Three outcomes were distinguishable in
+advance: neither back means <code>LOAD</code> never ran and the test says nothing about
+links; only the file back means ITS reads our file headers and rejects our link;
+both back means ITS accepts both. Without the file beside it, a failure could
+not have been told from a broken harness — which is the mistake made earlier
+with <code>MFDCLB</code> and written up above.</p>
+<p>Both came back. <code>KMP</code> is restored to the four entries and 953 words it started
+with, <code>GOTO 12</code> is byte-identical to what was read off the pack before the round
+trip, and the link points where it pointed.</p>
+<p>One thing fell out of it that was not being tested. ITS echoed the volume header
+as <code>CREATION DATE ______</code> — reading back, as its own &quot;unknown&quot;, the all-ones date
+word this writer was changed to produce an hour earlier on the strength of what
+ITS <em>wrote</em>. Written and read, by ITS, both ways.</p>
+<p>So the position on links is now: ITS's DUMP does not write them, ITS's LOAD
+accepts ours, and what remains unmeasured is only which ITS program writes the
+link entries <code>itstar</code> was built to read.</p>
 <h2 id="level-3a--the-word-layer-round-trips-a-real-pack">Level 3a — the word layer round-trips a real pack</h2>
 <pre><code class="language-console">$ make oracle IMAGE=~/its/out/simh/rp0.dsk
 IDENTICAL: the word layer round-trips the real pack
@@ -998,8 +1181,8 @@ files to</em>, which is a weaker statement than it first sounds.</li>
 <li><strong>One pack, one drive, one era.</strong> Everything above is an RP06 built from source
 in 2026. No RP07, no RM03, no multi-pack file system, and no artifact recovered
 from MIT.</li>
-<li><strong>No tape written here has been compared with one ITS wrote.</strong> <code>itstar</code> reads
-ours and ours reads <code>itstar</code>'s, but ITS's own DUMP has never been shown one.</li>
+<li><s>Which ITS program writes link entries</s> — DUMP does, under its <code>LINKS</code>
+switch, and what this writes now matches it byte for byte.</li>
 <li><strong>The version span has a floor and no ceiling.</strong> Both <code>FSDEFS</code> versions
 compared are after the 1979 TUT change, and nothing here maps a file system
 written by a monitor older than that.</li>

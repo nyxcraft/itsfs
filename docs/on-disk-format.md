@@ -96,6 +96,53 @@ Stated by FSDEFS. The full transcription with evidence markers is
 | TUT header words | all seven | five of seven; `QTRSRV` and the secondary-pack idea untouched |
 | TUT map | yes | yes |
 
+## The DUMP save set, which is a tape rather than a disk
+
+Not a disk format at all, but it belongs beside one, and it is the best-attested
+thing in this project: `itsfs save` writes a tape byte-identical to one ITS's own
+DUMP writes (`make itsdump`).
+
+A save set is a SIMH `.tap` of records in `core` packing — five frames to the
+word. It opens with a four-word volume header, and then each entry is a header
+followed by its data. **The header carries its own length** as an AOBJN pointer
+in its first word: `1000000 - n` in the left half. That is what lets tapes of
+different ages be read by one reader, and it is the reason a wrong length is
+invisible — every reader believes the pointer.
+
+The layout is `HBLK` in `syseng/dump.449`, transcribed with its own comments:
+
+| word | name | a file | a link |
+|---|---|---|---|
+| 0 | — | AOBJN `1000000-8` | AOBJN `1000000-8` |
+| 1 | `HSNM` | sys name (the directory) | same |
+| 2 | `HFN1` | first name | same |
+| 3 | `HFN2` | second name | same |
+| 4 | `HPKN` | *link flag,,pack number* — zero | the target's directory, SIXBIT, whole |
+| 5 | `HDATE` | creation date, in disk format | `400000,,0` |
+| 6 | `HRDATE` | `UNREF` entire: reference date, author, byte size | `777777,,777000` |
+| 7 | `HLEN` | length of the file in words | `3` |
+
+The data that follows is the file's words, or for a link the three words of its
+target as FN1, FN2, SNAME.
+
+Two things about this table are worth knowing rather than deducing.
+
+**Words 6 and 7 are younger than the rest.** The source marks them: *"Next two
+added 7/14/89 by Alan"*. So a pre-1989 tape has a six-word header, which is why
+`itstar` accepts six or seven and why writing seven here went unremarked for nine
+phases — every reader took the pointer at its word. Only comparing against a tape
+ITS wrote showed it.
+
+**A link's four odd values are constants, and the source names each one.**
+`MOVE A,[SETZ] / MOVEM A,HDATE ;CREATION DATE OF LINK IS 400000,,0` — `SETZ` is
+opcode 400, so the literal's address *is* that word. `HRROI A,777000` builds
+`777777,,777000`, commented *"Unknown reference date / Unknown author, 36. bit
+bytes"*. And `MOVEI A,3 / MOVEM A,HLEN ; Length of link is always 3`.
+
+**And DUMP does not write links unless asked.** `DMPLNK: 0 ;-1 => DUMP LINKS`,
+reachable as the `LINKS` switch — which the program's own help lists and the
+pack's `.INFO.;DUMP INFO` does not.
+
 ## What would change these columns
 
 - **A pack recovered from MIT**, rather than built from source, would exercise

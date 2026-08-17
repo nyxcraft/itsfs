@@ -71,6 +71,12 @@ tests/klh10.exp     SECOND emulator and a second packing.  KLH10 execs its
                     which reads as a corrupt pack and is not one.  KEEP EVERY
                     expect PATTERN LIST MULTI-LINE; the one-line form does not
                     match on expect 5.45.4, reproducibly, cause unknown.
+tests/itsdump.sh    `make itsdump`: ITS's OWN DUMP writes a tape, and cmp says
+                    ours is byte-identical.  The only level-1 evidence here.
+tests/itsload.sh    `make itsload`: and ITS's own LOAD reads one we wrote,
+                    link included -- the only grader for the link form, since
+                    ITS's DUMP never writes one.  The tape carries a FILE as
+                    well, on purpose: it is the control.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
@@ -143,9 +149,18 @@ and cannot tell anywhere else -- so it is a seat belt, not a guarantee.
   KLH10 and prints a file itsfs wrote (`make interop-klh10`).  Building the whole
   emulator turned out to be unnecessary for the first half and sufficient for the
   second.
-- A tape this project writes has not been compared RECORD FOR RECORD with one
-  ITS wrote, and ITS's own DUMP has never been shown one.  itstar reads ours and
-  the data round-trips, which is a weaker claim than byte identity.
+- ~~A tape this project writes has not been compared RECORD FOR RECORD with one
+  ITS wrote~~ -- settled, and it was the most productive thing in the project.
+  `make itsdump` boots ITS, runs its own DUMP to tape, and cmp's the result with
+  `itsfs save`: EQUAL over all 2,667,188 bytes.  Three fixes to get there, none
+  of them visible to any existing test -- an 8-word file header where this wrote
+  7, UNREF copied whole where this zeroed the author out of it, and an unknown
+  date written as all ones rather than zero.  What is STILL unmeasured is a
+  LINK: ITS's DUMP omits links ENTIRELY -- KSHACK 37 files/3 links dumped as
+  37/0, KMP 3/1 dumped as 3/0 -- so what `save` writes for a link is an
+  copy too, once DUMP is asked for one: `DMPLNK`/`LINKS` is a SWITCH, default
+  off, listed in DUMP's own help and not in .INFO.;DUMP INFO.  With it, a link
+  header is 8 words like a file's, and ours matches byte for byte.
 - `UNTIM`'s unit, `UNBYTE`'s other three encodings, `UNDUMP`'s position and the
   flag field's width are all unknown. See
   [the gap register](docs/filesystem.md#gap-register).

@@ -37,6 +37,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#confirmed">Confirmed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#observed">Observed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#sourced">Sourced</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-dump-save-set-which-is-a-tape-rather-than-a-disk">The DUMP save set, which is a tape rather than a disk</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-would-change-these-columns">What would change these columns</a></li>
 </ul>
         </nav>
@@ -189,6 +190,93 @@ perfectly ordinary UFD.</li>
 </tr>
 </tbody>
 </table>
+<h2 id="the-dump-save-set-which-is-a-tape-rather-than-a-disk">The DUMP save set, which is a tape rather than a disk</h2>
+<p>Not a disk format at all, but it belongs beside one, and it is the best-attested
+thing in this project: <code>itsfs save</code> writes a tape byte-identical to one ITS's own
+DUMP writes (<code>make itsdump</code>).</p>
+<p>A save set is a SIMH <code>.tap</code> of records in <code>core</code> packing — five frames to the
+word. It opens with a four-word volume header, and then each entry is a header
+followed by its data. <strong>The header carries its own length</strong> as an AOBJN pointer
+in its first word: <code>1000000 - n</code> in the left half. That is what lets tapes of
+different ages be read by one reader, and it is the reason a wrong length is
+invisible — every reader believes the pointer.</p>
+<p>The layout is <code>HBLK</code> in <code>syseng/dump.449</code>, transcribed with its own comments:</p>
+<table>
+<thead>
+<tr>
+<th>word</th>
+<th>name</th>
+<th>a file</th>
+<th>a link</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>—</td>
+<td>AOBJN <code>1000000-8</code></td>
+<td>AOBJN <code>1000000-8</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>HSNM</code></td>
+<td>sys name (the directory)</td>
+<td>same</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>HFN1</code></td>
+<td>first name</td>
+<td>same</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>HFN2</code></td>
+<td>second name</td>
+<td>same</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>HPKN</code></td>
+<td><em>link flag,,pack number</em> — zero</td>
+<td>the target's directory, SIXBIT, whole</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>HDATE</code></td>
+<td>creation date, in disk format</td>
+<td><code>400000,,0</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>HRDATE</code></td>
+<td><code>UNREF</code> entire: reference date, author, byte size</td>
+<td><code>777777,,777000</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>HLEN</code></td>
+<td>length of the file in words</td>
+<td><code>3</code></td>
+</tr>
+</tbody>
+</table>
+<p>The data that follows is the file's words, or for a link the three words of its
+target as FN1, FN2, SNAME.</p>
+<p>Two things about this table are worth knowing rather than deducing.</p>
+<p><strong>Words 6 and 7 are younger than the rest.</strong> The source marks them: <em>&quot;Next two
+added 7/14/89 by Alan&quot;</em>. So a pre-1989 tape has a six-word header, which is why
+<code>itstar</code> accepts six or seven and why writing seven here went unremarked for nine
+phases — every reader took the pointer at its word. Only comparing against a tape
+ITS wrote showed it.</p>
+<p><strong>A link's four odd values are constants, and the source names each one.</strong>
+<code>MOVE A,[SETZ] / MOVEM A,HDATE ;CREATION DATE OF LINK IS 400000,,0</code> — <code>SETZ</code> is
+opcode 400, so the literal's address <em>is</em> that word. <code>HRROI A,777000</code> builds
+<code>777777,,777000</code>, commented <em>&quot;Unknown reference date / Unknown author, 36. bit
+bytes&quot;</em>. And <code>MOVEI A,3 / MOVEM A,HLEN ; Length of link is always 3</code>.</p>
+<p><strong>And DUMP does not write links unless asked.</strong> <code>DMPLNK: 0 ;-1 =&gt; DUMP LINKS</code>,
+reachable as the <code>LINKS</code> switch — which the program's own help lists and the
+pack's <code>.INFO.;DUMP INFO</code> does not.</p>
 <h2 id="what-would-change-these-columns">What would change these columns</h2>
 <ul>
 <li><strong>A pack recovered from MIT</strong>, rather than built from source, would exercise

@@ -196,6 +196,8 @@ $ make interop-klh10 IMAGE=... # ...and do it again on a second emulator
 $ make mkfs-test        # build a pack from nothing; ITS grades it
 $ make tape-test        # read a real ITS tape (no emulator needed)
 $ make klh10 IMAGE=...  # dbd9 against KLH10's own converter (no emulator either)
+$ make itsdump IMAGE=... # ITS's own DUMP writes a tape; cmp it with ours
+$ make itsload IMAGE=... # ...and ITS's own LOAD reads one we wrote
 $ make version-diff     # how far the transcription reaches, across two FSDEFS
 ```
 
@@ -498,11 +500,32 @@ it did not bound first. Six of those commands per iteration are `put`, `del` and
 `saveset` over a damaged `.tap` — the input most likely to have come from
 somewhere else — with its record-length fields corrupted on purpose.
 
+**Byte-identical to what ITS writes.** `make itsdump` boots ITS, runs its own
+`DUMP` to write a save set to tape, writes the same files with `itsfs save`, and
+compares: equal over all 2,667,188 bytes. It took three fixes to get there, and
+none of them was visible to any test that existed — the file header is eight
+words and we wrote seven, `UNREF` is copied whole and we were zeroing the author
+out of it, and an unknown date is all ones where we wrote zero. Two independent
+readers had round-tripped all of it perfectly for nine phases. A round trip
+cannot see a field neither end uses; only the original disagrees.
+
+**Links too, and finding them took reading ITS's source.** Two dumps came back
+with no link entries at all, which looked like "DUMP does not write links". It
+does — `DMPLNK: 0 ;-1 => DUMP LINKS` is a switch, and the program's own help says
+`LINKS   Dump links as well as files`. The pack's `.INFO.;DUMP INFO`, where the
+recipe came from, never mentions it. With the switch on, a link's header is the
+same eight words as a file's with four values changed, every one of them named in
+`syseng/dump.449` — and with those, our tape matches ITS's byte for byte, link
+included.
+
+**And ITS reads what we write.** `make itsload` hands ITS a tape with a file and
+a link on it, both first deleted from the pack, and runs DUMP's own `LOAD`. Both
+come back, the link still a link, the file byte-identical. The file beside it is
+the control: without it, a failure could not be told from a broken harness.
+
 **What is NOT proven.** A pack `mkfs` builds does not boot, so ITS has never come
-up on one — the graders for those are booted from tape. A tape this project
-writes has not been compared record for record with one ITS wrote. And the
-reference pack is one built from source in 2026, not an artifact recovered from
-MIT. The version span has a floor and no ceiling — both `FSDEFS` versions
+up on one — the graders for those are booted from tape. And the reference pack is
+one built from source in 2026, not an artifact recovered from MIT. The version span has a floor and no ceiling — both `FSDEFS` versions
 compared are after the 1979 TUT change, and nothing here maps a file system
 written by an older monitor. Until each of those is done, this file does not
 claim it; what *has* been settled is listed in

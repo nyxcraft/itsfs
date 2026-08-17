@@ -308,6 +308,34 @@ interop-klh10: all
 	    "$(ITSTREE)" $(INTEROP_K10_TMP)
 	@rm -rf $(INTEROP_K10_TMP)
 
+#
+# `make itsdump` -- ITS'S OWN DUMP WRITES A TAPE, and ours is compared with it.
+#
+# The only level-1 evidence here: build something with itsfs, build the same
+# thing with ITS, cmp.  Needs KLH10 built and about twenty minutes.
+#
+ITSDUMP_TMP ?= $(shell mktemp -d)
+
+itsdump: all
+	@sh tests/itsdump.sh $(BIN)/itsfs "$(IMAGE)" "$(KLH10_BIN)" \
+	    "$(ITSTREE)" $(ITSDUMP_TMP)
+	@rm -rf $(ITSDUMP_TMP)
+
+#
+# `make itsload` -- ITS'S OWN DUMP READS A TAPE THIS WROTE.
+#
+# The other direction from `itsdump`, and the only grader for the one part of
+# `save` that is not a copy of something ITS produced: ITS's DUMP omits links,
+# so nothing it writes can be compared against what we write for one.  This
+# hands ITS a tape with a file AND a link on it and looks at what comes back.
+#
+ITSLOAD_TMP ?= $(shell mktemp -d)
+
+itsload: all
+	@sh tests/itsload.sh $(BIN)/itsfs "$(IMAGE)" "$(KLH10_BIN)" \
+	    "$(ITSTREE)" $(ITSLOAD_TMP)
+	@rm -rf $(ITSLOAD_TMP)
+
 # Optional corruption fuzzer (needs python3).  NOT part of `make test` and CI
 # does not run it -- the suite stays sh + coreutils.  Build sanitized first or a
 # finding is invisible, for the reason above.
@@ -324,4 +352,4 @@ ITERS ?= 100
 clean:
 	rm -rf $(BIN)
 
-.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff klh10 interop-klh10
+.PHONY: all clean lint lint-format test test-san fuzz oracle nsalv interop mkfs-test tape-test version-diff klh10 interop-klh10 itsdump itsload

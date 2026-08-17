@@ -339,14 +339,20 @@ cmd_save(int argc, char **argv)
 		goto out;
 
 	/*
-	 * The volume header.  The date is the MFD's own MDYEAR and today is not
-	 * available to this layer, so it is written as zeros rather than
-	 * invented: a save set that claimed a creation date this project made up
-	 * would be worse than one that admits it has none.
+	 * The volume header.  Today's date is not available to this layer, so it
+	 * is not invented -- a save set claiming a creation date this project
+	 * made up would be worse than one that admits it has none.
+	 *
+	 * "NONE" IS ALL ONES, NOT ZERO, which is what ITS writes.  On the tape
+	 * ITS's own DUMP produced -- from a machine whose clock was unset, so
+	 * this is the same case -- the date word is 777777777777, which is
+	 * SIXBIT `______`.  Zero would be SIXBIT six spaces.  Both are shown as
+	 * `__/__/__` by this reader and by itstar, so nothing depended on it;
+	 * it is changed because one of the two is what ITS actually writes.
 	 */
 	sw_word(&s, ((uint64_t)(01000000 - 4) << 18));
 	sw_word(&s, ((uint64_t)1 << 18) | 0); /* tape 1, reel 0 */
-	sw_word(&s, 0);			      /* SIXBIT date: unknown */
+	sw_word(&s, ITS_WORD_MASK);	      /* SIXBIT date: unknown */
 	sw_word(&s, 0);			      /* type: random */
 
 	for (int i = optind + 2; i < argc; i++) {
@@ -360,6 +366,9 @@ cmd_save(int argc, char **argv)
 		its_ent e;
 		int found = 0;
 		char have[ITS_SIXBIT_CHARS + 1];
+		long nblocks;
+		uint64_t nwords;
+		uint64_t tw1 = 0, tw2 = 0, twd = 0; /* a link's target */
 
 		if (semi == NULL) {
 			fprintf(stderr, "itsfs: '%s' is not a file name: it wants DIR;FN1 FN2\n",
@@ -431,39 +440,32 @@ cmd_save(int argc, char **argv)
 		}
 
 		/*
-		 * The file header.  Seven words, which is itstar's `len` unless
-		 * -O asks for the six-word form.
-		 *
-		 * THE DATE WORD IS COPIED STRAIGHT FROM THE DISK, because the
-		 * two layouts are the same one: itstar reads the tape's date as
-		 * year<<9 | month<<5 | day in the left half, and FSDEFS puts
-		 * UNYRB at bit 27, UNMON at 23 and UNDAY at 18 -- which is
-		 * exactly that, measured from the start of the halfword.  So
-		 * there is nothing to convert and nothing to get wrong.
+		 * THE FILE'S LENGTH IS NEEDED BEFORE THE HEADER, not after --
+		 * see the eighth word below.  The blocks are counted here and
+		 * the count reused when the data is written, so the descriptor
+		 * is walked once either way.
 		 */
-		sw_word(&s, ((uint64_t)(01000000 - 7) << 18));
-		sw_word(&s, nd);
-		sw_word(&s, n1);
-		sw_word(&s, n2);
-		sw_word(&s, e.is_link ? ((uint64_t)1 << 18) : 0);
-		sw_word(&s, e.date);
-		sw_word(&s, e.ref & ~((uint64_t)0777777)); /* the ref date half */
+		nblocks = 0;
+		nwords = 0;
 
 		if (e.is_link) {
+			/*
+			 * A LINK'S TARGET IS NEEDED BEFORE THE HEADER TOO: its
+			 * directory goes in the header's fourth word, which is
+			 * where a file carries its pack number.
+			 */
 			char tgt[64];
-			const char *err = NULL;
+			const char *lerr = NULL;
 			char t1[ITS_SIXBIT_CHARS + 1], t2[ITS_SIXBIT_CHARS + 1],
 				td[ITS_SIXBIT_CHARS + 1];
-			uint64_t w1, w2, wd;
 			char *semi2, *sp2;
 
-			if (its_link_target(&u, e.desc, tgt, sizeof tgt, &err) != 0) {
-				fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2, err);
+			if (its_link_target(&u, e.desc, tgt, sizeof tgt, &lerr) != 0) {
+				fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2, lerr);
 				its_ufd_free(&u);
 				goto out;
 			}
 
-			/* `DIR;FN1 FN2` back apart, to write it as FN1, FN2, UFD. */
 			memset(td, 0, sizeof td);
 			memset(t1, 0, sizeof t1);
 			memset(t2, 0, sizeof t2);
@@ -480,33 +482,152 @@ cmd_save(int argc, char **argv)
 				}
 			}
 
-			if (its_sixbit_make(td, &wd) != 0 || its_sixbit_make(t1, &w1) != 0 ||
-			    its_sixbit_make(t2, &w2) != 0) {
+			if (its_sixbit_make(td, &twd) != 0 || its_sixbit_make(t1, &tw1) != 0 ||
+			    its_sixbit_make(t2, &tw2) != 0) {
 				fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot "
 						"write: %s\n",
 					dir, fn1, fn2, tgt);
 				its_ufd_free(&u);
 				goto out;
 			}
+		}
 
-			/* FN1, FN2, UFD -- itstar's own comment calls it a funny order. */
-			sw_word(&s, w1);
-			sw_word(&s, w2);
-			sw_word(&s, wd);
+		if (!e.is_link) {
+			const char *derr = NULL;
+
+			nblocks = its_desc_blocks(&u, im.drv, e.desc, NULL, 0, &derr);
+
+			if (nblocks < 0 || nblocks > 200000) {
+				fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2,
+					derr ? derr : "impossibly long");
+				its_ufd_free(&u);
+				goto out;
+			}
+
+			nwords = its_file_words(u.wpb, nblocks, e.lastwc);
+		}
+
+		/*
+		 * The file header.  EIGHT words for a file, and the eighth is
+		 * the file's length in words.
+		 *
+		 * Seven was what this wrote for nine phases, on the strength of
+		 * itstar's reader, which takes six or seven.  Then ITS's own
+		 * DUMP was made to write a tape -- `make itsdump` -- and every
+		 * header on it is eight words with the length in the last one.
+		 * Measured on all 37 files of that tape: the AOBJN pointer says
+		 * 8, and the eighth word equals the words of data that follow,
+		 * exactly, every time.
+		 *
+		 *      -READ- -THIS-   header 8   word 8 = 0164   data 116 words
+		 *      BUILD DOC       header 8   word 8 = 016364 data 7412
+		 *      CMDS M80        header 8   word 8 = 041722 data 17362
+		 *
+		 * A LINK GETS EIGHT TOO, and the way that was settled is worth
+		 * keeping.  `DUMP E` on two directories wrote no links at all
+		 * -- KSHACK 37 files/3 links as 37/0, KMP 3/1 as 3/0 -- which
+		 * looked like "DUMP does not write links".  It is not: DUMP has
+		 * a switch, `DMPLNK: 0 ;-1 => DUMP LINKS`, and its own help
+		 * text lists it, "LINKS   Dump links as well as files".  The
+		 * pack's `.INFO.;DUMP INFO` does not mention it.  So the tapes
+		 * had no links because none had been asked for.
+		 *
+		 * `DUMP E LINKS` produces one, and the header is the same eight
+		 * words as a file's, with three of them different -- each named
+		 * outright in syseng/dump.449 rather than deduced:
+		 *
+		 *      HPKN    the target's directory, SIXBIT, copied whole
+		 *      HDATE   400000,,0    ;CREATION DATE OF LINK IS 400000,,0
+		 *      HRDATE  777777,,777000  ; Unknown reference date
+		 *                              ; Unknown author, 36. bit bytes
+		 *      HLEN    3               ; Length of link is always 3
+		 *
+		 * -- and the three words that follow are the target as FN1,
+		 * FN2, SNAME.  With those, a tape this writes is byte-identical
+		 * to one ITS wrote, link and all: `ITS_SWITCHES="E LINKS"
+		 * ITS_DIR=KMP make itsdump`.
+		 *
+		 * THE DATE WORD IS COPIED STRAIGHT FROM THE DISK, because the
+		 * two layouts are the same one: itstar reads the tape's date as
+		 * year<<9 | month<<5 | day in the left half, and FSDEFS puts
+		 * UNYRB at bit 27, UNMON at 23 and UNDAY at 18 -- which is
+		 * exactly that, measured from the start of the halfword.  So
+		 * there is nothing to convert and nothing to get wrong.
+		 */
+		sw_word(&s, ((uint64_t)(01000000 - 8) << 18));
+		sw_word(&s, nd);
+		sw_word(&s, n1);
+		sw_word(&s, n2);
+
+		/*
+		 * HPKN -- "LINK FLAG,,PACK NUMBER".  For a link this is the
+		 * TARGET'S DIRECTORY as a SIXBIT word, not a bare flag:
+		 * `PACKN: 0 ;PACK NUMBER OR SNAME IN LINK IF LEFT HALF NON
+		 * ZERO`, and DUMP copies it whole -- `MOVE A,PACKN / MOVEM
+		 * A,HPKN`.  A reader only asks whether the left half is
+		 * non-zero, which is why writing 1 here worked at all; it just
+		 * was not the sname.
+		 *
+		 * NOT SHIFTED.  A SIXBIT name is already left-justified in its
+		 * word -- `SYS` is 637163,,0 -- so shifting it up 18 puts it
+		 * off the end of the word, where the mask in sw_word eats it
+		 * and this field comes out zero.  That is one word's difference
+		 * on a 5,016-byte tape, and cmp is what found it.
+		 */
+		sw_word(&s, e.is_link ? twd : 0);
+
+		/*
+		 * HDATE and HRDATE.  For a FILE, both are copied off the disk.
+		 * For a LINK, DUMP does not copy them -- a link's entry has no
+		 * date, its `UNDSCP` field holds the target -- and writes two
+		 * constants its source names outright:
+		 *
+		 *      MOVE A,[SETZ]
+		 *      MOVEM A,HDATE     ;CREATION DATE OF LINK IS 400000,,0
+		 *
+		 *      DFHDTS: SETOM HDATE      ; Unknown creation date
+		 *              HRROI A,777000   ; Unknown reference date
+		 *              MOVEM A,HRDATE   ; Unknown author, 36. bit bytes
+		 *
+		 * `SETZ` is opcode 400, so that word is 400000,,0; `HRROI
+		 * A,777000` builds 777777,,777000.  Both are exactly what the
+		 * tape holds.
+		 */
+		sw_word(&s, e.is_link ? (uint64_t)0400000000000 : e.date);
+		/*
+		 * UNREF ENTIRE, not just its date half -- masking the low 18
+		 * bits threw the AUTHOR away.
+		 *
+		 * its.h has said all along that UNAUTH is 9 bits at 9 and that
+		 * "all ones = none".  Writing zeros there does not say "no
+		 * author", it says AUTHOR 0.  Every file in this test set has
+		 * UNAUTH 777 on the pack, and the header ITS's DUMP wrote holds
+		 * 176333777000 -- the pack's UNREF word, copied unchanged.  So
+		 * DUMP copies it, and so does this now.
+		 */
+		sw_word(&s, e.is_link ? (uint64_t)0777777777000 : e.ref);
+
+		/* HLEN.  "Length of link is always 3" -- and it is the three
+		 * words of target that follow. */
+		sw_word(&s, e.is_link ? (uint64_t)3 : nwords);
+
+		if (e.is_link) {
+			/*
+			 * FN1, FN2, UFD -- itstar's own comment calls it a
+			 * funny order, and it is the order ITS writes: the tape
+			 * DUMP produced holds `TS`, `NT`, `SYS` for a link to
+			 * SYS;TS NT.  Three words, which is why HLEN is 3.
+			 */
+			sw_word(&s, tw1);
+			sw_word(&s, tw2);
+			sw_word(&s, twd);
 		}
 		else {
 			uint64_t *blocks = NULL;
 			const char *err = NULL;
-			long nb = its_desc_blocks(&u, im.drv, e.desc, NULL, 0, &err);
-			uint64_t nwords, left;
+			long nb = nblocks; /* counted above, for the header */
+			uint64_t left;
 			uint64_t *blk;
-
-			if (nb < 0 || nb > 200000) {
-				fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2,
-					err ? err : "impossibly long");
-				its_ufd_free(&u);
-				goto out;
-			}
 
 			blocks = calloc((size_t)nb + 1, sizeof *blocks);
 			blk = calloc(u.wpb, sizeof *blk);
@@ -520,7 +641,6 @@ cmd_save(int argc, char **argv)
 			}
 
 			its_desc_blocks(&u, im.drv, e.desc, blocks, (size_t)nb, &err);
-			nwords = its_file_words(u.wpb, nb, e.lastwc);
 			left = nwords;
 
 			for (long k = 0; k < nb && left > 0; k++) {

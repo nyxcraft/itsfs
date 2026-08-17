@@ -5,7 +5,13 @@
 # Environment:
 #   KN10   the emulator binary
 #   INI    its command file, in the current directory
-#   MODE   `dskdmp` to list a directory, `print` to boot ITS and print a file
+#   TAPE   optional: a tape file to mount on mta0 before starting
+#   TAPECREATE  set it to create that tape; leave it unset to mount one
+#          that already exists
+#   SWITCHES  for `dump`: the switches to give DUMP, e.g. "E" or "E LINKS"
+#   MODE   `dskdmp` to list a directory, `print` to boot ITS and print a file,
+#          `dump` to have ITS's own DUMP write a save set to the mounted tape,
+#          `load` to have it READ one this project wrote
 #   DIR    for dskdmp: the directory to list
 #   FILE   for print: the file, as `DIR;FN1 FN2`
 #   MATCH  for print: text that must appear in what it prints
@@ -91,6 +97,36 @@ expect {
 	timeout { puts "\nKLH10: the emulator never finished its ini"; exit 2 }
 }
 sleep 2
+
+# MOUNT THE TAPE HERE, NOT IN THE INI.  A `devmo` in the command file stalls
+# the rest of it: the mount is asynchronous and the reply comes back through the
+# device process, so nothing after it is read until that happens.  The stock ITS
+# config has its own devmo lines commented out, which is the same hint read the
+# other way round.
+if {[info exists env(TAPE)]} {
+	# `create` MAKES a tape and refuses if the file is already there:
+	#     [TM03: Tape data file "in.tap" already exists]
+	#     No tape mounted.
+	# -- printed in passing, after which the machine runs with no tape and
+	# nothing says so again.  Mounting an EXISTING tape to read leaves it
+	# off.  TAPECREATE picks, rather than the script guessing from whether
+	# the file happens to exist, which would silently do the wrong thing
+	# for a re-run.
+	set mkt [expr {[info exists env(TAPECREATE)] ? " create" : ""}]
+	send "devmo mta0 $env(TAPE)$mkt\r"
+
+	# This build says "Mount succeeded."; doc/cmdref.txt's worked example
+	# shows "Mount requested:" and an asynchronous "[mta0: Tape online]".
+	# Matching only the documented one costs a whole timeout with the tape
+	# correctly mounted.
+	expect {
+		"Mount succeeded" {}
+		"Tape online" {}
+		timeout { puts "\nKLH10: the tape did not mount"; exit 2 }
+	}
+	sleep 2
+}
+
 send "go\r"
 
 expect {
@@ -111,9 +147,10 @@ if {$mode == "dskdmp"} {
 	exit 0
 }
 
-# ---- otherwise: boot the monitor and have it print a file.
+# ---- otherwise: boot the monitor.  `print` has it print a file; `dump` has
+# ITS's OWN DUMP write a save set to tape.
 set file  $env(FILE)
-set match $env(MATCH)
+set match [expr {[info exists env(MATCH)] ? $env(MATCH) : ""}]
 
 send "its\r"
 expect "\n"
@@ -188,6 +225,106 @@ expect { -re ".+" { exp_continue } timeout {} }
 set timeout $outer
 
 sleep 3
+
+if {$mode == "load"} {
+	# ITS's DUMP loading a tape THIS project wrote -- the opposite
+	# direction from `dump`, and the only grader there is for what `save`
+	# writes for a LINK, since ITS's own DUMP never writes one.
+	slow ":dump"
+	send "\r"
+
+	expect {
+		"_" {}
+		timeout { puts "\nKLH10: DUMP did not prompt"; exit 2 }
+	}
+	sleep 2
+
+	slow "LOAD"
+	send "\r"
+
+	expect {
+		"FILE" {}
+		timeout { puts "\nKLH10: no FILE prompt"; exit 2 }
+	}
+	sleep 2
+
+	slow $file
+	send $esc
+
+	expect {
+		"TAPE NO" { sleep 2; slow "1"; send "\r" }
+		timeout {}
+	}
+
+	expect {
+		"_" { puts "\nKLH10: LOAD finished" }
+		timeout { puts "\nKLH10: LOAD did not finish"; exit 2 }
+	}
+	sleep 20
+	bye
+	exit 0
+}
+
+if {$mode == "dump"} {
+	# `.INFO.;DUMP INFO`, read off the pack with `itsfs cat`, gives the
+	# recipe: the prompt is `_`, and "TO DUMP ONLY ONE DIRECTORY ... TYPE
+	# `DUMP`.  WHEN THE PROGRAM SAYS `FILE =`, TYPE `FOO;` FOLLOWED BY AN
+	# ALTMODE."  The E switch is EXPERM -- "DO NOT SET .DMPCH FOR THE FILES
+	# BEING DUMPED, SINCE THIS IS ONLY AN EXPERIMENTAL DUMP" -- which keeps
+	# this from touching the dump bits of a pack other tests read.
+	slow ":dump"
+	send "\r"
+
+	expect {
+		"_" {}
+		timeout { puts "\nKLH10: DUMP did not prompt"; exit 2 }
+	}
+	sleep 2
+
+	# The switches, and `E` is EXPERM -- "DO NOT SET .DMPCH FOR THE FILES
+	# BEING DUMPED, SINCE THIS IS ONLY AN EXPERIMENTAL DUMP" -- which keeps
+	# this from touching the dump bits of a pack other tests read.
+	#
+	# `LINKS` is the one that makes DUMP write link entries at all.  It is
+	# in the program's own FIGHLP help text ("LINKS   Dump links as well as
+	# files", syseng/dump.449) and NOT in .INFO.;DUMP INFO on the pack,
+	# which lists the other switches and not this one.
+	slow "DUMP $env(SWITCHES)"
+	send "\r"
+
+	expect {
+		"FILE" {}
+		timeout { puts "\nKLH10: no FILE prompt"; exit 2 }
+	}
+	sleep 2
+
+	slow $file
+	send $esc
+
+	# AND THEN IT ASKS `TAPE NO=`, which the info file does not mention.
+	# DUMP keeps a record per tape on disk, in .TAPE0 and .TAPE1, and wants
+	# to know which tape this is.  Miss this and the run sits at the prompt
+	# until it is killed, with an empty tape and no error anywhere.
+	expect {
+		"TAPE NO" {
+			sleep 2
+			slow "1"
+			send "\r"
+		}
+		timeout { puts "\nKLH10: no TAPE NO prompt"; exit 2 }
+	}
+
+	# Back at `_` means the dump finished.  It is reading files off the pack
+	# and writing tape, so give it room.
+	expect {
+		"_" { puts "\nKLH10: DUMP finished" }
+		timeout { puts "\nKLH10: DUMP did not finish"; exit 2 }
+	}
+	sleep 20
+	bye
+	exit 0
+}
+
 slow ":print $file"
 send "\r"
 
