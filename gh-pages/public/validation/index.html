@@ -72,6 +72,7 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-wrong-assertion-found-by-running-the-test">A wrong assertion, found by running the test</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-it-does-not-prove">What it does not prove</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-second-drive-and-why-its-cannot-grade-one">A second drive, and why ITS cannot grade one</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
@@ -1057,6 +1058,42 @@ asserting the wrong thing.</p>
 <p>The same <code>SYS;ITS</code> binary, off the same pack, under both emulators. Two machines
 agreeing is evidence about the <em>machines</em> and about our geometry; it is not two
 independent implementations of ITS, because there is only one ITS.</p>
+<h2 id="a-second-drive-and-why-its-cannot-grade-one">A second drive, and why ITS cannot grade one</h2>
+<p><code>mkfs</code> builds an <code>rm03</code> file system as readily as an <code>rp06</code>, and the arithmetic
+comes out right on both: 500 directory slots + 1 MFD + the table, which is <strong>505
+locked out</strong> on an RP06 with its four table blocks and <strong>503</strong> on an RM03 with
+two. The geometry differs in the way that matters, too — blocks per cylinder is
+truncated, and it truncates differently: 19×20/8 = 47.5 → <strong>47</strong> on an RP06,
+leaving 4 sectors per cylinder unreachable, against 5×30/8 = 18.75 → <strong>18</strong> and 6
+unreachable on an RM03.</p>
+<p>So <code>make mkfs-test ITS_DRIVE=rm03</code> should be a second, independent exercise of
+the one layer with no check word and no redundancy. It gets as far as building
+the pack and checking it, and then stops:</p>
+<pre><code>Salvager 254
+Active unit numbers? 0Format ran out of arguments.
+*** ERROR *** THE SYSTEM MAY NOT BE BROUGHT UP
+</code></pre>
+<p><strong>That says nothing about the pack.</strong> NSALV's drive is chosen when it is
+<em>assembled</em>, not when it is run — its source selects one inside a machine block:</p>
+<pre><code> IFCE MCHN,PM,[
+	...
+	RM03P==1	;RM03 on RH11 UNIBUS controller.
+</code></pre>
+<p>There are eighteen such blocks in <code>kshack/nsalv.261</code> and eleven lines between
+them setting <code>RP04P</code>/<code>RP06P</code>/<code>RM03P</code>/<code>RM80P</code>. A salvager tape grades the drive it
+was built for and no other, and the tape here is the one the ITS build produces,
+for an RP06 machine.</p>
+<p><strong>The control had already run.</strong> The same tape and the same harness accepted an
+RP06 pack built the same way, minutes earlier; the only difference is the drive.
+Without that, &quot;the salvager rejected it&quot; and &quot;the salvager cannot read this drive
+at all&quot; would look identical — which is the error this document has had to
+correct twice already.</p>
+<p>So the stage is skipped for any drive but <code>rp06</code>, and skipped <em>loudly</em>: a grader
+that cannot read the format it is handed is not a grader, and reporting its
+refusal as a fault in the pack would be reporting a lie. Grading an RM03 needs an
+RM03 salvager, which needs its own ITS build — a bigger undertaking than a test,
+and one that would change the reference environment everything else here depends
+on.</p>
 <h2 id="the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</h2>
 <p>This one is not about ITS, and it is the most portable lesson here.</p>
 <p>Every negative claim in <code>src/its.h</code> — every <code>no DEFSYM</code>, every &quot;FSDEFS does not
@@ -1178,9 +1215,10 @@ opinion.</li>
 <li><strong>A pack <code>mkfs</code> builds does not boot.</strong> Nothing writes a boot area; the graders
 are booted from tape instead. ITS comes up on packs this project has <em>written
 files to</em>, which is a weaker statement than it first sounds.</li>
-<li><strong>One pack, one drive, one era.</strong> Everything above is an RP06 built from source
-in 2026. No RP07, no RM03, no multi-pack file system, and no artifact recovered
-from MIT.</li>
+<li><strong>One pack, one drive, one era.</strong> Everything ITS has graded is an RP06 built
+from source in 2026. No multi-pack file system, and no artifact recovered from
+MIT. The <em>drive</em> half of that turns out to be blocked rather than merely
+undone, and the reason is worth writing down — see below.</li>
 <li><s>Which ITS program writes link entries</s> — DUMP does, under its <code>LINKS</code>
 switch, and what this writes now matches it byte for byte.</li>
 <li><strong>The version span has a floor and no ceiling.</strong> Both <code>FSDEFS</code> versions

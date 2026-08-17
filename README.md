@@ -524,8 +524,12 @@ come back, the link still a link, the file byte-identical. The file beside it is
 the control: without it, a failure could not be told from a broken harness.
 
 **What is NOT proven.** A pack `mkfs` builds does not boot, so ITS has never come
-up on one — the graders for those are booted from tape. And the reference pack is
-one built from source in 2026, not an artifact recovered from MIT. The version span has a floor and no ceiling — both `FSDEFS` versions
+up on one — the graders for those are booted from tape. Everything ITS has graded
+is an RP06: `mkfs` builds an RM03 as readily, and its arithmetic checks out (503
+locked out against the RP06's 505, and a different cylinder truncation), but
+NSALV's drive is fixed when the salvager is *assembled*, so the tape here can
+only grade the drive it was built for. And the reference pack is one built from
+source in 2026, not an artifact recovered from MIT. The version span has a floor and no ceiling — both `FSDEFS` versions
 compared are after the 1979 TUT change, and nothing here maps a file system
 written by an older monitor. Until each of those is done, this file does not
 claim it; what *has* been settled is listed in

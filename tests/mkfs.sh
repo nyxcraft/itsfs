@@ -37,6 +37,26 @@ DSKDMP=${4:?usage: mkfs.sh <itsfs> <pdp10> <salv.tape> <dskdmp.tape> [scratch]}
 T=${5:-/tmp/itsfs-mkfs}
 
 ID=${ID:-ITSFS}
+
+# THE DRIVE, AND THE ONE NUMBER THAT DEPENDS ON IT.  A fresh file system locks
+# out the 500 directory slots, the MFD, and the allocation table -- and only the
+# table's size varies between drives.  Both values are written out here rather
+# than asked of `itsfs drives`, for the same reason the geometry is written out
+# in tests/run.sh: a wrong table must not be able to agree with itself.
+#
+#   rp06   500 + 1 + 4 = 505
+#   rm03   500 + 1 + 2 = 503
+DRIVE=${ITS_DRIVE:-rp06}
+
+case "$DRIVE" in
+rp06) LOCKED=505; NTUT=4 ;;
+rm03) LOCKED=503; NTUT=2 ;;
+*)
+	echo "mkfs.sh: no locked-out count written down for $DRIVE."
+	echo "  It is 500 directory slots + 1 MFD + that drive's table blocks."
+	exit 2
+	;;
+esac
 EXP=$(dirname "$0")/nsalv.exp
 
 [ -x "$ITSFS" ] || { echo "mkfs.sh: no $ITSFS (build first)"; exit 2; }
@@ -53,7 +73,7 @@ ok() { echo "  ok   $*"; }
 
 echo "1. build a file system where nothing was"
 
-if "$ITSFS" mkfs "$T/new.dsk" "$ID" > "$T/mkfs.out" 2>&1; then
+if "$ITSFS" mkfs -d "$DRIVE" "$T/new.dsk" "$ID" > "$T/mkfs.out" 2>&1; then
 	ok "$(cat "$T/mkfs.out")"
 else
 	fail "itsfs mkfs failed:"
@@ -68,7 +88,7 @@ apparent=$(wc -c < "$T/new.dsk" | tr -d ' ')
 actual=$(du -k "$T/new.dsk" | awk '{print $1}')
 echo "   $apparent bytes, $actual KB actually on disk"
 
-if "$ITSFS" check "$T/new.dsk" > "$T/check1.out" 2>&1; then
+if "$ITSFS" check -d "$DRIVE" "$T/new.dsk" > "$T/check1.out" 2>&1; then
 	ok "itsfs check: clean, with nothing in it"
 else
 	fail "itsfs check found problems on a fresh file system:"
@@ -77,8 +97,8 @@ fi
 
 # The locked-out set is the whole structural claim: the directory slots, the
 # MFD and the table itself, and nothing else.
-if grep -q "505 locked out" "$T/check1.out" 2>/dev/null; then
-	ok "...and 505 blocks locked out: 500 directory slots + 1 MFD + 4 table"
+if grep -aq "$LOCKED locked out" "$T/check1.out" 2>/dev/null; then
+	ok "...and $LOCKED blocks locked out: 500 directory slots + 1 MFD + $NTUT table"
 else
 	fail "the locked-out count is not 500 + 1 + 4"
 	grep "locked out" "$T/check1.out" | sed 's/^/       /'
@@ -91,11 +111,11 @@ printf 'BUILT BY ITSFS MKFS.\r\nNO PART OF THIS PACK EXISTED BEFORE.\r\n' > "$T/
 made=0
 
 for d in SYS KSHACK; do
-	"$ITSFS" mkdir "$T/new.dsk" "$d" >/dev/null 2>&1 && made=$((made + 1))
+	"$ITSFS" mkdir -d "$DRIVE" "$T/new.dsk" "$d" >/dev/null 2>&1 && made=$((made + 1))
 done
 
 for f in "SYS;HELLO TXT" "SYS;AAA X" "KSHACK;NOTE TXT"; do
-	"$ITSFS" put "$T/new.dsk" "$f" "$T/msg.txt" >/dev/null 2>&1 && made=$((made + 1))
+	"$ITSFS" put -d "$DRIVE" "$T/new.dsk" "$f" "$T/msg.txt" >/dev/null 2>&1 && made=$((made + 1))
 done
 
 if [ "$made" -eq 5 ]; then
@@ -104,7 +124,7 @@ else
 	fail "only $made of 5 succeeded"
 fi
 
-"$ITSFS" cat "$T/new.dsk" 'SYS;HELLO TXT' > "$T/back.txt" 2>/dev/null
+"$ITSFS" cat -d "$DRIVE" "$T/new.dsk" 'SYS;HELLO TXT' > "$T/back.txt" 2>/dev/null
 
 if cmp -s "$T/msg.txt" "$T/back.txt"; then
 	ok "...and a file reads back byte-identical"
@@ -112,7 +132,7 @@ else
 	fail "...and a file reads back byte-identical"
 fi
 
-if "$ITSFS" check "$T/new.dsk" >/dev/null 2>&1; then
+if "$ITSFS" check -d "$DRIVE" "$T/new.dsk" >/dev/null 2>&1; then
 	ok "itsfs check: still clean"
 else
 	fail "itsfs check found problems after populating it"
@@ -121,8 +141,45 @@ fi
 echo
 echo "3. hand it to NSALV, ITS's own salvager (booted from tape)"
 
+# NSALV'S DRIVE IS CHOSEN WHEN IT IS ASSEMBLED, not when it is run.  Its source
+# selects one inside a machine block --
+#
+#     IFCE MCHN,PM,[
+#             ...
+#             RM03P==1        ;RM03 on RH11 UNIBUS controller.
+#
+# -- and there are eighteen such blocks in kshack/nsalv.261, between them
+# eleven lines setting RP04P/RP06P/RM03P/RM80P.  So a salvager tape grades the
+# drive it was built for and no other.
+#
+# The tape this project has is the one the ITS build produces, and that build is
+# an RP06 machine.  Pointed at an rm03 pack it gets as far as
+#
+#     Salvager 254
+#     Active unit numbers? 0Format ran out of arguments.
+#     *** ERROR *** THE SYSTEM MAY NOT BE BROUGHT UP
+#
+# which says nothing about the pack.  The control is that the SAME tape and the
+# SAME harness accept an rp06 pack built the same way, minutes earlier: the only
+# difference is the drive.
+#
+# So this stage is skipped for anything but an rp06, and skipped LOUDLY.  A
+# grader that cannot read the format it is given is not a grader, and reporting
+# its refusal as a failure of the pack would be reporting a lie.
+if [ "$DRIVE" != "rp06" ]; then
+	echo "  skip NSALV grades the drive it was ASSEMBLED for, and the tape here"
+	echo "       is an rp06 build -- see the note in this script.  An $DRIVE"
+	echo "       pack needs an $DRIVE salvager, which needs its own ITS build."
+	echo
+	echo "  skip DSKDMP, for the same reason"
+	echo
+	echo "an $DRIVE file system built from nothing, checked here but not yet"
+	echo "graded by ITS -- itsfs check and the locked-out arithmetic only."
+	exit $rc
+fi
+
 NSALV_PDP10=$PDP10 NSALV_TAPE=$SALV NSALV_IMAGE=$T/new.dsk NSALV_LOG=$T/nsalv.log \
-	expect "$EXP" > "$T/nsalv.exp.out" 2>&1
+	NSALV_DRIVE=$DRIVE expect "$EXP" > "$T/nsalv.exp.out" 2>&1
 
 if grep -qE "need updating|Tracking down shared|unprotected|Wrong NUDSL|garbaged|Errors in directory" \
 	"$T/nsalv.log" 2>/dev/null; then
@@ -153,7 +210,7 @@ set console wru=034
 set cpu its
 set tim y2k
 at tu2 $DSKDMP
-set rp0 rp06
+set rp0 $DRIVE
 at rp0 $T/new.dsk
 EOF
 

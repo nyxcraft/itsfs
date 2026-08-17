@@ -29,6 +29,7 @@
 set pdp10 $env(NSALV_PDP10)
 set tape  $env(NSALV_TAPE)
 set image $env(NSALV_IMAGE)
+set drive [expr {[info exists env(NSALV_DRIVE)] ? $env(NSALV_DRIVE) : "rp06"}]
 set log   $env(NSALV_LOG)
 set esc   "\034"
 
@@ -42,7 +43,10 @@ puts $f "set console wru=034"
 puts $f "set cpu its"
 puts $f "set tim y2k"
 puts $f "at tu1 $tape"
-puts $f "set rp0 rp06"
+# The drive, so a pack that is not an rp06 can be graded too.  NSALV reads the
+# geometry from the drive SIMH says is there, so this and `itsfs -d` have to
+# agree or the salvager is being shown a different pack than the one built.
+puts $f "set rp0 $drive"
 puts $f "at rp0 $image"
 close $f
 

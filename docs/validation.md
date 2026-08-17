@@ -1136,6 +1136,53 @@ The same `SYS;ITS` binary, off the same pack, under both emulators. Two machines
 agreeing is evidence about the *machines* and about our geometry; it is not two
 independent implementations of ITS, because there is only one ITS.
 
+## A second drive, and why ITS cannot grade one
+
+`mkfs` builds an `rm03` file system as readily as an `rp06`, and the arithmetic
+comes out right on both: 500 directory slots + 1 MFD + the table, which is **505
+locked out** on an RP06 with its four table blocks and **503** on an RM03 with
+two. The geometry differs in the way that matters, too — blocks per cylinder is
+truncated, and it truncates differently: 19×20/8 = 47.5 → **47** on an RP06,
+leaving 4 sectors per cylinder unreachable, against 5×30/8 = 18.75 → **18** and 6
+unreachable on an RM03.
+
+So `make mkfs-test ITS_DRIVE=rm03` should be a second, independent exercise of
+the one layer with no check word and no redundancy. It gets as far as building
+the pack and checking it, and then stops:
+
+```
+Salvager 254
+Active unit numbers? 0Format ran out of arguments.
+*** ERROR *** THE SYSTEM MAY NOT BE BROUGHT UP
+```
+
+**That says nothing about the pack.** NSALV's drive is chosen when it is
+*assembled*, not when it is run — its source selects one inside a machine block:
+
+```
+ IFCE MCHN,PM,[
+	...
+	RM03P==1	;RM03 on RH11 UNIBUS controller.
+```
+
+There are eighteen such blocks in `kshack/nsalv.261` and eleven lines between
+them setting `RP04P`/`RP06P`/`RM03P`/`RM80P`. A salvager tape grades the drive it
+was built for and no other, and the tape here is the one the ITS build produces,
+for an RP06 machine.
+
+**The control had already run.** The same tape and the same harness accepted an
+RP06 pack built the same way, minutes earlier; the only difference is the drive.
+Without that, "the salvager rejected it" and "the salvager cannot read this drive
+at all" would look identical — which is the error this document has had to
+correct twice already.
+
+So the stage is skipped for any drive but `rp06`, and skipped *loudly*: a grader
+that cannot read the format it is handed is not a grader, and reporting its
+refusal as a fault in the pack would be reporting a lie. Grading an RM03 needs an
+RM03 salvager, which needs its own ITS build — a bigger undertaking than a test,
+and one that would change the reference environment everything else here depends
+on.
+
 ## The tool you verify with can lie by omission
 
 This one is not about ITS, and it is the most portable lesson here.
@@ -1262,9 +1309,10 @@ true.*
 - **A pack `mkfs` builds does not boot.** Nothing writes a boot area; the graders
   are booted from tape instead. ITS comes up on packs this project has *written
   files to*, which is a weaker statement than it first sounds.
-- **One pack, one drive, one era.** Everything above is an RP06 built from source
-  in 2026. No RP07, no RM03, no multi-pack file system, and no artifact recovered
-  from MIT.
+- **One pack, one drive, one era.** Everything ITS has graded is an RP06 built
+  from source in 2026. No multi-pack file system, and no artifact recovered from
+  MIT. The *drive* half of that turns out to be blocked rather than merely
+  undone, and the reason is worth writing down — see below.
 - ~~Which ITS program writes link entries~~ — DUMP does, under its `LINKS`
   switch, and what this writes now matches it byte for byte.
 - **The version span has a floor and no ceiling.** Both `FSDEFS` versions

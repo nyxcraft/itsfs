@@ -161,8 +161,13 @@ one; its graders are booted from tape.</li>
 <li>A pack <code>mkfs</code> builds does not BOOT: ITS starts from the front end's blocks at
 the bottom of the disk, which <code>mkfs</code> does not write (and NSALV's own ZAP
 refuses to touch).  Both graders for such a pack come off tape.</li>
-<li>One pack, one drive, one era: an RP06 built from source in 2026. No RP07, no
-RM03, no multi-pack file system, no artifact recovered from MIT.</li>
+<li>One pack, one drive, one era: an RP06 built from source in 2026.  No
+multi-pack file system, no artifact recovered from MIT.  <code>mkfs</code> DOES build an
+rm03 and <code>make mkfs-test ITS_DRIVE=rm03</code> checks it, but ITS cannot grade one:
+NSALV picks its drive at ASSEMBLY time (<code>IFCE MCHN,PM,[ ... RM03P==1</code>), so the
+salv.tape here grades rp06 and nothing else.  An rm03 salvager needs its own
+ITS build.  The stage skips loudly rather than reporting the refusal as a
+fault in the pack.</li>
 <li><s><code>dbd9</code> is still <code>corroborated</code></s> -- settled.  KLH10's own <code>vdkfmt</code> writes a
 dbd9 pack byte-identical to ours (<code>make klh10</code>), and ITS boots on one under
 KLH10 and prints a file itsfs wrote (<code>make interop-klh10</code>).  Building the whole
