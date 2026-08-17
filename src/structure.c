@@ -160,7 +160,7 @@ its_ufd_read(its_image *im, uint64_t blk, its_ufd *u)
 	 * BUT UDNAMP == WPB IS LEGAL AND MEANS EMPTY.  ITS writes exactly that
 	 * when it makes a directory -- `MOVEI A,2000 / MOVEM A,UDNAMP-1(B)` in
 	 * QSKON, disk.1228 -- so the name area starts past the end of the block
-	 * and there are no entries yet.  This reader refused it for four phases
+	 * and there are no entries yet.  This reader refused it once
 	 * and nobody noticed, because every directory on the reference pack has
 	 * at least one file in it (the lowest UDNAMP there is 1019, which is
 	 * one entry).  Writing `mkdir` is what found it.

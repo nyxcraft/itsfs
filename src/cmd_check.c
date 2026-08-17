@@ -629,42 +629,32 @@ check_ufd(struct ck *c, struct ckdir *dir)
 	/*
 	 * THE NAME AREA IS SORTED, AND ITS DEPENDS ON IT.
 	 *
-	 * That it is sorted was measured first: 6,056 entries on the reference
-	 * pack, none out of order.  That the order is LOAD-BEARING took reading
-	 * the monitor.  QLOOK does not scan -- it calls QLGLK, which is a binary
-	 * search over the name area (`disk.1228`):
+	 * QLOOK does not scan a name area -- it calls QLGLK, a binary search
+	 * (`disk.1228`):
 	 *
-	 *      ADDI J,600      ;128. NAME BLOCKS FROM END
-	 *      REPEAT 7,[      ;THIS CODE DELIBERATELY NOT INDENTED.
-	 *              ...
-	 *              CAML A,D
-	 *              ADDI J,<1_<7-.RPCNT>>*LUNBLK
-	 *              SUBI J,<1_<6-.RPCNT>>*LUNBLK
-	 *      ]
+	 *	ADDI J,600	;128. NAME BLOCKS FROM END
+	 *	REPEAT 7,[
+	 *		...
+	 *		CAML A,D
+	 *		ADDI J,<1_<7-.RPCNT>>*LUNBLK
+	 *		SUBI J,<1_<6-.RPCNT>>*LUNBLK
+	 *	]
 	 *
-	 * -- seven halving steps over 128 name blocks.  An out-of-order name
-	 * area therefore makes files UNFINDABLE by the monitor while every block
-	 * is still accounted for.
+	 * Seven halving steps over 128 name blocks, so an out-of-order name area
+	 * makes files UNFINDABLE by the monitor while every block stays
+	 * accounted for.  NSALV does not check it: given a pack with two entries
+	 * swapped it walks the whole thing and returns to DDT without a word.
+	 * That combination -- the pack broken and the second opinion silent -- is
+	 * what makes this worth checking here.
 	 *
-	 * AND NSALV DOES NOT CHECK IT.  Swapping two entries on the reference
-	 * pack and handing it to the salvager produces no complaint at all: it
-	 * walks the pack and returns to DDT.  So this is the one kind of damage
-	 * where the second opinion is silent and the pack is still broken, which
-	 * is exactly the kind worth checking here.
-	 *
-	 * THIS IS STRICTER THAN THE MONITOR REQUIRES, and the difference is
-	 * worth stating rather than leaving for somebody to trip over.  QLGLK
-	 * searches on FN1 alone; QLOOK then walks BACKWARDS through the run of
-	 * equal FN1s comparing both names -- `SUBI Q,LUNBLK / CAML Q,J / JRST
-	 * QLK1`, commented "SEARCH THROUGH * FILES".  So two entries sharing an
-	 * FN1 could be in any FN2 order and still be found.
-	 *
-	 * They never are.  On the reference pack 1,913 adjacent pairs share an
-	 * FN1 and not one has its FN2 out of order: QRELOC sorts on the whole
-	 * name.  So this checks what ITS WRITES rather than the minimum ITS can
-	 * READ, which is the more useful of the two for spotting a writer that
-	 * has gone wrong -- but a pack that failed only on FN2 order would still
-	 * work, and the message should be read in that light.
+	 * STRICTER THAN THE MONITOR REQUIRES.  QLGLK searches on FN1 alone;
+	 * QLOOK then walks backwards through the run of equal FN1s comparing
+	 * both (`SUBI Q,LUNBLK / CAML Q,J`, "SEARCH THROUGH * FILES"), so
+	 * entries sharing an FN1 could be in any FN2 order and still be found.
+	 * On the reference pack 1,913 adjacent pairs share an FN1 and none has
+	 * its FN2 out of order -- QRELOC sorts on the whole name.  This tests
+	 * what ITS writes rather than the minimum it can read, which catches a
+	 * broken writer; a pack failing only on FN2 order would still work.
 	 */
 	prev1 = 0;
 	prev2 = 0;

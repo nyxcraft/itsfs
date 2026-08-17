@@ -277,17 +277,9 @@ cmd_tape(int argc, char **argv)
 
 				its_get_words(pk, rec, w, nw);
 
-				for (size_t i = 0; i < nw; i++) {
-					unsigned char b[8];
-
-					for (int k = 0; k < 8; k++)
-						b[k] = (unsigned char)(w[i] >> (8 * k));
-
-					if (fwrite(b, 1, 8, out) != 8) {
-						perror(path);
-						free(w);
-						goto out;
-					}
+				if (its_write_words(out, w, nw, path) != 0) {
+					free(w);
+					goto out;
 				}
 
 				free(w);

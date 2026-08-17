@@ -31,79 +31,6 @@
  * descriptor: the whole of an RP07 is 108,360 blocks. */
 #define MAX_FILE_BLOCKS 200000
 
-typedef struct {
-	char dir[ITS_NAME_MAX];
-	char fn1[ITS_NAME_MAX];
-	char fn2[ITS_NAME_MAX];
-} its_path;
-
-/*
- * `DIR;FN1 FN2` in one argument, or in three.  Refuses a name that cannot be
- * SIXBIT rather than truncating it -- a seven-character name silently cut to
- * six matches a different file, and matching the wrong file quietly is worse
- * than not matching at all.
- */
-static int
-parse_path(int argc, char **argv, int i, its_path *p)
-{
-	memset(p, 0, sizeof *p);
-
-	if (argc - i == 3) {
-		if (strlen(argv[i]) >= ITS_NAME_MAX || strlen(argv[i + 1]) >= ITS_NAME_MAX ||
-		    strlen(argv[i + 2]) >= ITS_NAME_MAX)
-			goto toolong;
-		snprintf(p->dir, sizeof p->dir, "%s", argv[i]);
-		snprintf(p->fn1, sizeof p->fn1, "%s", argv[i + 1]);
-		snprintf(p->fn2, sizeof p->fn2, "%s", argv[i + 2]);
-		return 0;
-	}
-
-	if (argc - i == 1) {
-		const char *s = argv[i];
-		const char *semi = strchr(s, ';');
-		const char *sp;
-		size_t n;
-
-		if (semi == NULL) {
-			fprintf(stderr, "itsfs: '%s' is not a file name: it wants DIR;FN1 FN2\n", s);
-			return -1;
-		}
-
-		n = (size_t)(semi - s);
-
-		if (n >= ITS_NAME_MAX)
-			goto toolong;
-		memcpy(p->dir, s, n);
-		p->dir[n] = '\0';
-
-		s = semi + 1;
-		sp = strchr(s, ' ');
-
-		if (sp == NULL) {
-			if (strlen(s) >= ITS_NAME_MAX)
-				goto toolong;
-			snprintf(p->fn1, sizeof p->fn1, "%s", s);
-			return 0;
-		}
-
-		n = (size_t)(sp - s);
-
-		if (n >= ITS_NAME_MAX || strlen(sp + 1) >= ITS_NAME_MAX)
-			goto toolong;
-		memcpy(p->fn1, s, n);
-		p->fn1[n] = '\0';
-		snprintf(p->fn2, sizeof p->fn2, "%s", sp + 1);
-		return 0;
-	}
-
-	fprintf(stderr, "itsfs: a file name is 'DIR;FN1 FN2', or three arguments\n");
-	return -1;
-
-toolong:
-	fprintf(stderr, "itsfs: a name component is at most %d characters\n", ITS_SIXBIT_CHARS);
-	return -1;
-}
-
 /* Options every command here takes.  One parser, one set of defaults. */
 struct fsopts {
 	const its_pack *pk;
@@ -516,17 +443,8 @@ copy_out(its_image *im, its_ufd *u, const uint64_t *blocks, long nblocks, uint64
 			/* The words themselves, one per 8-byte little-endian
 			 * container -- the same le64 the pack uses, so the host
 			 * file is the file's words and nothing else. */
-			uint8_t b[8];
-
-			for (size_t k = 0; k < n; k++) {
-				for (int j = 0; j < 8; j++)
-					b[j] = (uint8_t)(w[k] >> (8 * j));
-
-				if (fwrite(b, 1, 8, out) != 8) {
-					perror("write");
-					goto out;
-				}
-			}
+			if (its_write_words(out, w, n, "write") != 0)
+				goto out;
 		}
 		else {
 			write_text(out, w, n);
@@ -570,7 +488,7 @@ cat_or_get(int argc, char **argv, int is_get)
 	if (img_open(&im, argv[optind], o.pk, o.drv, 0) != 0)
 		return 1;
 
-	if (parse_path(argc - nargs, argv, optind + 1, &p) != 0)
+	if (its_parse_path(argv, optind + 1, argc - nargs - optind - 1, &p) != 0)
 		goto out;
 
 	if (open_file(&im, &p, &u, &blocks, &nblocks, &nwords) != 0)

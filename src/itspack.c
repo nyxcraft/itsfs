@@ -183,58 +183,22 @@ core_put(uint8_t *b, unsigned i, uint64_t w)
  * formulas gives no disagreement, so the two are the same function and not
  * merely the same intention.
  *
- * IT IS `confirmed` AS OF THE KLH10 BUILD, and both the failed attempt and the
- * one that worked are worth recording.
+ * CONFIRMED against an artifact KLH10 wrote: its own converter, `vdkfmt`,
+ * produces a pack byte-identical to `itsfs repack -P dbd9` over all 177,776,640
+ * bytes of it, and `itsfs check -p dbd9` reads that file to the same accounting
+ * as the le64 original.  `make klh10` runs it.  The two false starts along the
+ * way are in docs/word-packing.md, not here.
  *
- * THE ATTEMPT THAT FAILED, AND WHY -- WHICH TOOK TWO GOES TO GET RIGHT.
- * KLH10's DSKDMP was pointed at a pack this repacked into dbd9 and answered
- * MFDCLB, "M.F.D. clobbered".  The CONTROL stopped that being reported as a
- * finding: the same KLH10 and the same DSKDMP, given the UNTOUCHED le64 pack
- * through KLH10's own "SIMH" format, answer MFDCLB too.  A setup that cannot
- * tell a good pack from a bad one says nothing about a packing.
- *
- * That much was right.  The CAUSE written down next to it -- that the DSKDMP in
- * build/klh10 is build 216 against the pack's 217 and "probably wants a machine
- * this is not" -- was a guess, and it was WRONG.  KLH10 drives its disk through
- * a separate process, `dprpxx`, which has to be findable at run time:
- *
- *	[dp_exec: Cannot access "dprpxx" - No such file or directory]
- *	[rp_dpstart: Start of DP "dprpxx" failed!]
- *	Final init of device "dsk0" failed!
- *
- * -- three lines in the middle of the startup noise, after which there is no
- * disk at all and DSKDMP is reading nothing.  Hence MFDCLB, for the dbd9 pack
- * and the control alike.  With dprpxx on hand, DSKDMP 216 reads a dbd9 pack
- * this project wrote and lists a directory off it; removing dprpxx again brings
- * MFDCLB straight back.  The version difference was never involved.
- *
- * The lesson is not "run the control" -- the control worked.  It is that a
- * control tells you your setup cannot answer the question, and NOT why.  The
- * why still has to be found, and until it is, it is a guess and should be
- * written as one.
- *
- * WHAT SETTLED IT was building KLH10 from the tree, which turns out to ship
- * `vdkfmt` -- KLH10's own disk-format converter, so an artifact written by
- * KLH10's code rather than by ours:
- *
- *	vdkfmt ip=rp0.dsk op=klh10.dbd9 ifmt=SIMH ofmt=DBD9 dt=RP06
- *
- * Its output is byte-identical to `itsfs repack -P dbd9` over every one of the
- * 177,776,640 bytes it wrote, and `itsfs check -p dbd9` reads it to the same
- * 6719 free / 30940 in use / 505 locked out / 247 directories / 5657 files as
- * the le64 original.  Two directions, one artifact, neither of them ours.
- *
- * THE SIZE DIFFERENCE IS NOT DAMAGE, which is worth writing down because it
- * looks exactly like truncation.  vdkfmt's copy loop is
+ * A REAL KLH10 PACK IS SHORTER THAN ITS DRIVE, which looks exactly like
+ * truncation and is not.  vdkfmt's copy loop is
  *
  *	if (!zerosector(wbuff, 128))
  *		err = devwrite(&dvo, nsect, wbuff);
  *
- * -- it never writes an all-zero sector, so the file simply STOPS at the last
- * non-zero one, 1,060 sectors short of the drive.  Every sector it did write is
- * at its true offset, and our trailing 610,560 bytes are all zero.  A real
- * KLH10 pack therefore does not have the nominal size, which is why the
- * size-based drive inference refuses it and `-d rp06` has to be given.
+ * -- it never writes an all-zero sector, so the file stops at the last non-zero
+ * one.  Everything it did write is at its true offset.  The practical
+ * consequence: size-based drive inference refuses such a pack, and `-d` must be
+ * given.
  */
 static uint64_t
 dbd9_get(const uint8_t *b, unsigned i)

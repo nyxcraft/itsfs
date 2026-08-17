@@ -196,6 +196,63 @@ slurp(const char *path, size_t *n)
 	return buf;
 }
 
+/*
+ * A link's target, as the three SIXBIT words a save set carries: FN1, FN2 and
+ * the target's directory.
+ *
+ * Wanted BEFORE the header is written, because the directory goes in the
+ * header's fourth word -- where a file carries its pack number.
+ */
+static int
+link_target_words(const its_ufd *u, const its_ent *e, const char *dir, const char *fn1,
+		  const char *fn2, uint64_t *w1, uint64_t *w2, uint64_t *wd)
+{
+	char tgt[64], t1[ITS_SIXBIT_CHARS + 1], t2[ITS_SIXBIT_CHARS + 1],
+		td[ITS_SIXBIT_CHARS + 1];
+	const char *lerr = NULL;
+	char *semi, *sp;
+
+	if (its_link_target(u, e->desc, tgt, sizeof tgt, &lerr) != 0) {
+		fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2, lerr);
+		return -1;
+	}
+
+	memset(td, 0, sizeof td);
+	memset(t1, 0, sizeof t1);
+	memset(t2, 0, sizeof t2);
+	semi = strchr(tgt, ';');
+	sp = semi ? strchr(semi + 1, ' ') : NULL;
+
+	/*
+	 * AND IF IT DOES NOT PARSE, SAY SO.  The three buffers are zeroed above
+	 * and its_sixbit_make succeeds on an empty string, so a path that
+	 * skipped this parse would write a link with an EMPTY target and no
+	 * complaint.  It cannot happen today -- its_link_target formats
+	 * "%s;%s %s" from components of at most six characters -- but that
+	 * guarantee lives in structure.c, and a silently-zeroed field is the
+	 * shape a real bug took here.
+	 */
+	if (semi == NULL || sp == NULL || (size_t)(semi - tgt) >= sizeof td ||
+	    (size_t)(sp - semi - 1) >= sizeof t1 || strlen(sp + 1) >= sizeof t2) {
+		fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot take apart: %s\n",
+			dir, fn1, fn2, tgt);
+		return -1;
+	}
+
+	memcpy(td, tgt, (size_t)(semi - tgt));
+	memcpy(t1, semi + 1, (size_t)(sp - semi - 1));
+	snprintf(t2, sizeof t2, "%s", sp + 1);
+
+	if (its_sixbit_make(td, wd) != 0 || its_sixbit_make(t1, w1) != 0 ||
+	    its_sixbit_make(t2, w2) != 0) {
+		fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot write: %s\n", dir,
+			fn1, fn2, tgt);
+		return -1;
+	}
+
+	return 0;
+}
+
 /* A host file name for `DIR;FN1 FN2`, in itstar's shape: dir/fn1.fn2 */
 static void
 hostname(char *out, size_t sz, const char *dir, const char *fn1, const char *fn2)
@@ -392,10 +449,8 @@ cmd_save(int argc, char **argv)
 	sw_word(&s, 0);			      /* type: random */
 
 	for (int i = optind + 2; i < argc; i++) {
-		char dir[ITS_SIXBIT_CHARS + 1], fn1[ITS_SIXBIT_CHARS + 1],
-			fn2[ITS_SIXBIT_CHARS + 1];
-		const char *semi = strchr(argv[i], ';');
-		const char *sp;
+		its_path p;
+		const char *dir, *fn1, *fn2;
 		uint64_t dirblk = 0, n1, n2, nd;
 		its_ufd u;
 		unsigned idx;
@@ -406,32 +461,12 @@ cmd_save(int argc, char **argv)
 		uint64_t nwords;
 		uint64_t tw1 = 0, tw2 = 0, twd = 0; /* a link's target */
 
-		if (semi == NULL) {
-			fprintf(stderr, "itsfs: '%s' is not a file name: it wants DIR;FN1 FN2\n",
-				argv[i]);
+		if (its_parse_path(argv, i, 1, &p) != 0)
 			goto out;
-		}
 
-		memset(dir, 0, sizeof dir);
-		memset(fn1, 0, sizeof fn1);
-		memset(fn2, 0, sizeof fn2);
-
-		if ((size_t)(semi - argv[i]) >= sizeof dir)
-			goto toolong;
-		memcpy(dir, argv[i], (size_t)(semi - argv[i]));
-		sp = strchr(semi + 1, ' ');
-
-		if (sp == NULL) {
-			if (strlen(semi + 1) >= sizeof fn1)
-				goto toolong;
-			snprintf(fn1, sizeof fn1, "%s", semi + 1);
-		}
-		else {
-			if ((size_t)(sp - semi - 1) >= sizeof fn1 || strlen(sp + 1) >= sizeof fn2)
-				goto toolong;
-			memcpy(fn1, semi + 1, (size_t)(sp - semi - 1));
-			snprintf(fn2, sizeof fn2, "%s", sp + 1);
-		}
+		dir = p.dir;
+		fn1 = p.fn1;
+		fn2 = p.fn2;
 
 		if (its_sixbit_make(dir, &nd) != 0 || its_sixbit_make(fn1, &n1) != 0 ||
 		    its_sixbit_make(fn2, &n2) != 0) {
@@ -484,71 +519,11 @@ cmd_save(int argc, char **argv)
 		nblocks = 0;
 		nwords = 0;
 
-		if (e.is_link) {
-			/*
-			 * A LINK'S TARGET IS NEEDED BEFORE THE HEADER TOO: its
-			 * directory goes in the header's fourth word, which is
-			 * where a file carries its pack number.
-			 */
-			char tgt[64];
-			const char *lerr = NULL;
-			char t1[ITS_SIXBIT_CHARS + 1], t2[ITS_SIXBIT_CHARS + 1],
-				td[ITS_SIXBIT_CHARS + 1];
-			char *semi2, *sp2;
-
-			if (its_link_target(&u, e.desc, tgt, sizeof tgt, &lerr) != 0) {
-				fprintf(stderr, "itsfs: '%s;%s %s': %s\n", dir, fn1, fn2, lerr);
-				its_ufd_free(&u);
-				goto out;
-			}
-
-			memset(td, 0, sizeof td);
-			memset(t1, 0, sizeof t1);
-			memset(t2, 0, sizeof t2);
-			semi2 = strchr(tgt, ';');
-			sp2 = semi2 ? strchr(semi2 + 1, ' ') : NULL;
-
-			/*
-			 * AND IF IT DOES NOT PARSE, SAY SO.  The three buffers
-			 * are zeroed above, and its_sixbit_make succeeds on an
-			 * empty string -- so every path that skipped this
-			 * parse used to write a link with an EMPTY target and
-			 * no complaint.
-			 *
-			 * It cannot happen today: its_link_target formats
-			 * "%s;%s %s" from three components of at most six
-			 * characters, so the separators are always there and
-			 * the lengths always fit.  But that guarantee lives in
-			 * structure.c, and a silently-zeroed field is exactly
-			 * the shape of the bug that cost an afternoon here --
-			 * a SIXBIT name shifted off the end of its own word,
-			 * which no reader noticed and only cmp caught.
-			 */
-			if (semi2 == NULL || sp2 == NULL ||
-			    (size_t)(semi2 - tgt) >= sizeof td ||
-			    (size_t)(sp2 - semi2 - 1) >= sizeof t1 ||
-			    strlen(sp2 + 1) >= sizeof t2) {
-				fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot "
-						"take apart: %s\n",
-					dir, fn1, fn2, tgt);
-				its_ufd_free(&u);
-				goto out;
-			}
-
-			memcpy(td, tgt, (size_t)(semi2 - tgt));
-			memcpy(t1, semi2 + 1, (size_t)(sp2 - semi2 - 1));
-			snprintf(t2, sizeof t2, "%s", sp2 + 1);
-
-			if (its_sixbit_make(td, &twd) != 0 || its_sixbit_make(t1, &tw1) != 0 ||
-			    its_sixbit_make(t2, &tw2) != 0) {
-				fprintf(stderr, "itsfs: '%s;%s %s' has a target this cannot "
-						"write: %s\n",
-					dir, fn1, fn2, tgt);
-				its_ufd_free(&u);
-				goto out;
-			}
+		if (e.is_link &&
+		    link_target_words(&u, &e, dir, fn1, fn2, &tw1, &tw2, &twd) != 0) {
+			its_ufd_free(&u);
+			goto out;
 		}
-
 		if (!e.is_link) {
 			const char *derr = NULL;
 
@@ -565,51 +540,38 @@ cmd_save(int argc, char **argv)
 		}
 
 		/*
-		 * The file header.  EIGHT words for a file, and the eighth is
-		 * the file's length in words.
+		 * The file header, EIGHT words -- HBLK in syseng/dump.449:
 		 *
-		 * Seven was what this wrote for nine phases, on the strength of
-		 * itstar's reader, which takes six or seven.  Then ITS's own
-		 * DUMP was made to write a tape -- `make itsdump` -- and every
-		 * header on it is eight words with the length in the last one.
-		 * Measured on all 37 files of that tape: the AOBJN pointer says
-		 * 8, and the eighth word equals the words of data that follow,
-		 * exactly, every time.
+		 *	0  AOBJN 1000000-8	4  HPKN   link flag,,pack number
+		 *	1  HSNM  directory	5  HDATE  creation date
+		 *	2  HFN1			6  HRDATE UNREF entire
+		 *	3  HFN2			7  HLEN   length in words
 		 *
-		 *      -READ- -THIS-   header 8   word 8 = 0164   data 116 words
-		 *      BUILD DOC       header 8   word 8 = 016364 data 7412
-		 *      CMDS M80        header 8   word 8 = 041722 data 17362
+		 * Words 6 and 7 are the younger two -- "Next two added 7/14/89
+		 * by Alan" -- which is why itstar accepts six or seven, and why
+		 * writing seven here went unnoticed until a tape ITS wrote was
+		 * compared byte for byte.  The header carries its own length,
+		 * so every reader believes whatever it says.
 		 *
-		 * A LINK GETS EIGHT TOO, and the way that was settled is worth
-		 * keeping.  `DUMP E` on two directories wrote no links at all
-		 * -- KSHACK 37 files/3 links as 37/0, KMP 3/1 as 3/0 -- which
-		 * looked like "DUMP does not write links".  It is not: DUMP has
-		 * a switch, `DMPLNK: 0 ;-1 => DUMP LINKS`, and its own help
-		 * text lists it, "LINKS   Dump links as well as files".  The
-		 * pack's `.INFO.;DUMP INFO` does not mention it.  So the tapes
-		 * had no links because none had been asked for.
+		 * A LINK GETS EIGHT TOO, with four values changed, each stated
+		 * outright in dump.449 rather than deduced:
 		 *
-		 * `DUMP E LINKS` produces one, and the header is the same eight
-		 * words as a file's, with three of them different -- each named
-		 * outright in syseng/dump.449 rather than deduced:
+		 *	HPKN	the target's directory, SIXBIT, copied whole
+		 *	HDATE	400000,,0	;CREATION DATE OF LINK IS 400000,,0
+		 *	HRDATE	777777,,777000	; Unknown author, 36. bit bytes
+		 *	HLEN	3		; Length of link is always 3
 		 *
-		 *      HPKN    the target's directory, SIXBIT, copied whole
-		 *      HDATE   400000,,0    ;CREATION DATE OF LINK IS 400000,,0
-		 *      HRDATE  777777,,777000  ; Unknown reference date
-		 *                              ; Unknown author, 36. bit bytes
-		 *      HLEN    3               ; Length of link is always 3
-		 *
-		 * -- and the three words that follow are the target as FN1,
-		 * FN2, SNAME.  With those, a tape this writes is byte-identical
-		 * to one ITS wrote, link and all: `ITS_SWITCHES="E LINKS"
-		 * ITS_DIR=KMP make itsdump`.
+		 * -- and the three words after it are the target as FN1, FN2,
+		 * SNAME.  `ITS_SWITCHES="E LINKS" make itsdump` checks the lot
+		 * against a tape ITS wrote; DUMP omits links without that
+		 * switch, which its own help documents and .INFO.;DUMP INFO
+		 * does not.
 		 *
 		 * THE DATE WORD IS COPIED STRAIGHT FROM THE DISK, because the
-		 * two layouts are the same one: itstar reads the tape's date as
+		 * two layouts are the same one: the tape's date is
 		 * year<<9 | month<<5 | day in the left half, and FSDEFS puts
-		 * UNYRB at bit 27, UNMON at 23 and UNDAY at 18 -- which is
-		 * exactly that, measured from the start of the halfword.  So
-		 * there is nothing to convert and nothing to get wrong.
+		 * UNYRB at bit 27, UNMON at 23 and UNDAY at 18 -- exactly that,
+		 * measured from the start of the halfword.
 		 */
 		sw_word(&s, ((uint64_t)(01000000 - 8) << 18));
 		sw_word(&s, nd);
@@ -728,12 +690,6 @@ cmd_save(int argc, char **argv)
 
 		printf("%s;%s %s\n", dir, fn1, fn2);
 		nfile++;
-		continue;
-
-	toolong:
-		fprintf(stderr, "itsfs: a name component is at most %d characters\n",
-			ITS_SIXBIT_CHARS);
-		goto out;
 	}
 
 	/* A second mark ends the tape, which is what itstar's closetape does. */
@@ -946,20 +902,12 @@ cmd_saveset(int argc, char **argv)
 			 * RECORD, for the reason above, and continues in the
 			 * records after it up to a tape mark. */
 			for (;;) {
-				for (size_t i = s.pos; i < s.nw; i++) {
-					unsigned char b[8];
-
-					for (int k = 0; k < 8; k++)
-						b[k] = (unsigned char)(s.w[i] >> (8 * k));
-
-					if (fwrite(b, 1, 8, out) != 8) {
-						perror(path);
-						fclose(out);
-						goto out;
-					}
-
-					nw++;
+				if (its_write_words(out, s.w + s.pos, s.nw - s.pos, path) != 0) {
+					fclose(out);
+					goto out;
 				}
+
+				nw += s.nw - s.pos;
 
 				if (ss_read(&s, &err) <= 0)
 					break;

@@ -3,6 +3,8 @@
 Host tools for the **ITS file system** — the disk MIT's Incompatible Timesharing
 System ran, read on a machine that has never heard of a 36-bit word.
 
+> **Software Architecture, Design & Engineering by Nicholas J. Kisseberth.**
+
 > **Status: phases 0–9 done. ITS opens a file this project wrote and prints
 > it.** The word layer is proven byte-for-byte
 > against a real RP06 pack, the geometry layer finds the master file directory by
@@ -186,7 +188,7 @@ in front asks for octal.
 ```console
 $ make                  # bin/itsfs, no dependencies beyond C99 + POSIX
 $ make lint             # 16 warning options, and clang-format
-$ make test             # the regression suite (sh + coreutils), 275 checks
+$ make test             # the regression suite (sh + coreutils), 277 checks
 $ make test-san         # the same suite under ASan + UBSan
 $ make fuzz             # optional corruption fuzzer (needs python3)
 $ make oracle IMAGE=... # everything above, against a real pack
@@ -489,7 +491,7 @@ format rather than about our reading of it. It also needs no writer, which is wh
 it runs now rather than in phase 8 — a pack this project has only read is enough
 to ask the question. See [validation](docs/validation.md#a-second-opinion-that-is-not-ours).
 
-**Hostile input is bounded.** 275 checks in the suite, a third of them feeding the
+**Hostile input is bounded.** 277 checks in the suite, a third of them feeding the
 reader a pack damaged on purpose, and a corruption fuzzer that has run 5,400
 commands over damaged packs and damaged tapes under ASan and UBSan without a
 finding. The bar is
@@ -548,6 +550,10 @@ settles it.
 - [Roadmap](docs/roadmap.md) — the phases, and what ends each one
 - [The plan](PLAN.md) — written before any code
 - [Handoff](HANDOFF.md) — for whoever picks this up next
+
+## Authorship & attribution
+
+- Software Architecture, Design & Engineering by Nicholas J. Kisseberth.
 
 ## Copyright
 

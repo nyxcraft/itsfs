@@ -9,11 +9,13 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
 
 #include "itspack.h"
 #include "itsgeom.h"
+#include "structure.h"
 
 /* -p: packing by name.  Prints the accepted names and returns NULL if unknown. */
 const its_pack *opt_pack(const char *name);
@@ -63,5 +65,31 @@ int parse_u64_base(const char *s, int base, uint64_t *out);
  * reversed range rather than quietly printing nothing.
  */
 int parse_blkrange(const char *s, uint64_t *first, uint64_t *last);
+
+/*
+ * `DIR;FN1 FN2`, given either as one argument or as three.
+ *
+ * A name component that SIXBIT cannot hold is REFUSED, not truncated: a
+ * seven-character name cut to six matches a different file, and matching the
+ * wrong file quietly is worse than not matching at all.
+ *
+ * `navail` is how many of argv[i..] are name arguments -- 1 or 3.
+ */
+typedef struct {
+	char dir[ITS_NAME_MAX];
+	char fn1[ITS_NAME_MAX];
+	char fn2[ITS_NAME_MAX];
+} its_path;
+
+int its_parse_path(char **argv, int i, int navail, its_path *p);
+
+/*
+ * Words to a host file, one per 8-byte little-endian container.
+ *
+ * This IS the `-w` file format -- what `get -w` writes, `put -w` reads, and
+ * both extractors produce -- so it lives in one place.  `what` names the file
+ * in the error message.  Returns 0, or -1 with perror already called.
+ */
+int its_write_words(FILE *out, const uint64_t *w, size_t n, const char *what);
 
 #endif /* UTIL_H */

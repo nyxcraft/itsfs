@@ -45,75 +45,6 @@
  * when the pack turns out to be full. */
 #define PUT_MAXBYTES (64u * 1024u * 1024u)
 
-typedef struct {
-	char dir[ITS_NAME_MAX];
-	char fn1[ITS_NAME_MAX];
-	char fn2[ITS_NAME_MAX];
-} wpath;
-
-/* `DIR;FN1 FN2` in one argument, or as three.  The same grammar cmd_fs.c
- * accepts, and refusing what SIXBIT cannot hold rather than truncating it. */
-static int
-parse_path(char **argv, int i, int navail, wpath *p)
-{
-	memset(p, 0, sizeof *p);
-
-	if (navail >= 3) {
-		if (strlen(argv[i]) >= ITS_NAME_MAX || strlen(argv[i + 1]) >= ITS_NAME_MAX ||
-		    strlen(argv[i + 2]) >= ITS_NAME_MAX)
-			goto toolong;
-		snprintf(p->dir, sizeof p->dir, "%s", argv[i]);
-		snprintf(p->fn1, sizeof p->fn1, "%s", argv[i + 1]);
-		snprintf(p->fn2, sizeof p->fn2, "%s", argv[i + 2]);
-		return 0;
-	}
-
-	if (navail == 1) {
-		const char *s = argv[i];
-		const char *semi = strchr(s, ';');
-		const char *sp;
-		size_t n;
-
-		if (semi == NULL) {
-			fprintf(stderr, "itsfs: '%s' is not a file name: it wants DIR;FN1 FN2\n", s);
-			return -1;
-		}
-
-		n = (size_t)(semi - s);
-
-		if (n >= ITS_NAME_MAX)
-			goto toolong;
-		memcpy(p->dir, s, n);
-		p->dir[n] = '\0';
-
-		s = semi + 1;
-		sp = strchr(s, ' ');
-
-		if (sp == NULL) {
-			if (strlen(s) >= ITS_NAME_MAX)
-				goto toolong;
-			snprintf(p->fn1, sizeof p->fn1, "%s", s);
-			return 0;
-		}
-
-		n = (size_t)(sp - s);
-
-		if (n >= ITS_NAME_MAX || strlen(sp + 1) >= ITS_NAME_MAX)
-			goto toolong;
-		memcpy(p->fn1, s, n);
-		p->fn1[n] = '\0';
-		snprintf(p->fn2, sizeof p->fn2, "%s", sp + 1);
-		return 0;
-	}
-
-	fprintf(stderr, "itsfs: a file name is 'DIR;FN1 FN2', or three arguments\n");
-	return -1;
-
-toolong:
-	fprintf(stderr, "itsfs: a name component is at most %d characters\n", ITS_SIXBIT_CHARS);
-	return -1;
-}
-
 /*
  * A host file as 36-bit words.  Returns the word count, or -1.
  *
@@ -224,7 +155,7 @@ run(int argc, char **argv, int is_del)
 	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
 	const its_drive *drv = NULL;
 	its_writer w;
-	wpath p;
+	its_path p;
 	uint64_t *words = NULL;
 	long nwords = 0;
 	int c, raw = 0, rc = 2, nargs;
@@ -253,7 +184,7 @@ run(int argc, char **argv, int is_del)
 	if (nargs != 1 && nargs != 3)
 		goto usage;
 
-	if (parse_path(argv, optind + 1, nargs, &p) != 0)
+	if (its_parse_path(argv, optind + 1, nargs, &p) != 0)
 		return 2;
 
 	if (!is_del && (nwords = read_host(argv[argc - 1], raw, &words)) < 0)

@@ -509,6 +509,15 @@ out=$("$ITSFS" check "$T/k5.dsk" 2>&1)
 has "a descriptor area that has reached the name area is a problem" "$out" \
 	"has overrun the name area"
 
+# `rm` IS `del` UNDER ANOTHER NAME -- the same function pointer in itsfs.c.
+# Nothing exercised the alias, so a typo in the dispatch table would not have
+# shown up anywhere.
+mkfixture "$T/alias.dsk"
+out=$("$ITSFS" rm "$T/alias.dsk" 'TEST;HELLO TXT' 2>&1); rc=$?
+chk "rm removes a file, like del" "$rc" "0"
+out=$("$ITSFS" ls "$T/alias.dsk" TEST 2>&1)
+hasnt "...and the file is gone" "$out" "HELLO"
+
 # A TAPE THAT TRIES TO ESCAPE THE EXTRACTION DIRECTORY.
 #
 # SIXBIT decodes to ASCII 040..0137, a range that CONTAINS `/` and `.`, and

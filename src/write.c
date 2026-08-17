@@ -396,7 +396,7 @@ desc_put(uint64_t *u, unsigned wpb, unsigned off, unsigned val)
  * image its checker called clean, and it is worth one full scan of at most two
  * hundred entries to make it unreachable here.
  *
- * The project's own test fixture was unsorted for three phases, which is how
+ * The project's own test fixture was once unsorted, which is how
  * this was noticed rather than reasoned about.
  */
 static unsigned

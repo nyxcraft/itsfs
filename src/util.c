@@ -224,3 +224,93 @@ parse_blkrange(const char *s, uint64_t *first, uint64_t *last)
 
 	return 0;
 }
+
+/*
+ * `DIR;FN1 FN2` in one argument, or as three.  One copy: cmd_fs.c and
+ * cmd_write.c each had their own, byte-for-byte the same but for the argument
+ * convention, and they had already begun to drift apart.
+ */
+int
+its_parse_path(char **argv, int i, int navail, its_path *p)
+{
+	memset(p, 0, sizeof *p);
+
+	if (navail == 3) {
+		if (strlen(argv[i]) >= ITS_NAME_MAX || strlen(argv[i + 1]) >= ITS_NAME_MAX ||
+		    strlen(argv[i + 2]) >= ITS_NAME_MAX)
+			goto toolong;
+
+		snprintf(p->dir, sizeof p->dir, "%s", argv[i]);
+		snprintf(p->fn1, sizeof p->fn1, "%s", argv[i + 1]);
+		snprintf(p->fn2, sizeof p->fn2, "%s", argv[i + 2]);
+		return 0;
+	}
+
+	if (navail == 1) {
+		const char *s = argv[i];
+		const char *semi = strchr(s, ';');
+		const char *sp;
+		size_t n;
+
+		if (semi == NULL) {
+			fprintf(stderr, "itsfs: '%s' is not a file name: it wants DIR;FN1 FN2\n",
+				s);
+			return -1;
+		}
+
+		n = (size_t)(semi - s);
+
+		if (n >= ITS_NAME_MAX)
+			goto toolong;
+
+		memcpy(p->dir, s, n);
+		p->dir[n] = '\0';
+
+		s = semi + 1;
+		sp = strchr(s, ' ');
+
+		/* No space: FN2 is empty, which is a legal ITS name. */
+		if (sp == NULL) {
+			if (strlen(s) >= ITS_NAME_MAX)
+				goto toolong;
+
+			snprintf(p->fn1, sizeof p->fn1, "%s", s);
+			return 0;
+		}
+
+		n = (size_t)(sp - s);
+
+		if (n >= ITS_NAME_MAX || strlen(sp + 1) >= ITS_NAME_MAX)
+			goto toolong;
+
+		memcpy(p->fn1, s, n);
+		p->fn1[n] = '\0';
+		snprintf(p->fn2, sizeof p->fn2, "%s", sp + 1);
+		return 0;
+	}
+
+	fprintf(stderr, "itsfs: a file name is 'DIR;FN1 FN2', or three arguments\n");
+	return -1;
+
+toolong:
+	fprintf(stderr, "itsfs: a name component is at most %d characters\n", ITS_SIXBIT_CHARS);
+	return -1;
+}
+
+int
+its_write_words(FILE *out, const uint64_t *w, size_t n, const char *what)
+{
+	for (size_t i = 0; i < n; i++) {
+		unsigned char b[8];
+
+		for (int k = 0; k < 8; k++)
+			b[k] = (unsigned char)(w[i] >> (8 * k));
+
+		if (fwrite(b, 1, 8, out) != 8) {
+			perror(what);
+			return -1;
+		}
+	}
+
+	return 0;
+}
