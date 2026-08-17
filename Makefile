@@ -153,6 +153,18 @@ oracle: $(BIN)/itsfs
 	@$(BIN)/itsfs verify -p dbd9 $(ORACLE_TMP)/d9.dsk $(ORACLE_TMP)/ref.mf
 	@echo "IDENTICAL: the same file system, four and a half bytes per word instead of eight"
 	@echo
+	@# A THIRD READER, in another language, sharing no constants with either C
+	@# one.  structure.c and cmd_check.c are already independent of each other,
+	@# but both take their numbers from src/its.h -- so a wrong TRANSCRIPTION
+	@# would be inherited by both and invisible to their agreement.  This one
+	@# transcribes them again from the same ITS sources.  Optional: it needs
+	@# python3, which `make test` deliberately does not.
+	@if command -v python3 >/dev/null 2>&1; then \
+	   echo; \
+	   python3 tests/crosscount.py $(ORACLE_TMP)/ref.dsk; \
+	   $(BIN)/itsfs check $(ORACLE_TMP)/ref.dsk 2>&1 | sed -n 's/^directories *//p' | \
+	     sed 's/^/itsfs check: /'; \
+	 fi
 	@# ...and the one check here that is not the pack agreeing with itself.
 	@# Extract files and compare them to the host files in the ITS source tree
 	@# that they were built from -- something no part of this project has ever

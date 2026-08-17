@@ -1272,6 +1272,113 @@ finished, not before. Read first, they would have been believed — and
 `dump.format` in particular describes a save-set header two words shorter than
 the one ITS writes today. It is corroboration precisely because it came second.
 
+## What an `[s]` costs to check
+
+The per-field markers in `its.h` are the finest-grained claims here: `[v]` means
+a field has been exercised against a real pack, `[s]` that it is read in `FSDEFS`
+and has not. Fifteen fields are still `[s]`, and the temptation on finding ITS's
+own prose documentation was to promote some of them, because a second source
+feels like stronger evidence.
+
+It is not the same thing. `doc/sysdoc/ufd.100` says "Colon quotes the character
+that follows it", which corroborates the *rule*; `[s]` is a claim about whether
+any artifact has ever made the code run.
+
+So that one was checked properly instead. All 296 distinct link targets on the
+reference pack, and the character set across every one of them is
+
+```
+!%*-.0123456789;>?@ABCDEFGHIJKLMNOPQRSTUVWXY[]_
+```
+
+— no colon, and no space inside a component. **Nothing on this pack needs
+quoting.** The marker stays, and now says why: not for want of looking, but
+because a pack that exercises it has not been read. The decoder implements the
+rule, `FSDEFS`'s own four examples drive it in the suite, and ITS's documentation
+agrees with all of it — and none of that is an artifact.
+
+### The rest of them, counted
+
+Having done one properly, the others were worth the same scan of the reference
+pack — 247 directories and 6,056 entries, which are the numbers `check`
+independently reports:
+
+| field | on the pack | so |
+|---|---|---|
+| `MPDOFF` | `771107,,352672` | present, but nothing here interprets a clock offset |
+| `MPDWDK` | zero | not exercised |
+| `QTRSRV` | zero | not exercised — it is `-1` only for "allocated dirs only" |
+| `UDALLO` | zero in **0 of 247** directories | not exercised |
+| `UNREAP` | set on **1** entry | exercised, once, out of 6,056 |
+| `UNWRIT` | **0** | not exercised |
+| `UNMARK` | **0** | not exercised |
+| `UNCDEL` | **0** | not exercised |
+| `UNBYTE` | **0 on all 5,657 files** | 36-bit bytes; the other encodings are unexercised, as the roadmap says |
+
+**One of those matters more than the others.** `UNIGFL` — the bits that mean
+"ignore this file" — is `UNWRIT | UNCDEL`, and both are zero everywhere on this
+pack. So the reader's `deleted` flag is **never true** on the reference pack, and
+the branch that skips such an entry has never been taken against a real artifact.
+It is driven by the suite's own fixture, and that is all.
+
+`UNWRIT` means "open for writing", so an abruptly halted machine looked like the
+way to produce one — and these interop runs halt ITS with the console escape,
+which is as abrupt as it gets. So a pack ITS had actually run on was scanned too:
+6,058 entries, including the two the batch daemon created while it was up. Still
+none. Whatever ITS does with that bit, it does not leave it set to be found.
+
+That is not a defect; it is the sort of thing worth knowing before trusting a
+count. Every "5,657 files" this project prints is a count of entries none of
+which were ignorable.
+
+That scan was written from scratch to answer the flag question — its own `dbd9`
+decode, its own MFD-slot arithmetic, no `itsfs` code — and it agreed with `check`
+to the entry. The agreement was worth more than the answer, so it stayed:
+`tests/crosscount.py`, run by `make oracle`.
+
+**Why a third reader is not redundant.** `structure.c` and `cmd_check.c` are
+already independent of each other — the checker re-derives the geometry and the
+MFD arithmetic rather than calling the reader. But *both take their constants
+from `src/its.h`*. A second reading catches a wrong reading; it cannot catch a
+wrong **transcription**, because both inherit it. So `crosscount.py` transcribes
+`NHEDS`, `NSECS`, `SECBLK`, `MDNAMP`, `MDNUDS`, `LMNBLK`, `LUNBLK` and `UNLINK`
+again, from the same ITS sources, with citations. If a number disagrees, one of
+the two transcriptions is wrong and the disagreement says so.
+
+It is also a different language, which is not nothing: the C readers share an
+integer model, a byte order, and a set of habits about shifts and masks. Python
+has arbitrary-precision integers and no unsigned types, so a 36-bit value that
+overflowed or sign-extended in C would come out differently here.
+
+```console
+crosscount: 247 directories, 6056 entries (5657 files, 399 links)
+crosscount: 30940 blocks claimed by files, 30940 in use per the table, 6719 free, 505 locked out
+itsfs check: 6719 free, 30940 in use, 505 locked out / claimed 30940 blocks, in 5657 files
+```
+
+Two packs, two packings, exact — including **30,940 == 30,940**, which is the
+strongest single claim this project makes and which had until now been checked
+only by two implementations sharing a header.
+
+**It earned its keep the first time it counted blocks, by disagreeing.** Three
+constants had been transcribed wrong in it:
+
+- `UNDSCP` is the **low 13 bits** of `UNRNDM`, not the top nine
+- the map starts at `LTIBLK`, which is **octal** 20, not word 0
+- a block indexes from `QFRSTB`, not from zero
+
+Every one produced plausible output. The block count came out 6,826 — a number
+with no obvious flaw in it — and the table still partitioned exactly, into
+30,792 + 6,864 + 508 = 38,164. Nothing about either result looked wrong on its
+own. They were caught by the totals not matching `check`, which is the entire
+argument for a third reader: two implementations that share a header agree with
+each other about a mistake in it.
+
+(The search turned up three targets worth knowing about for a different reason:
+`EMACS;[PRFY] >`, `EMACS;[PURE] >`, `EMACS;[RMAI] >`. Bracketed names, and `>`
+as the second name — the version wildcard that `QLOOK` resolves, which is why
+the dangling-link count on this pack is seven rather than ninety-five.)
+
 ## The tool you verify with can lie by omission
 
 This one is not about ITS, and it is the most portable lesson here.

@@ -75,6 +75,8 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#what-it-does-not-prove">What it does not prove</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-drive-and-why-its-cannot-grade-one">A second drive, and why ITS cannot grade one</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-prose-description-of-the-directory-found-afterwards">A prose description of the directory, found afterwards</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-an-s-costs-to-check">What an `[s]` costs to check</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-rest-of-them-counted">The rest of them, counted</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
@@ -1270,6 +1272,137 @@ that.</strong> These documents were found by searching the web after the work wa
 finished, not before. Read first, they would have been believed — and
 <code>dump.format</code> in particular describes a save-set header two words shorter than
 the one ITS writes today. It is corroboration precisely because it came second.</p>
+<h2 id="what-an-s-costs-to-check">What an <code>[s]</code> costs to check</h2>
+<p>The per-field markers in <code>its.h</code> are the finest-grained claims here: <code>[v]</code> means
+a field has been exercised against a real pack, <code>[s]</code> that it is read in <code>FSDEFS</code>
+and has not. Fifteen fields are still <code>[s]</code>, and the temptation on finding ITS's
+own prose documentation was to promote some of them, because a second source
+feels like stronger evidence.</p>
+<p>It is not the same thing. <code>doc/sysdoc/ufd.100</code> says &quot;Colon quotes the character
+that follows it&quot;, which corroborates the <em>rule</em>; <code>[s]</code> is a claim about whether
+any artifact has ever made the code run.</p>
+<p>So that one was checked properly instead. All 296 distinct link targets on the
+reference pack, and the character set across every one of them is</p>
+<pre><code>!%*-.0123456789;&gt;?@ABCDEFGHIJKLMNOPQRSTUVWXY[]_
+</code></pre>
+<p>— no colon, and no space inside a component. <strong>Nothing on this pack needs
+quoting.</strong> The marker stays, and now says why: not for want of looking, but
+because a pack that exercises it has not been read. The decoder implements the
+rule, <code>FSDEFS</code>'s own four examples drive it in the suite, and ITS's documentation
+agrees with all of it — and none of that is an artifact.</p>
+<h3 id="the-rest-of-them-counted">The rest of them, counted</h3>
+<p>Having done one properly, the others were worth the same scan of the reference
+pack — 247 directories and 6,056 entries, which are the numbers <code>check</code>
+independently reports:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>on the pack</th>
+<th>so</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MPDOFF</code></td>
+<td><code>771107,,352672</code></td>
+<td>present, but nothing here interprets a clock offset</td>
+</tr>
+<tr>
+<td><code>MPDWDK</code></td>
+<td>zero</td>
+<td>not exercised</td>
+</tr>
+<tr>
+<td><code>QTRSRV</code></td>
+<td>zero</td>
+<td>not exercised — it is <code>-1</code> only for &quot;allocated dirs only&quot;</td>
+</tr>
+<tr>
+<td><code>UDALLO</code></td>
+<td>zero in <strong>0 of 247</strong> directories</td>
+<td>not exercised</td>
+</tr>
+<tr>
+<td><code>UNREAP</code></td>
+<td>set on <strong>1</strong> entry</td>
+<td>exercised, once, out of 6,056</td>
+</tr>
+<tr>
+<td><code>UNWRIT</code></td>
+<td><strong>0</strong></td>
+<td>not exercised</td>
+</tr>
+<tr>
+<td><code>UNMARK</code></td>
+<td><strong>0</strong></td>
+<td>not exercised</td>
+</tr>
+<tr>
+<td><code>UNCDEL</code></td>
+<td><strong>0</strong></td>
+<td>not exercised</td>
+</tr>
+<tr>
+<td><code>UNBYTE</code></td>
+<td><strong>0 on all 5,657 files</strong></td>
+<td>36-bit bytes; the other encodings are unexercised, as the roadmap says</td>
+</tr>
+</tbody>
+</table>
+<p><strong>One of those matters more than the others.</strong> <code>UNIGFL</code> — the bits that mean
+&quot;ignore this file&quot; — is <code>UNWRIT | UNCDEL</code>, and both are zero everywhere on this
+pack. So the reader's <code>deleted</code> flag is <strong>never true</strong> on the reference pack, and
+the branch that skips such an entry has never been taken against a real artifact.
+It is driven by the suite's own fixture, and that is all.</p>
+<p><code>UNWRIT</code> means &quot;open for writing&quot;, so an abruptly halted machine looked like the
+way to produce one — and these interop runs halt ITS with the console escape,
+which is as abrupt as it gets. So a pack ITS had actually run on was scanned too:
+6,058 entries, including the two the batch daemon created while it was up. Still
+none. Whatever ITS does with that bit, it does not leave it set to be found.</p>
+<p>That is not a defect; it is the sort of thing worth knowing before trusting a
+count. Every &quot;5,657 files&quot; this project prints is a count of entries none of
+which were ignorable.</p>
+<p>That scan was written from scratch to answer the flag question — its own <code>dbd9</code>
+decode, its own MFD-slot arithmetic, no <code>itsfs</code> code — and it agreed with <code>check</code>
+to the entry. The agreement was worth more than the answer, so it stayed:
+<code>tests/crosscount.py</code>, run by <code>make oracle</code>.</p>
+<p><strong>Why a third reader is not redundant.</strong> <code>structure.c</code> and <code>cmd_check.c</code> are
+already independent of each other — the checker re-derives the geometry and the
+MFD arithmetic rather than calling the reader. But <em>both take their constants
+from <code>src/its.h</code></em>. A second reading catches a wrong reading; it cannot catch a
+wrong <strong>transcription</strong>, because both inherit it. So <code>crosscount.py</code> transcribes
+<code>NHEDS</code>, <code>NSECS</code>, <code>SECBLK</code>, <code>MDNAMP</code>, <code>MDNUDS</code>, <code>LMNBLK</code>, <code>LUNBLK</code> and <code>UNLINK</code>
+again, from the same ITS sources, with citations. If a number disagrees, one of
+the two transcriptions is wrong and the disagreement says so.</p>
+<p>It is also a different language, which is not nothing: the C readers share an
+integer model, a byte order, and a set of habits about shifts and masks. Python
+has arbitrary-precision integers and no unsigned types, so a 36-bit value that
+overflowed or sign-extended in C would come out differently here.</p>
+<pre><code class="language-console">crosscount: 247 directories, 6056 entries (5657 files, 399 links)
+crosscount: 30940 blocks claimed by files, 30940 in use per the table, 6719 free, 505 locked out
+itsfs check: 6719 free, 30940 in use, 505 locked out / claimed 30940 blocks, in 5657 files
+</code></pre>
+<p>Two packs, two packings, exact — including <strong>30,940 == 30,940</strong>, which is the
+strongest single claim this project makes and which had until now been checked
+only by two implementations sharing a header.</p>
+<p><strong>It earned its keep the first time it counted blocks, by disagreeing.</strong> Three
+constants had been transcribed wrong in it:</p>
+<ul>
+<li><code>UNDSCP</code> is the <strong>low 13 bits</strong> of <code>UNRNDM</code>, not the top nine</li>
+<li>the map starts at <code>LTIBLK</code>, which is <strong>octal</strong> 20, not word 0</li>
+<li>a block indexes from <code>QFRSTB</code>, not from zero</li>
+</ul>
+<p>Every one produced plausible output. The block count came out 6,826 — a number
+with no obvious flaw in it — and the table still partitioned exactly, into
+30,792 + 6,864 + 508 = 38,164. Nothing about either result looked wrong on its
+own. They were caught by the totals not matching <code>check</code>, which is the entire
+argument for a third reader: two implementations that share a header agree with
+each other about a mistake in it.</p>
+<p>(The search turned up three targets worth knowing about for a different reason:
+<code>EMACS;[PRFY] &gt;</code>, <code>EMACS;[PURE] &gt;</code>, <code>EMACS;[RMAI] &gt;</code>. Bracketed names, and <code>&gt;</code>
+as the second name — the version wildcard that <code>QLOOK</code> resolves, which is why
+the dangling-link count on this pack is seven rather than ninety-five.)</p>
 <h2 id="the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</h2>
 <p>This one is not about ITS, and it is the most portable lesson here.</p>
 <p>Every negative claim in <code>src/its.h</code> — every <code>no DEFSYM</code>, every &quot;FSDEFS does not

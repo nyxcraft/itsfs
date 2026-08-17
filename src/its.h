@@ -178,6 +178,22 @@
 #define ITS_UN_MARK	010	/* UNMARK  GC mark bit                        [s] */
 #define ITS_UN_CDEL	020	/* UNCDEL  delete when closed                 [s] */
 #define ITS_UN_IGFL	024	/* UNIGFL  bits that mean "ignore this file"  [s] */
+/*
+ * AND [s] HERE IS LOAD-BEARING.  UNIGFL is UNWRIT|UNCDEL, and neither bit is set
+ * anywhere on the reference pack -- 247 directories, 6,056 entries, all scanned.
+ * So `deleted` is never true on it, and the branch that skips such an entry has
+ * never run against a real artifact; only against the suite's own fixture.
+ *
+ * NOR ON A PACK ITS ITSELF RAN ON AND WE KILLED.  UNWRIT means "open for
+ * writing", so an abruptly halted machine looked like the way to produce one --
+ * and the interop runs halt ITS with the console escape, which is as abrupt as
+ * it gets.  Scanning such a pack afterwards, 6,058 entries including the two the
+ * batch daemon created while it ran, still finds none.  Whatever ITS does with
+ * that bit, it does not leave it set for us to find.
+ *
+ * Worth knowing before trusting a count: every "5,657 files" this project prints
+ * is a count of entries none of which were ignorable.
+ */
 
 /* in UNDATE */
 #define ITS_UN_TIM_P	0
@@ -263,6 +279,20 @@
  */
 #define ITS_LNK_SEP	033	/* no DEFSYM; NSALV LTYPE's `';`              [v] */
 #define ITS_LNK_QUOTE	032	/* no DEFSYM; NSALV LTYPE's `':`              [s] */
+/*
+ * [s] ON THE QUOTE IS NOT FOR WANT OF LOOKING.  Every one of the 296 distinct
+ * link targets on the reference pack was checked, and the character set across
+ * all of them is
+ *
+ *      !%*-.0123456789;>?@ABCDEFGHIJKLMNOPQRSTUVWXY[]_
+ *
+ * -- no colon, and no space inside a component.  So none of them needs quoting,
+ * and no pack this project has read can exercise the code that handles it.  ITS
+ * documents the rule (doc/sysdoc/ufd.100: "Colon quotes the character that
+ * follows it"), the decoder implements it, and tests/run.sh drives it with
+ * FSDEFS's own four examples -- but a document and a fixture are not an artifact,
+ * which is what [s] is for.
+ */
 
 /* clang-format on */
 
