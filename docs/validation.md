@@ -998,12 +998,12 @@ and turns "unreachable" into "impossible". The corruption fuzzer had never found
 it because it damages descriptor bytes at the *start* of the area, where the
 offsets involved are small.
 
-### And a clean one, which is also a result
+### Two clean ones, which are also results
 
-`structure.c` got the same reading afterwards — it is the reader every command
-depends on, and it had never had one. **Nothing was found**, and that is worth
-one paragraph rather than none, so the next person knows it has been looked at
-and where.
+`structure.c` and `cmd_check.c` got the same reading afterwards — the reader
+every command depends on, and the independent checker. **Nothing was found in
+either**, and that is worth a paragraph rather than none, so the next person
+knows they have been looked at and where.
 
 What was checked: the descriptor decoder's opcode ranges against `FSDEFS`
 (0 ends, 1–12 take, 13–30 skip, 31 write-placeholder, 32+ load address) and the
@@ -1015,6 +1015,17 @@ of `ITS_NAME_MAX` — 6 into 7, safe, but only because those two constants are
 defined in terms of each other in different headers. Its `goto done` path leaves
 a component unterminated and relies on the opening `memset` for that, which
 holds.
+
+In `cmd_check.c` the risk is different, because it allocates from what it reads.
+Three sites: the growable name list (doubles, and survives either allocation
+failing without corrupting its state), the MFD slot table, and the two per-block
+arrays. The slot count is `(wpb - namp) / LMNBLK`, an unsigned subtraction that
+would underflow into an enormous `calloc` if `namp` exceeded `wpb` — and `namp`
+is range-checked against `wpb` immediately above it, with a `return -1`. The
+per-block arrays are sized from the **drive table**, not from the disk:
+`ntutbl`, `ncyls`, `nblksc`. So nothing an image controls can inflate an
+allocation, which is the property that matters for a program whose whole job is
+to be pointed at damaged packs.
 
 ## A second machine, and a second packing
 

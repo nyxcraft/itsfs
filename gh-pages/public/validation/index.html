@@ -67,7 +67,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
-<li><a class="section-nav__link section-nav__link--l3" href="#and-a-clean-one-which-is-also-a-result">And a clean one, which is also a result</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#two-clean-ones-which-are-also-results">Two clean ones, which are also results</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-machine-and-a-second-packing">A second machine, and a second packing</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#two-things-that-cost-time-both-worth-writing-down">Two things that cost time, both worth writing down</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-wrong-assertion-found-by-running-the-test">A wrong assertion, found by running the test</a></li>
@@ -950,11 +950,11 @@ of the two functions. <code>desc_put</code> bounds itself now, which costs one c
 and turns &quot;unreachable&quot; into &quot;impossible&quot;. The corruption fuzzer had never found
 it because it damages descriptor bytes at the <em>start</em> of the area, where the
 offsets involved are small.</p>
-<h3 id="and-a-clean-one-which-is-also-a-result">And a clean one, which is also a result</h3>
-<p><code>structure.c</code> got the same reading afterwards — it is the reader every command
-depends on, and it had never had one. <strong>Nothing was found</strong>, and that is worth
-one paragraph rather than none, so the next person knows it has been looked at
-and where.</p>
+<h3 id="two-clean-ones-which-are-also-results">Two clean ones, which are also results</h3>
+<p><code>structure.c</code> and <code>cmd_check.c</code> got the same reading afterwards — the reader
+every command depends on, and the independent checker. <strong>Nothing was found in
+either</strong>, and that is worth a paragraph rather than none, so the next person
+knows they have been looked at and where.</p>
 <p>What was checked: the descriptor decoder's opcode ranges against <code>FSDEFS</code>
 (0 ends, 1–12 take, 13–30 skip, 31 write-placeholder, 32+ load address) and the
 branch order that distinguishes them — get that wrong and a load address is
@@ -965,6 +965,16 @@ of <code>ITS_NAME_MAX</code> — 6 into 7, safe, but only because those two cons
 defined in terms of each other in different headers. Its <code>goto done</code> path leaves
 a component unterminated and relies on the opening <code>memset</code> for that, which
 holds.</p>
+<p>In <code>cmd_check.c</code> the risk is different, because it allocates from what it reads.
+Three sites: the growable name list (doubles, and survives either allocation
+failing without corrupting its state), the MFD slot table, and the two per-block
+arrays. The slot count is <code>(wpb - namp) / LMNBLK</code>, an unsigned subtraction that
+would underflow into an enormous <code>calloc</code> if <code>namp</code> exceeded <code>wpb</code> — and <code>namp</code>
+is range-checked against <code>wpb</code> immediately above it, with a <code>return -1</code>. The
+per-block arrays are sized from the <strong>drive table</strong>, not from the disk:
+<code>ntutbl</code>, <code>ncyls</code>, <code>nblksc</code>. So nothing an image controls can inflate an
+allocation, which is the property that matters for a program whose whole job is
+to be pointed at damaged packs.</p>
 <h2 id="a-second-machine-and-a-second-packing">A second machine, and a second packing</h2>
 <p>Everything in <code>make interop</code> runs under SIMH. When ITS boots there and prints a
 file this project wrote, the chain is: our writer, our packing, SIMH's disk
