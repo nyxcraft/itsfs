@@ -51,7 +51,9 @@ tests/accounting.sh does the space add up?  The same three questions `check`
 tests/crosscheck.sh extracted files against the host files they were built from
                     -- the only evidence here that is not the pack agreeing
                     with itself.
-tests/fuzz.py       one random word damaged per iteration, every command run.
+tests/fuzz.py       one random word damaged per iteration, every command run --
+                    INCLUDING put/del/mkdir, each on its own copy and each
+                    rechecked, and tape/saveset over a damaged .tap.
 tests/nsalv.sh      `make nsalv`: hand a pack to ITS's own salvager and compare.
 tests/nsalv.exp     ...the emulator half of that.  THE SLEEPS ARE LOAD-BEARING.
 tests/interop.sh    `make interop`: boot ITS on a pack we wrote, and have
@@ -60,6 +62,15 @@ tests/mkfs.sh       `make mkfs-test`: a pack built from nothing, graded by
                     NSALV and DSKDMP, both booted from tape.
 tests/tape.sh       `make tape-test`: a real ITS tape, decoded and checked
                     against the host files it was made from.  No emulator.
+tests/klh10.sh      `make klh10`: dbd9 against KLH10's OWN converter, vdkfmt.
+                    No emulator run -- the KLH10 build ships the converter.
+tests/interop-klh10.sh  `make interop-klh10`: the interop questions again on a
+tests/klh10.exp     SECOND emulator and a second packing.  KLH10 execs its
+                    devices as separate processes (dprpxx, dpchaos, dptm03) --
+                    without them it runs with NO DISK and DSKDMP says MFDCLB,
+                    which reads as a corrupt pack and is not one.  KEEP EVERY
+                    expect PATTERN LIST MULTI-LINE; the one-line form does not
+                    match on expect 5.45.4, reproducibly, cause unknown.
 tests/version-diff.sh  two versions of FSDEFS, and the citation column checked.
 ```
 
