@@ -213,12 +213,58 @@ esac
 echo
 echo "4. and the pack afterwards"
 
-if "$ITSFS" check -p dbd9 -d rp06 "$T/run/rp0.dsk" > "$T/check2.out" 2>&1; then
+# NOT "still checks clean" -- THAT WAS THE WRONG ASSERTION, and writing it cost
+# a failing test to find out.  A running ITS creates files of its own, and this
+# harness stops the machine by HALTING it, so the TUT it had in memory is never
+# written back.  The result is exactly what ITS's own salvager has a category
+# for: reference counts that disagree with the files, on a pack that is
+# otherwise sound.  70 of them here, and the pack had grown from 5658 files to
+# 5660 while it ran.  Demanding a clean check is demanding that ITS not be ITS.
+#
+# What must hold is the part that means data is at risk:
+#
+#   free but claimed        a file holds a block the allocator will hand out
+#   on locked-out blocks    a file holds a directory or a table
+#
+# Those must be zero.  A miscount costs space and nothing else, and NSALV fixes
+# it in one pass.
+"$ITSFS" check -p dbd9 -d rp06 "$T/run/rp0.dsk" > "$T/check2.out" 2>&1
+d=$(sed -n 's/^disagreements *//p' "$T/check2.out")
+
+case "$d" in
+"0 free but claimed, 0 in use but unclaimed"*)
+	ok "no block is both free and claimed after ITS ran"
+	;;
+"")
 	ok "the pack still checks clean after ITS had it"
-else
-	no "check reports problems after ITS ran:"
-	sed 's/^/       /' "$T/check2.out" | tail -8
-fi
+	;;
+*)
+	no "a dangerous disagreement after ITS ran: $d"
+	;;
+esac
+
+case "$d" in
+*"0 on locked-out blocks")
+	ok "...and no file has landed on a directory or a table"
+	;;
+"")
+	ok "...and nothing is on a locked-out block"
+	;;
+*)
+	no "a file holds a locked-out block: $d"
+	;;
+esac
+
+# Said out loud rather than hidden, because a reader seeing `check` exit
+# non-zero here should know it is expected.
+case "$d" in
+*" 0 miscounted"*) ;;
+"") ;;
+*)
+	echo "       (miscounts are expected: the machine was halted, so the TUT"
+	echo "        ITS held in memory was never written back -- $d)"
+	;;
+esac
 
 if "$ITSFS" cat -p dbd9 -d rp06 "$T/run/rp0.dsk" "$DIR;$FN1 $FN2" 2>/dev/null |
 	cmp -s - "$T/msg.txt"; then

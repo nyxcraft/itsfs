@@ -917,6 +917,53 @@ with one. Sending ESC where `^\` was meant does not produce an error: DSKDMP
 takes it, answers `FNF`, and the `quit` typed after it goes in as a file name —
 so the run hangs at a timeout with a perfectly correct listing on the screen.
 
+### A wrong assertion, found by running the test
+
+The KLH10 run gained a fourth stage — does the pack survive ITS *having* it? —
+and the obvious form of that was **"it still checks clean"**. That test failed
+the first time it ran, which is the whole argument for running a test before
+believing it:
+
+```
+disagreements  0 free but claimed, 0 in use but unclaimed, 70 miscounted, 0 on locked-out blocks
+directories    247, 5660 files, 398 links
+70 problems
+```
+
+Zero in both categories that mean data is at risk, seventy **miscounts** — and
+the pack had grown from the 5,658 files we left it with to 5,660. Neither is
+damage, and rather than assert that, it can be measured. Diffing a manifest of
+the pack before and after names the two files exactly:
+
+```
+.BATCH;BATCHN LOG
+.BATCH;BATCHN NEXTUP
+```
+
+— the batch daemon writing its log and its next-up file, and `.BATCH` growing
+from 248 blocks to 249 to hold them. The arithmetic closes with nothing left
+over: 5,657 on the original pack, **+1** for the file we wrote, **+2** for ITS's,
+= 5,660; and 399 links down to 398 because `SYS;ATSIGN DRAGON` — which turns out
+to point at `CHANNA;ATSIGN TARAKA` — is the one we removed to get the console.
+
+The miscounts follow from the same fact: this harness stops the machine by
+*halting* it, so the allocation table ITS held in memory is never written back.
+What is left is precisely the category ITS's own salvager has a name for.
+Demanding a clean check here is demanding that ITS not be ITS.
+
+So the assertion is now the one that means something:
+
+- **free but claimed** must be zero — otherwise the allocator will hand out a
+  block a file is using.
+- **on locked-out blocks** must be zero — otherwise a file is sitting on a
+  directory or a table.
+- **miscounted** may be anything, is reported rather than hidden, and `NSALV`
+  fixes it in one pass.
+
+Both dangerous categories are zero, and our file comes back byte for byte. The
+weaker claim is the true one, and it is worth more than a green tick that was
+asserting the wrong thing.
+
 ### What it does not prove
 
 The same `SYS;ITS` binary, off the same pack, under both emulators. Two machines
