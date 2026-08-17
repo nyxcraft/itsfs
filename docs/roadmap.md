@@ -243,4 +243,59 @@ would produce a tape unlike any ITS made.
   floor and no ceiling. A pre-1979 one would be the interesting artifact.
 - **A multi-pack file system.** `UNPKN` and `QTRSRV` are read and ignored today.
   `t10fs` found two real bugs the first time it met a genuinely multi-unit
-  structure.
+  structure. ITS's own note on it, `doc/sysdoc/adding.packs`, is short enough to
+  quote in full effect: *"Change the configuration in SALV or NSALV. `FIRSPK` and
+  `LASTPK` defines the range of packs… Change the definition of `NQS` in ITS…
+  Run `MARK` in SALV to mark the packs. Use `UCOP` in SALV to update the MFD and
+  UFDs on the fresh pack with information from a pack already in use."* So the
+  pack count is fixed when ITS and the salvager are **assembled**, and a
+  multi-pack file system needs its own build of both — and `UCOP` says the MFD
+  and the UFDs are propagated to the new pack rather than shared, which is a
+  structural fact worth having before writing any of it.
+
+### The shape of what is left
+
+Two of these are blocked by the same thing, and it is worth naming: **ITS's
+configuration is compiled in, not read at run time.** The salvager's drive
+(`IFCE MCHN,…,[ … RM03P==1`) and the pack count (`FIRSPK`, `LASTPK`, `NQS`) are
+both assembly-time, so exercising either against ITS means building a different
+ITS — which changes the reference environment every other test here depends on.
+Neither is a file-system problem, and neither is hard; both are a day of build
+plumbing rather than an afternoon of reading.
+
+The other three need artifacts nobody here can produce: a pack recovered from
+MIT, a pre-1979 `FSDEFS`, and the KS10 front-end file system. MIT's Tapes of Tech
+Square collection holds real ITS backup tapes, but its published output is
+*extracted files* — the raw images stay in the archive.
+- **An `RM03`-assembled salvager.** `mkfs` builds an RM03 and `make mkfs-test
+  ITS_DRIVE=rm03` checks its arithmetic, but ITS cannot grade one: `NSALV` picks
+  its drive when it is *assembled* (`IFCE MCHN,PM,[ … RM03P==1`), so the tape
+  here grades RP06 and nothing else. A second geometry graded by ITS would be a
+  real strengthening of the one layer with no check word — it is the only drive
+  where blocks-per-cylinder truncates differently (18 from 18.75, against the
+  RP06's 47 from 47.5).
+- **The front-end file system.** The last thing between `mkfs` and a bootable
+  pack, and it is not this format: a separate layout for the KS10's 8080 console,
+  which `kshack/ksfedr.146` manipulates. The home block that points at it is
+  fully specified and would take an afternoon; on its own it would produce a pack
+  that lies about being bootable. See
+  [validation](validation.md#what-is-not-established).
+
+## What closed, and what it took
+
+Worth recording, because the pattern is more useful than the list. Of everything
+settled after the ten phases, **none of it needed a new idea about the format**.
+Every one came from making ITS produce an artifact and comparing:
+
+| was open | what closed it |
+|---|---|
+| `dbd9` unconfirmed | KLH10's own `vdkfmt`, which the build ships — no emulator run at all |
+| one emulator | KLH10 boots ITS on a `dbd9` pack and prints our file |
+| no tape compared with one ITS wrote | `:dump` under KLH10, then `cmp` — level 1, and it found four faults nothing else could see |
+| ITS never shown a tape of ours | DUMP's `LOAD` reads one, link and all |
+| a link's header unmeasured | DUMP's `LINKS` switch, which its own help documents and the pack's `.INFO.` file does not |
+
+And three of those exposed a mistake in something already written down here: the
+`MFDCLB` cause was a guess, "DUMP does not write links" was a switch I had not
+set, and the seven-word header had been wrong since phase 8 with two independent
+readers agreeing about it.

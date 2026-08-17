@@ -113,6 +113,22 @@ them about a pack it damaged on purpose. Text that came out of the emulated
 machine, found by this decoder in the file the machine loaded it from.</p>
 <p>And <code>itsfs tape -x</code> extracts both files on that tape into words, which re-encode
 to the host originals byte for byte.</p>
+<p><strong>Three sources, and each supplies what the others cannot.</strong> The TM03 formatter
+manual gives the frame layout bit by bit, because the <em>hardware</em> does the
+splitting — the driver hands over words and a mode. The measurement above shows
+that ITS's own tapes decode that way. And ITS's tape documentation,
+<code>doc/sysdoc/magtap.101</code>, supplies the middle term: which mode ITS asks for.</p>
+<pre><code>3.9=400,,0 Only meaningful for 9 track tapes
+    0=&gt; Core dump mode, 36 bit words, any density allowed.
+    1=&gt; IBM Character Mode, 32 bit words, doesn't allow 200/556 BPI
+</code></pre>
+<p>Core-dump mode is the <strong>zero</strong> case — what a program gets without asking — and
+it is named as 36-bit words against a 32-bit alternative. So: the manual says
+what core-dump mode <em>is</em>, ITS's doc says ITS uses it by default, and the tape
+says the bytes agree. None of the three would be enough alone; the manual
+describes hardware ITS might not have used that way, the doc names a mode
+without laying out a frame, and a measurement of five-byte groups could in
+principle be a coincidence of file length.</p>
 <h2 id="how-dbd9-was-confirmed">How <code>dbd9</code> was confirmed</h2>
 <p>KLH10's source defines it, and DEC never had a two-words-in-nine-bytes format
 for it to be wrong about — so that source is the specification rather than a

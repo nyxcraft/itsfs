@@ -214,3 +214,39 @@ The last two are why `core` and `dbd9` are implemented at all. Both are now
 finding three strings ITS prints inside the tape it loads them from, and `dbd9`
 by agreeing byte for byte with a pack written by KLH10's own `vdkfmt` — see
 [word packing](word-packing.md).
+
+## ITS's own prose documentation
+
+Found after the format had been implemented and measured, which is the only
+order in which it is worth anything: read first it would simply have been
+believed.
+
+- **`doc/sysdoc/magtap.101`** — ITS's `.OPEN` bits for magtape, copied from a
+  1972 memo. Bit 3.9 selects "Core dump mode, 36 bit words" against "IBM
+  Character Mode, 32 bit words", and core dump is the zero case. That is the one
+  thing the TM03 manual cannot say: which mode ITS actually asks for.
+- **`doc/sysdoc/adding.packs`** — nine lines on multi-pack, and they settle what
+  it would take: `FIRSPK`/`LASTPK` in the salvager and `NQS` in ITS, both
+  assembly-time, then `MARK` and `UCOP`. Also says `UCOP` *propagates* the MFD
+  and UFDs to a fresh pack rather than sharing them, which is a structural fact
+  worth having before writing any multi-pack support.
+- **`doc/sysdoc/ufd.100`** — the directory in English. Confirms the three header
+  words, the five-word name block, the semicolon/colon link rule, and — the one
+  that matters — that the descriptor pointer is "a byte address relative to a
+  point 11. words from the beginning of the directory", which is the origin this
+  project got wrong once and found by arithmetic rather than by reading.
+
+## The DUMP tape format
+
+- **`doc/sysdoc/dump.format`**, in the PDP-10/its tree — ITS's own description of
+  the save-set layout: the four-word tape header, the file header, and what a
+  link looks like. Read *after* the format had been measured against a tape ITS
+  wrote and transcribed from `syseng/dump.449`, which is the right order: it
+  turned out to describe the **six-word** header, from before `HRDATE` and `HLEN`
+  were added in July 1989, and so corroborates both the layout and the date of
+  the change rather than merely repeating one of them.
+- **`syseng/dump.449`** — the program itself, and the only place the link
+  constants are stated outright (`;CREATION DATE OF LINK IS 400000,,0`,
+  `; Length of link is always 3`) rather than deduced from bytes.
+- **`kshack/nsalv.261`** — for `FESET`, which writes the KS10 home block, and for
+  the `IFCE MCHN` blocks that fix a salvager's drive at assembly time.

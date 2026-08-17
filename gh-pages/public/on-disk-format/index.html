@@ -38,6 +38,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#observed">Observed</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#sourced">Sourced</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-dump-save-set-which-is-a-tape-rather-than-a-disk">The DUMP save set, which is a tape rather than a disk</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-home-block-which-is-not-this-format">The home block, which is not this format</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-would-change-these-columns">What would change these columns</a></li>
 </ul>
         </nav>
@@ -269,6 +270,17 @@ added 7/14/89 by Alan&quot;</em>. So a pre-1989 tape has a six-word header, whic
 <code>itstar</code> accepts six or seven and why writing seven here went unremarked for nine
 phases — every reader took the pointer at its word. Only comparing against a tape
 ITS wrote showed it.</p>
+<p>ITS's own format documentation confirms that, by being older than the change.
+<code>doc/sysdoc/dump.format</code> in the PDP-10/its tree describes the header as
+<strong>six words</strong> — the AOBJN pointer, directory, FN1, FN2, &quot;disk pack number where
+file was&quot;, and &quot;creation date of file&quot; — and stops. That is <code>HBLK</code> through
+<code>HDATE</code> exactly, with <code>HRDATE</code> and <code>HLEN</code> simply not yet existing. Two
+independent artifacts, the document and the source comment, agreeing about when
+this format grew.</p>
+<p>It says the same thing about links from the other side: <em>&quot;the left half of the
+pack number is non-zero and the data of the file consists of three words,
+containing the sixbit file name the link points to&quot;</em> — which is <code>HPKN</code>'s left
+half as the flag, and the three words that <code>HLEN</code> counts in the modern form.</p>
 <p><strong>A link's four odd values are constants, and the source names each one.</strong>
 <code>MOVE A,[SETZ] / MOVEM A,HDATE ;CREATION DATE OF LINK IS 400000,,0</code> — <code>SETZ</code> is
 opcode 400, so the literal's address <em>is</em> that word. <code>HRROI A,777000</code> builds
@@ -277,6 +289,39 @@ bytes&quot;</em>. And <code>MOVEI A,3 / MOVEM A,HLEN ; Length of link is always 
 <p><strong>And DUMP does not write links unless asked.</strong> <code>DMPLNK: 0 ;-1 =&gt; DUMP LINKS</code>,
 reachable as the <code>LINKS</code> switch — which the program's own help lists and the
 pack's <code>.INFO.;DUMP INFO</code> does not.</p>
+<h2 id="the-home-block-which-is-not-this-format">The home block, which is not this format</h2>
+<p>Blocks 0 and 1 of a bootable pack are not part of the ITS file system. They hold
+the KS10 home block, and the reason to write it down here is that anyone reading
+a pack will meet it before anything else:</p>
+<table>
+<thead>
+<tr>
+<th>word</th>
+<th>contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>SIXBIT <code>HOM</code></td>
+</tr>
+<tr>
+<td>0103 (67.)</td>
+<td>the front-end file system's directory address</td>
+</tr>
+</tbody>
+</table>
+<p>— that 128-word sector replicated across the whole block, and the whole block
+written twice, to blocks 0 and 1. Sixteen copies in all. Written by <code>NSALV</code>'s
+<code>FESET</code> command, and matched exactly on the reference pack, where word 67 reads
+<code>007700,,000004</code>.</p>
+<p>It explains a constant in the writer that would otherwise look arbitrary:
+<code>mkdir</code> will not place a directory below block 2.</p>
+<p>What the address points at is a <em>different file system</em>, for the KS10's 8080
+console, with its own format and its own tool (<code>KSFEDR</code>). This project neither
+reads nor writes it, and <code>mkfs</code> writes no home block either — a pack that
+advertised a front-end file system it did not have would be worse than one that
+makes no claim.</p>
 <h2 id="what-would-change-these-columns">What would change these columns</h2>
 <ul>
 <li><strong>A pack recovered from MIT</strong>, rather than built from source, would exercise

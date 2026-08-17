@@ -38,6 +38,35 @@ readers for nine phases. A round trip cannot see a field that neither end uses,
 and a second opinion cannot see one that both readers agree to ignore. Only the
 original can.
 
+## Everything, in one table
+
+The sections below appear roughly in the order the evidence was *obtained*, not
+by rank — which is why level 1 comes before level 3 and level 2 comes after both.
+This is the index.
+
+| what is established | how strong | the command |
+|---|---|---|
+| a save set we write is byte-identical to one ITS's own DUMP writes, files and links | **level 1** | `make itsdump` |
+| ITS's own `LOAD` reads a tape we wrote and restores both a file and a link | level 2 | `make itsload` |
+| `NSALV`, ITS's salvager, accepts a pack the writer produced | level 2 | `make nsalv` |
+| ITS boots on a pack we wrote to, and its monitor prints a file we put there | level 2 | `make interop` |
+| …again on an unrelated emulator, in a different packing | level 2 | `make interop-klh10` |
+| a pack built from **nothing** is accepted by `NSALV` and read by `DSKDMP` | level 2 | `make mkfs-test` |
+| `NSALV` names the same damaged blocks, and the same files, as our checker | second opinion | `make nsalv` |
+| the word layer round-trips 39,641,600 words in three packings, byte for byte | level 3 | `make oracle` |
+| the space on a real pack accounts three independent ways | level 3 | `make oracle` |
+| a second implementation of the reader agrees over the whole pack | level 3 | `make oracle` |
+| 137 extracted files are byte-identical to their host originals | level 3 | `make oracle` |
+| `dbd9` matches a pack KLH10's own converter wrote | level 3 | `make klh10` |
+| a real ITS tape decodes to the exact words its own program prints | level 3 | `make tape-test` |
+| 264 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| the same, under ASan and UBSan | level 3 | `make test-san` |
+| 5,400 commands over damaged packs and damaged tapes | level 3 | `make fuzz` |
+| every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
+
+What is *not* established has its own section at the end, and is worth reading
+first if you are deciding whether to trust any of this.
+
 ## Level 1 — a tape ITS wrote, and a tape we wrote, byte for byte
 
 ```console
@@ -93,6 +122,15 @@ render as `__/__/__` in both readers, so nothing depended on it; one of the two
 is what ITS does.
 
 With those three, the tapes are equal over all 2,667,188 bytes.
+
+**A third opinion, found afterwards, agrees — and dates the change.** ITS's own
+format documentation, `doc/sysdoc/dump.format`, describes the file header as
+**six** words: the AOBJN pointer, directory, FN1, FN2, "disk pack number where
+file was", "creation date of file". No reference date, no length. That is
+`HBLK`…`HDATE` and nothing after, which is exactly the header as it stood before
+the source's *"Next two added 7/14/89 by Alan"*. The document and the comment are
+independent and agree about when the format grew — and between them they explain
+why `itstar` accepts six or seven and why nothing here noticed for nine phases.
 
 **Why none of this was visible before.** `itstar` reads what we write, we read
 what `itstar` writes, and both round trips were byte-perfect the whole time. But
@@ -1194,6 +1232,46 @@ RM03 salvager, which needs its own ITS build — a bigger undertaking than a tes
 and one that would change the reference environment everything else here depends
 on.
 
+## A prose description of the directory, found afterwards
+
+The on-disk transcription rests on `FSDEFS`, which is a file of assembler
+symbols. Every offset in `its.h` cites one, and two readers were written from it
+so a misreading could not agree with itself — but both still read the same
+source. `doc/sysdoc/ufd.100`, in the PDP-10/its tree, describes the same
+structure in English, and it was read only after the format had been implemented
+and measured:
+
+| `ufd.100` | `its.h` |
+|---|---|
+| "the first word of the file directory contains a pointer to the beginning of the descriptor area" | `ITS_UD_ESCP 0` |
+| "the second word points to the beginning of the name area" | `ITS_UD_NAMP 1` |
+| "the third word of the directory contains the sixbit user name" | `ITS_UD_NAME 2` |
+| "5 words of information for every file" | `ITS_LUNBLK 5` |
+
+**And the one that mattered most.** The descriptor pointer, it says, "is actually
+a byte address relative to a point **11. words** from the beginning of the
+directory." That is the single worst bug this project has had: reading `UNDSCP`
+from word 0 instead of word 11 lands 66 bytes early, where a well-formed pack
+holds zero, so every file decodes as empty and *nothing complains*. It was found
+by the space not adding up, and fixed by reading `QFL2` in the monitor. Here it
+is in one sentence of documentation, which would have saved an afternoon — and
+which nobody would have thought to doubt if the code had happened to agree with a
+wrong reading of it.
+
+Links too: "Each name is terminated by a semicolon unless it is a full six
+characters long. Colon quotes the character that follows it." That is the rule
+`its.h` carries with a `[v]` and a note that `FSDEFS` defines no symbol for
+either character — the project had to take them from `NSALV`'s `LTYPE` and from
+what MIDAS assembles `';` as. The prose names the characters; the code gives the
+encoding, which is SIXBIT `033` and `032` rather than ASCII. Consistent, and
+neither alone would do.
+
+**The order was lucky rather than careful, and it is worth being honest about
+that.** These documents were found by searching the web after the work was
+finished, not before. Read first, they would have been believed — and
+`dump.format` in particular describes a save-set header two words shorter than
+the one ITS writes today. It is corroboration precisely because it came second.
+
 ## The tool you verify with can lie by omission
 
 This one is not about ITS, and it is the most portable lesson here.
@@ -1320,6 +1398,44 @@ true.*
 - **A pack `mkfs` builds does not boot.** Nothing writes a boot area; the graders
   are booted from tape instead. ITS comes up on packs this project has *written
   files to*, which is a weaker statement than it first sounds.
+
+  That was a vague limitation until it was looked at, and it is worth scoping
+  precisely, because most of it is not a file-system problem at all. A KS10 boots
+  in two steps, and `mkfs` writes neither:
+
+  **The home block**, in blocks 0 and 1, which is entirely specified and would
+  take an afternoon. It is written by `NSALV`'s own `FESET` command
+  (`kshack/nsalv.261`), and the code is short enough to quote whole:
+
+  ```
+  	SETZM FDBUF
+  	MOVE TT,[FDBUF,,FDBUF+1]
+  	BLT TT,FDBUF+177	; one 128-word sector, zeroed
+  	MOVSI TT,(SIXBIT /HOM/)
+  	MOVEM TT,FDBUF+0	; word 0
+  	MOVEM A,FDBUF+103	; word 0103 -- the FE directory address
+  	MOVE TT,[FDBUF,,FDBUF+200]
+  	BLT TT,FDBUF+1777	; that sector, replicated across the block
+  	MOVEI J,0 ... CALL WRITE
+  	MOVEI J,1 ... CALL WRITE
+  ```
+
+  The reference pack matches it exactly: `HOM` at word 0 and `007700,,000004` at
+  word 67 (= 0103), repeating every 128 words through blocks 0 and 1. Sixteen
+  copies, because the sector is replicated eight times per block and the block is
+  written twice. It also explains a constant the writer already had: `mkdir`'s
+  floor is block 2, and blocks 0 and 1 are why.
+
+  **The front-end file system it points at**, which is the actual work. The
+  address in word 0103 is not a bootstrap — it locates a separate file system for
+  the KS10's 8080 console, with its own format, manipulated by `KSFEDR`
+  (`kshack/ksfedr.146`, about a thousand lines). The programs the console loads live in
+  *that*, not in the ITS file system.
+
+  So writing the home block alone would produce a pack that *claims* to be
+  bootable and is not — a worse artifact than one that makes no claim. The gap is
+  the FE file system, and it is a different format that happens to share a disk
+  with this one.
 - **One pack, one drive, one era.** Everything ITS has graded is an RP06 built
   from source in 2026. No multi-pack file system, and no artifact recovered from
   MIT. The *drive* half of that turns out to be blocked rather than merely

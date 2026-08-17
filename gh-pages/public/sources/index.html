@@ -40,6 +40,8 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#two-traps">Two traps</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#evidence-markers">Evidence markers</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#corroborating-implementations">Corroborating implementations</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#itss-own-prose-documentation">ITS&#x27;s own prose documentation</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#the-dump-tape-format">The DUMP tape format</a></li>
 </ul>
         </nav>
       </aside>
@@ -254,6 +256,41 @@ splits the word; the operating system only hands it over.</li>
 finding three strings ITS prints inside the tape it loads them from, and <code>dbd9</code>
 by agreeing byte for byte with a pack written by KLH10's own <code>vdkfmt</code> — see
 <a href="../word-packing/index.html">word packing</a>.</p>
+<h2 id="itss-own-prose-documentation">ITS's own prose documentation</h2>
+<p>Found after the format had been implemented and measured, which is the only
+order in which it is worth anything: read first it would simply have been
+believed.</p>
+<ul>
+<li><strong><code>doc/sysdoc/magtap.101</code></strong> — ITS's <code>.OPEN</code> bits for magtape, copied from a
+1972 memo. Bit 3.9 selects &quot;Core dump mode, 36 bit words&quot; against &quot;IBM
+Character Mode, 32 bit words&quot;, and core dump is the zero case. That is the one
+thing the TM03 manual cannot say: which mode ITS actually asks for.</li>
+<li><strong><code>doc/sysdoc/adding.packs</code></strong> — nine lines on multi-pack, and they settle what
+it would take: <code>FIRSPK</code>/<code>LASTPK</code> in the salvager and <code>NQS</code> in ITS, both
+assembly-time, then <code>MARK</code> and <code>UCOP</code>. Also says <code>UCOP</code> <em>propagates</em> the MFD
+and UFDs to a fresh pack rather than sharing them, which is a structural fact
+worth having before writing any multi-pack support.</li>
+<li><strong><code>doc/sysdoc/ufd.100</code></strong> — the directory in English. Confirms the three header
+words, the five-word name block, the semicolon/colon link rule, and — the one
+that matters — that the descriptor pointer is &quot;a byte address relative to a
+point 11. words from the beginning of the directory&quot;, which is the origin this
+project got wrong once and found by arithmetic rather than by reading.</li>
+</ul>
+<h2 id="the-dump-tape-format">The DUMP tape format</h2>
+<ul>
+<li><strong><code>doc/sysdoc/dump.format</code></strong>, in the PDP-10/its tree — ITS's own description of
+the save-set layout: the four-word tape header, the file header, and what a
+link looks like. Read <em>after</em> the format had been measured against a tape ITS
+wrote and transcribed from <code>syseng/dump.449</code>, which is the right order: it
+turned out to describe the <strong>six-word</strong> header, from before <code>HRDATE</code> and <code>HLEN</code>
+were added in July 1989, and so corroborates both the layout and the date of
+the change rather than merely repeating one of them.</li>
+<li><strong><code>syseng/dump.449</code></strong> — the program itself, and the only place the link
+constants are stated outright (<code>;CREATION DATE OF LINK IS 400000,,0</code>,
+<code>; Length of link is always 3</code>) rather than deduced from bytes.</li>
+<li><strong><code>kshack/nsalv.261</code></strong> — for <code>FESET</code>, which writes the KS10 home block, and for
+the <code>IFCE MCHN</code> blocks that fix a salvager's drive at assembly time.</li>
+</ul>
 
         </div>
       </article>

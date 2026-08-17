@@ -1302,6 +1302,37 @@ out=$("$ITSFS" help); rc=$?
 chk "help exits zero" "$rc" "0"
 
 #
+# AND EVERY `make X` THE DOCUMENTATION CITES MUST EXIST.  docs/validation.md
+# opens with a table of what is established and the command that establishes it,
+# which is the first thing a reader will try -- and a table of commands is
+# exactly the kind of prose that rots when a target is renamed.  Not a `chk`,
+# for the same reason as the count below: it is a statement about the repository.
+#
+# ONLY IN A COMMAND CONTEXT -- inside backticks, or after a `$` prompt.  A bare
+# `make [a-z]*` also matches English: the first run of this check reported that
+# README.md says "make a", from "make a pack".
+rm -f "$T/stale.targets"
+for doc in docs/validation.md README.md; do
+	[ -f "$doc" ] || continue
+	{
+		grep -ao '`make [a-z][a-z0-9-]*' "$doc"
+		grep -ao '\$ make [a-z][a-z0-9-]*' "$doc"
+	} | awk '{print $NF}' | sort -u |
+	while read -r tgt; do
+		grep -aq "^$tgt:" Makefile ||
+			printf '%s %s\n' "$doc" "$tgt" >> "$T/stale.targets"
+	done
+done
+
+if [ -s "$T/stale.targets" ]; then
+	echo
+	while read -r d t; do
+		echo "STALE: $d says 'make $t', which is not a Makefile target"
+	done < "$T/stale.targets"
+	fail=$((fail + 1))
+fi
+
+#
 # AND THE DOCUMENTED PACKING TABLE MUST BE THE REAL ONE.  docs/word-packing.md
 # shows the output of `itsfs packings` as a console transcript, and a status
 # column that disagrees with the code is a false claim about evidence -- which

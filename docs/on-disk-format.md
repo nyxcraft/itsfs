@@ -133,6 +133,19 @@ added 7/14/89 by Alan"*. So a pre-1989 tape has a six-word header, which is why
 phases — every reader took the pointer at its word. Only comparing against a tape
 ITS wrote showed it.
 
+ITS's own format documentation confirms that, by being older than the change.
+`doc/sysdoc/dump.format` in the PDP-10/its tree describes the header as
+**six words** — the AOBJN pointer, directory, FN1, FN2, "disk pack number where
+file was", and "creation date of file" — and stops. That is `HBLK` through
+`HDATE` exactly, with `HRDATE` and `HLEN` simply not yet existing. Two
+independent artifacts, the document and the source comment, agreeing about when
+this format grew.
+
+It says the same thing about links from the other side: *"the left half of the
+pack number is non-zero and the data of the file consists of three words,
+containing the sixbit file name the link points to"* — which is `HPKN`'s left
+half as the flag, and the three words that `HLEN` counts in the modern form.
+
 **A link's four odd values are constants, and the source names each one.**
 `MOVE A,[SETZ] / MOVEM A,HDATE ;CREATION DATE OF LINK IS 400000,,0` — `SETZ` is
 opcode 400, so the literal's address *is* that word. `HRROI A,777000` builds
@@ -142,6 +155,31 @@ bytes"*. And `MOVEI A,3 / MOVEM A,HLEN ; Length of link is always 3`.
 **And DUMP does not write links unless asked.** `DMPLNK: 0 ;-1 => DUMP LINKS`,
 reachable as the `LINKS` switch — which the program's own help lists and the
 pack's `.INFO.;DUMP INFO` does not.
+
+## The home block, which is not this format
+
+Blocks 0 and 1 of a bootable pack are not part of the ITS file system. They hold
+the KS10 home block, and the reason to write it down here is that anyone reading
+a pack will meet it before anything else:
+
+| word | contents |
+|---|---|
+| 0 | SIXBIT `HOM` |
+| 0103 (67.) | the front-end file system's directory address |
+
+— that 128-word sector replicated across the whole block, and the whole block
+written twice, to blocks 0 and 1. Sixteen copies in all. Written by `NSALV`'s
+`FESET` command, and matched exactly on the reference pack, where word 67 reads
+`007700,,000004`.
+
+It explains a constant in the writer that would otherwise look arbitrary:
+`mkdir` will not place a directory below block 2.
+
+What the address points at is a *different file system*, for the KS10's 8080
+console, with its own format and its own tool (`KSFEDR`). This project neither
+reads nor writes it, and `mkfs` writes no home block either — a pack that
+advertised a front-end file system it did not have would be worse than one that
+makes no claim.
 
 ## What would change these columns
 

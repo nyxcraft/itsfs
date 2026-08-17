@@ -863,7 +863,15 @@ itsw_mkdir(its_writer *w, const char *name)
 
 	blk /= ITS_LMNBLK;
 
-	/* `CAIGE TT,2 / BUG ;Don't clobber HOM blocks`. */
+	/*
+	 * `CAIGE TT,2 / BUG ;Don't clobber HOM blocks`.
+	 *
+	 * And they really do hold something: blocks 0 and 1 are the KS10 home
+	 * block -- SIXBIT `HOM` at word 0, the front-end file system's directory
+	 * address at word 0103, that sector replicated across the block and the
+	 * block written twice.  NSALV's own FESET writes them.  Nothing here
+	 * reads or writes them; see docs/on-disk-format.md.
+	 */
 	if (blk < 2) {
 		fprintf(stderr, "itsfs: the next directory would land in block %lld, which ITS "
 				"keeps back -- refusing\n",

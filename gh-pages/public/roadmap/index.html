@@ -49,6 +49,8 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#phase-9--tapes">Phase 9 — tapes</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#not-on-the-roadmap">Not on the roadmap</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#open-questions-that-could-reorder-this">Open questions that could reorder this</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#the-shape-of-what-is-left">The shape of what is left</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-closed-and-what-it-took">What closed, and what it took</a></li>
 </ul>
         </nav>
       </aside>
@@ -265,8 +267,80 @@ TUT format change both of them mention, so the span this reader covers has a
 floor and no ceiling. A pre-1979 one would be the interesting artifact.</li>
 <li><strong>A multi-pack file system.</strong> <code>UNPKN</code> and <code>QTRSRV</code> are read and ignored today.
 <code>t10fs</code> found two real bugs the first time it met a genuinely multi-unit
-structure.</li>
+structure. ITS's own note on it, <code>doc/sysdoc/adding.packs</code>, is short enough to
+quote in full effect: <em>&quot;Change the configuration in SALV or NSALV. <code>FIRSPK</code> and
+<code>LASTPK</code> defines the range of packs… Change the definition of <code>NQS</code> in ITS…
+Run <code>MARK</code> in SALV to mark the packs. Use <code>UCOP</code> in SALV to update the MFD and
+UFDs on the fresh pack with information from a pack already in use.&quot;</em> So the
+pack count is fixed when ITS and the salvager are <strong>assembled</strong>, and a
+multi-pack file system needs its own build of both — and <code>UCOP</code> says the MFD
+and the UFDs are propagated to the new pack rather than shared, which is a
+structural fact worth having before writing any of it.</li>
 </ul>
+<h3 id="the-shape-of-what-is-left">The shape of what is left</h3>
+<p>Two of these are blocked by the same thing, and it is worth naming: <strong>ITS's
+configuration is compiled in, not read at run time.</strong> The salvager's drive
+(<code>IFCE MCHN,…,[ … RM03P==1</code>) and the pack count (<code>FIRSPK</code>, <code>LASTPK</code>, <code>NQS</code>) are
+both assembly-time, so exercising either against ITS means building a different
+ITS — which changes the reference environment every other test here depends on.
+Neither is a file-system problem, and neither is hard; both are a day of build
+plumbing rather than an afternoon of reading.</p>
+<p>The other three need artifacts nobody here can produce: a pack recovered from
+MIT, a pre-1979 <code>FSDEFS</code>, and the KS10 front-end file system. MIT's Tapes of Tech
+Square collection holds real ITS backup tapes, but its published output is
+<em>extracted files</em> — the raw images stay in the archive.</p>
+<ul>
+<li><strong>An <code>RM03</code>-assembled salvager.</strong> <code>mkfs</code> builds an RM03 and <code>make mkfs-test ITS_DRIVE=rm03</code> checks its arithmetic, but ITS cannot grade one: <code>NSALV</code> picks
+its drive when it is <em>assembled</em> (<code>IFCE MCHN,PM,[ … RM03P==1</code>), so the tape
+here grades RP06 and nothing else. A second geometry graded by ITS would be a
+real strengthening of the one layer with no check word — it is the only drive
+where blocks-per-cylinder truncates differently (18 from 18.75, against the
+RP06's 47 from 47.5).</li>
+<li><strong>The front-end file system.</strong> The last thing between <code>mkfs</code> and a bootable
+pack, and it is not this format: a separate layout for the KS10's 8080 console,
+which <code>kshack/ksfedr.146</code> manipulates. The home block that points at it is
+fully specified and would take an afternoon; on its own it would produce a pack
+that lies about being bootable. See
+<a href="../validation/index.html#what-is-not-established">validation</a>.</li>
+</ul>
+<h2 id="what-closed-and-what-it-took">What closed, and what it took</h2>
+<p>Worth recording, because the pattern is more useful than the list. Of everything
+settled after the ten phases, <strong>none of it needed a new idea about the format</strong>.
+Every one came from making ITS produce an artifact and comparing:</p>
+<table>
+<thead>
+<tr>
+<th>was open</th>
+<th>what closed it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dbd9</code> unconfirmed</td>
+<td>KLH10's own <code>vdkfmt</code>, which the build ships — no emulator run at all</td>
+</tr>
+<tr>
+<td>one emulator</td>
+<td>KLH10 boots ITS on a <code>dbd9</code> pack and prints our file</td>
+</tr>
+<tr>
+<td>no tape compared with one ITS wrote</td>
+<td><code>:dump</code> under KLH10, then <code>cmp</code> — level 1, and it found four faults nothing else could see</td>
+</tr>
+<tr>
+<td>ITS never shown a tape of ours</td>
+<td>DUMP's <code>LOAD</code> reads one, link and all</td>
+</tr>
+<tr>
+<td>a link's header unmeasured</td>
+<td>DUMP's <code>LINKS</code> switch, which its own help documents and the pack's <code>.INFO.</code> file does not</td>
+</tr>
+</tbody>
+</table>
+<p>And three of those exposed a mistake in something already written down here: the
+<code>MFDCLB</code> cause was a guess, &quot;DUMP does not write links&quot; was a switch I had not
+set, and the seven-word header had been wrong since phase 8 with two independent
+readers agreeing about it.</p>
 
         </div>
       </article>

@@ -35,6 +35,7 @@
         <nav class="section-nav" aria-label="On this page">
 <ul class="section-nav__list">
 <li><a class="section-nav__link section-nav__link--l2" href="#the-standard">The standard</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#everything-in-one-table">Everything, in one table</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#level-1--a-tape-its-wrote-and-a-tape-we-wrote-byte-for-byte">Level 1 — a tape ITS wrote, and a tape we wrote, byte for byte</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-cmp-found-that-nine-phases-of-round-trips-had-not">What `cmp` found that nine phases of round trips had not</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#a-links-header-and-the-switch-that-produces-one">A link&#x27;s header, and the switch that produces one</a></li>
@@ -73,6 +74,7 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#a-wrong-assertion-found-by-running-the-test">A wrong assertion, found by running the test</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#what-it-does-not-prove">What it does not prove</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#a-second-drive-and-why-its-cannot-grade-one">A second drive, and why ITS cannot grade one</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-prose-description-of-the-directory-found-afterwards">A prose description of the directory, found afterwards</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
@@ -121,6 +123,108 @@ all ones. Every one of them had been read back correctly by two independent
 readers for nine phases. A round trip cannot see a field that neither end uses,
 and a second opinion cannot see one that both readers agree to ignore. Only the
 original can.</p>
+<h2 id="everything-in-one-table">Everything, in one table</h2>
+<p>The sections below appear roughly in the order the evidence was <em>obtained</em>, not
+by rank — which is why level 1 comes before level 3 and level 2 comes after both.
+This is the index.</p>
+<table>
+<thead>
+<tr>
+<th>what is established</th>
+<th>how strong</th>
+<th>the command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a save set we write is byte-identical to one ITS's own DUMP writes, files and links</td>
+<td><strong>level 1</strong></td>
+<td><code>make itsdump</code></td>
+</tr>
+<tr>
+<td>ITS's own <code>LOAD</code> reads a tape we wrote and restores both a file and a link</td>
+<td>level 2</td>
+<td><code>make itsload</code></td>
+</tr>
+<tr>
+<td><code>NSALV</code>, ITS's salvager, accepts a pack the writer produced</td>
+<td>level 2</td>
+<td><code>make nsalv</code></td>
+</tr>
+<tr>
+<td>ITS boots on a pack we wrote to, and its monitor prints a file we put there</td>
+<td>level 2</td>
+<td><code>make interop</code></td>
+</tr>
+<tr>
+<td>…again on an unrelated emulator, in a different packing</td>
+<td>level 2</td>
+<td><code>make interop-klh10</code></td>
+</tr>
+<tr>
+<td>a pack built from <strong>nothing</strong> is accepted by <code>NSALV</code> and read by <code>DSKDMP</code></td>
+<td>level 2</td>
+<td><code>make mkfs-test</code></td>
+</tr>
+<tr>
+<td><code>NSALV</code> names the same damaged blocks, and the same files, as our checker</td>
+<td>second opinion</td>
+<td><code>make nsalv</code></td>
+</tr>
+<tr>
+<td>the word layer round-trips 39,641,600 words in three packings, byte for byte</td>
+<td>level 3</td>
+<td><code>make oracle</code></td>
+</tr>
+<tr>
+<td>the space on a real pack accounts three independent ways</td>
+<td>level 3</td>
+<td><code>make oracle</code></td>
+</tr>
+<tr>
+<td>a second implementation of the reader agrees over the whole pack</td>
+<td>level 3</td>
+<td><code>make oracle</code></td>
+</tr>
+<tr>
+<td>137 extracted files are byte-identical to their host originals</td>
+<td>level 3</td>
+<td><code>make oracle</code></td>
+</tr>
+<tr>
+<td><code>dbd9</code> matches a pack KLH10's own converter wrote</td>
+<td>level 3</td>
+<td><code>make klh10</code></td>
+</tr>
+<tr>
+<td>a real ITS tape decodes to the exact words its own program prints</td>
+<td>level 3</td>
+<td><code>make tape-test</code></td>
+</tr>
+<tr>
+<td>264 checks, a third of them on packs damaged on purpose</td>
+<td>level 3</td>
+<td><code>make test</code></td>
+</tr>
+<tr>
+<td>the same, under ASan and UBSan</td>
+<td>level 3</td>
+<td><code>make test-san</code></td>
+</tr>
+<tr>
+<td>5,400 commands over damaged packs and damaged tapes</td>
+<td>level 3</td>
+<td><code>make fuzz</code></td>
+</tr>
+<tr>
+<td>every constant cited is in the <code>FSDEFS</code> it claims</td>
+<td>level 3</td>
+<td><code>make version-diff</code></td>
+</tr>
+</tbody>
+</table>
+<p>What is <em>not</em> established has its own section at the end, and is worth reading
+first if you are deciding whether to trust any of this.</p>
 <h2 id="level-1--a-tape-its-wrote-and-a-tape-we-wrote-byte-for-byte">Level 1 — a tape ITS wrote, and a tape we wrote, byte for byte</h2>
 <pre><code class="language-console">$ make itsdump
 2. ITS writes the tape
@@ -166,6 +270,14 @@ date is not available to that layer. This wrote zero, SIXBIT six spaces. Both
 render as <code>__/__/__</code> in both readers, so nothing depended on it; one of the two
 is what ITS does.</p>
 <p>With those three, the tapes are equal over all 2,667,188 bytes.</p>
+<p><strong>A third opinion, found afterwards, agrees — and dates the change.</strong> ITS's own
+format documentation, <code>doc/sysdoc/dump.format</code>, describes the file header as
+<strong>six</strong> words: the AOBJN pointer, directory, FN1, FN2, &quot;disk pack number where
+file was&quot;, &quot;creation date of file&quot;. No reference date, no length. That is
+<code>HBLK</code>…<code>HDATE</code> and nothing after, which is exactly the header as it stood before
+the source's <em>&quot;Next two added 7/14/89 by Alan&quot;</em>. The document and the comment are
+independent and agree about when the format grew — and between them they explain
+why <code>itstar</code> accepts six or seven and why nothing here noticed for nine phases.</p>
 <p><strong>Why none of this was visible before.</strong> <code>itstar</code> reads what we write, we read
 what <code>itstar</code> writes, and both round trips were byte-perfect the whole time. But
 a round trip cannot see a field that neither end uses, and a second opinion
@@ -1104,6 +1216,60 @@ refusal as a fault in the pack would be reporting a lie. Grading an RM03 needs a
 RM03 salvager, which needs its own ITS build — a bigger undertaking than a test,
 and one that would change the reference environment everything else here depends
 on.</p>
+<h2 id="a-prose-description-of-the-directory-found-afterwards">A prose description of the directory, found afterwards</h2>
+<p>The on-disk transcription rests on <code>FSDEFS</code>, which is a file of assembler
+symbols. Every offset in <code>its.h</code> cites one, and two readers were written from it
+so a misreading could not agree with itself — but both still read the same
+source. <code>doc/sysdoc/ufd.100</code>, in the PDP-10/its tree, describes the same
+structure in English, and it was read only after the format had been implemented
+and measured:</p>
+<table>
+<thead>
+<tr>
+<th><code>ufd.100</code></th>
+<th><code>its.h</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;the first word of the file directory contains a pointer to the beginning of the descriptor area&quot;</td>
+<td><code>ITS_UD_ESCP 0</code></td>
+</tr>
+<tr>
+<td>&quot;the second word points to the beginning of the name area&quot;</td>
+<td><code>ITS_UD_NAMP 1</code></td>
+</tr>
+<tr>
+<td>&quot;the third word of the directory contains the sixbit user name&quot;</td>
+<td><code>ITS_UD_NAME 2</code></td>
+</tr>
+<tr>
+<td>&quot;5 words of information for every file&quot;</td>
+<td><code>ITS_LUNBLK 5</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>And the one that mattered most.</strong> The descriptor pointer, it says, &quot;is actually
+a byte address relative to a point <strong>11. words</strong> from the beginning of the
+directory.&quot; That is the single worst bug this project has had: reading <code>UNDSCP</code>
+from word 0 instead of word 11 lands 66 bytes early, where a well-formed pack
+holds zero, so every file decodes as empty and <em>nothing complains</em>. It was found
+by the space not adding up, and fixed by reading <code>QFL2</code> in the monitor. Here it
+is in one sentence of documentation, which would have saved an afternoon — and
+which nobody would have thought to doubt if the code had happened to agree with a
+wrong reading of it.</p>
+<p>Links too: &quot;Each name is terminated by a semicolon unless it is a full six
+characters long. Colon quotes the character that follows it.&quot; That is the rule
+<code>its.h</code> carries with a <code>[v]</code> and a note that <code>FSDEFS</code> defines no symbol for
+either character — the project had to take them from <code>NSALV</code>'s <code>LTYPE</code> and from
+what MIDAS assembles <code>';</code> as. The prose names the characters; the code gives the
+encoding, which is SIXBIT <code>033</code> and <code>032</code> rather than ASCII. Consistent, and
+neither alone would do.</p>
+<p><strong>The order was lucky rather than careful, and it is worth being honest about
+that.</strong> These documents were found by searching the web after the work was
+finished, not before. Read first, they would have been believed — and
+<code>dump.format</code> in particular describes a save-set header two words shorter than
+the one ITS writes today. It is corroboration precisely because it came second.</p>
 <h2 id="the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</h2>
 <p>This one is not about ITS, and it is the most portable lesson here.</p>
 <p>Every negative claim in <code>src/its.h</code> — every <code>no DEFSYM</code>, every &quot;FSDEFS does not
@@ -1217,23 +1383,64 @@ marketing:</p>
 struck through by work rather than by editing. What is left is what is still
 true.</em></p>
 <ul>
-<li><strong><code>NSALV</code> was asked about two kinds of damage.</strong> A cleared TUT word at two
+<li>
+<p><strong><code>NSALV</code> was asked about two kinds of damage.</strong> A cleared TUT word at two
 sites, and a miscount found by accident after an abrupt halt. It has not been
 shown a broken descriptor, a damaged directory header or a corrupt MFD — all of
 which <code>itsfs check</code> reports and none of which has been put to ITS for a second
-opinion.</li>
-<li><strong>A pack <code>mkfs</code> builds does not boot.</strong> Nothing writes a boot area; the graders
+opinion.</p>
+</li>
+<li>
+<p><strong>A pack <code>mkfs</code> builds does not boot.</strong> Nothing writes a boot area; the graders
 are booted from tape instead. ITS comes up on packs this project has <em>written
-files to</em>, which is a weaker statement than it first sounds.</li>
-<li><strong>One pack, one drive, one era.</strong> Everything ITS has graded is an RP06 built
+files to</em>, which is a weaker statement than it first sounds.</p>
+<p>That was a vague limitation until it was looked at, and it is worth scoping
+precisely, because most of it is not a file-system problem at all. A KS10 boots
+in two steps, and <code>mkfs</code> writes neither:</p>
+<p><strong>The home block</strong>, in blocks 0 and 1, which is entirely specified and would
+take an afternoon. It is written by <code>NSALV</code>'s own <code>FESET</code> command
+(<code>kshack/nsalv.261</code>), and the code is short enough to quote whole:</p>
+<pre><code>	SETZM FDBUF
+	MOVE TT,[FDBUF,,FDBUF+1]
+	BLT TT,FDBUF+177	; one 128-word sector, zeroed
+	MOVSI TT,(SIXBIT /HOM/)
+	MOVEM TT,FDBUF+0	; word 0
+	MOVEM A,FDBUF+103	; word 0103 -- the FE directory address
+	MOVE TT,[FDBUF,,FDBUF+200]
+	BLT TT,FDBUF+1777	; that sector, replicated across the block
+	MOVEI J,0 ... CALL WRITE
+	MOVEI J,1 ... CALL WRITE
+</code></pre>
+<p>The reference pack matches it exactly: <code>HOM</code> at word 0 and <code>007700,,000004</code> at
+word 67 (= 0103), repeating every 128 words through blocks 0 and 1. Sixteen
+copies, because the sector is replicated eight times per block and the block is
+written twice. It also explains a constant the writer already had: <code>mkdir</code>'s
+floor is block 2, and blocks 0 and 1 are why.</p>
+<p><strong>The front-end file system it points at</strong>, which is the actual work. The
+address in word 0103 is not a bootstrap — it locates a separate file system for
+the KS10's 8080 console, with its own format, manipulated by <code>KSFEDR</code>
+(<code>kshack/ksfedr.146</code>, about a thousand lines). The programs the console loads live in
+<em>that</em>, not in the ITS file system.</p>
+<p>So writing the home block alone would produce a pack that <em>claims</em> to be
+bootable and is not — a worse artifact than one that makes no claim. The gap is
+the FE file system, and it is a different format that happens to share a disk
+with this one.</p>
+</li>
+<li>
+<p><strong>One pack, one drive, one era.</strong> Everything ITS has graded is an RP06 built
 from source in 2026. No multi-pack file system, and no artifact recovered from
 MIT. The <em>drive</em> half of that turns out to be blocked rather than merely
-undone, and the reason is worth writing down — see below.</li>
-<li><s>Which ITS program writes link entries</s> — DUMP does, under its <code>LINKS</code>
-switch, and what this writes now matches it byte for byte.</li>
-<li><strong>The version span has a floor and no ceiling.</strong> Both <code>FSDEFS</code> versions
+undone, and the reason is worth writing down — see below.</p>
+</li>
+<li>
+<p><s>Which ITS program writes link entries</s> — DUMP does, under its <code>LINKS</code>
+switch, and what this writes now matches it byte for byte.</p>
+</li>
+<li>
+<p><strong>The version span has a floor and no ceiling.</strong> Both <code>FSDEFS</code> versions
 compared are after the 1979 TUT change, and nothing here maps a file system
-written by a monitor older than that.</li>
+written by a monitor older than that.</p>
+</li>
 </ul>
 <p>Struck off since, and where the evidence is:</p>
 <table>
