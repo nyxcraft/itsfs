@@ -230,21 +230,40 @@ the Open SIMH build the PDP-10/its Makefile produces at
 question the instant it appears makes the RH11 report the drive offline
 (<code>Error 1 = (40001) ILL-FUNC UNSAFE</code>) and the run is lost. The ITS build's own
 scripts sleep in the same places; this was rediscovered the hard way.</p>
-<h2 id="if-you-are-starting-the-next-phase">If you are starting the next phase</h2>
-<p>Phase 7 is the writer. The writer is
-where invariant 9 in <a href="../design/index.html">docs/design.md</a> starts to matter, and where
-<code>check</code> stops being a nice-to-have: every mutating flow in the suite has to end
-with a clean check.</p>
-<p>Two cheap things are available first, and both reuse harnesses that now exist:</p>
+<h2 id="if-you-are-picking-this-up">If you are picking this up</h2>
+<p>The roadmap is finished, and so is the round of work after it. <code>make itsdump</code>
+compares a save set with one ITS's own DUMP wrote and they are equal to the byte;
+<code>make itsload</code> hands ITS one of ours and its own loader reads it back. Read
+<a href="../validation/index.html">docs/validation.md</a> — it opens with a table of every claim
+and the command behind it.</p>
+<p><strong>What is cheap and still open.</strong> Both reuse harnesses that already exist:</p>
 <ul>
-<li><strong>Show <code>NSALV</code> other kinds of damage.</strong> It has seen a cleared TUT word and
-nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
-are all things <code>itsfs check</code> reports. <code>tests/nsalv.sh</code> needs a different damage
-step and nothing more.</li>
+<li><strong>Show <code>NSALV</code> other kinds of damage.</strong> It has seen a cleared TUT word, at two
+sites, and a miscount after an abrupt halt. It has <em>not</em> been shown a broken
+descriptor, a damaged directory header or a corrupt MFD — all of which
+<code>itsfs check</code> reports and none of which has had a second opinion.
+<code>tests/nsalv.sh</code> needs a different damage step and nothing else.</li>
 <li><strong>A <code>FSDEFS</code> from before September 1979</strong> would put a ceiling on the version
-span. <code>make version-diff</code> has the harness; it needs an older artifact, and none
-is in the ITS tree.</li>
+span. <code>make version-diff</code> has the harness; it needs an artifact, and none is in
+the ITS tree.</li>
 </ul>
+<p><strong>What is blocked, and by what.</strong> Two of the remaining gaps are the same problem
+wearing different clothes: <em>ITS's configuration is compiled in, not read at run
+time.</em> The salvager's drive is fixed by <code>IFCE MCHN,…,[ … RM03P==1</code>, and the pack
+count by <code>FIRSPK</code>/<code>LASTPK</code>/<code>NQS</code>. So grading an RM03 pack, or a multi-pack file
+system, means building a different ITS — which changes the reference environment
+every other test here depends on. Neither is hard; neither is a file-system
+problem.</p>
+<p>The rest need artifacts nobody here can make: a pack recovered from MIT, a
+pre-1979 <code>FSDEFS</code>, and the KS10 front-end file system that stands between <code>mkfs</code>
+and a bootable pack.</p>
+<p><strong>A habit worth keeping</strong>, because it earned its place repeatedly: when a check
+passes, make it fail on purpose before believing it. Three documentation guards
+in <code>tests/run.sh</code> exist because prose that was true when written stopped being
+true, and every one of them was verified by breaking it. And when something
+fails, find the cause rather than the most plausible story — four mechanisms
+written down here as fact this year turned out to be invented, each one
+comfortable enough that nothing but an experiment would have dislodged it.</p>
 
         </div>
       </article>

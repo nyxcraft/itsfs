@@ -222,19 +222,41 @@ question the instant it appears makes the RH11 report the drive offline
 (`Error 1 = (40001) ILL-FUNC UNSAFE`) and the run is lost. The ITS build's own
 scripts sleep in the same places; this was rediscovered the hard way.
 
-## If you are starting the next phase
+## If you are picking this up
 
-Phase 7 is the writer. The writer is
-where invariant 9 in [docs/design.md](docs/design.md) starts to matter, and where
-`check` stops being a nice-to-have: every mutating flow in the suite has to end
-with a clean check.
+The roadmap is finished, and so is the round of work after it. `make itsdump`
+compares a save set with one ITS's own DUMP wrote and they are equal to the byte;
+`make itsload` hands ITS one of ours and its own loader reads it back. Read
+[docs/validation.md](docs/validation.md) — it opens with a table of every claim
+and the command behind it.
 
-Two cheap things are available first, and both reuse harnesses that now exist:
+**What is cheap and still open.** Both reuse harnesses that already exist:
 
-- **Show `NSALV` other kinds of damage.** It has seen a cleared TUT word and
-  nothing else. A broken descriptor, a damaged directory header and a corrupt MFD
-  are all things `itsfs check` reports. `tests/nsalv.sh` needs a different damage
-  step and nothing more.
+- **Show `NSALV` other kinds of damage.** It has seen a cleared TUT word, at two
+  sites, and a miscount after an abrupt halt. It has *not* been shown a broken
+  descriptor, a damaged directory header or a corrupt MFD — all of which
+  `itsfs check` reports and none of which has had a second opinion.
+  `tests/nsalv.sh` needs a different damage step and nothing else.
 - **A `FSDEFS` from before September 1979** would put a ceiling on the version
-  span. `make version-diff` has the harness; it needs an older artifact, and none
-  is in the ITS tree.
+  span. `make version-diff` has the harness; it needs an artifact, and none is in
+  the ITS tree.
+
+**What is blocked, and by what.** Two of the remaining gaps are the same problem
+wearing different clothes: *ITS's configuration is compiled in, not read at run
+time.* The salvager's drive is fixed by `IFCE MCHN,…,[ … RM03P==1`, and the pack
+count by `FIRSPK`/`LASTPK`/`NQS`. So grading an RM03 pack, or a multi-pack file
+system, means building a different ITS — which changes the reference environment
+every other test here depends on. Neither is hard; neither is a file-system
+problem.
+
+The rest need artifacts nobody here can make: a pack recovered from MIT, a
+pre-1979 `FSDEFS`, and the KS10 front-end file system that stands between `mkfs`
+and a bootable pack.
+
+**A habit worth keeping**, because it earned its place repeatedly: when a check
+passes, make it fail on purpose before believing it. Three documentation guards
+in `tests/run.sh` exist because prose that was true when written stopped being
+true, and every one of them was verified by breaking it. And when something
+fails, find the cause rather than the most plausible story — four mechanisms
+written down here as fact this year turned out to be invented, each one
+comfortable enough that nothing but an experiment would have dislodged it.
