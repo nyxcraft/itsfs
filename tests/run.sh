@@ -509,6 +509,38 @@ out=$("$ITSFS" check "$T/k5.dsk" 2>&1)
 has "a descriptor area that has reached the name area is a problem" "$out" \
 	"has overrun the name area"
 
+# A PACK WHERE EVERYTHING IS WRONG AT ONCE, to check that the output stays
+# readable.  Clearing QLASTB makes the TUT map the range 0..0, so every block on
+# the pack falls outside it -- which on the reference pack is 30,942 problems.
+#
+# cmd_check.c caps the PRINTING at CK_MAXPRINT and never caps the COUNT, and
+# that distinction is the whole point: a checker that answers a damaged pack
+# with a hundred thousand lines is one nobody reads twice, but one that also
+# under-reports the total is lying about the extent.
+mkfixture "$T/k8.dsk"
+poke "$T/k8.dsk" "$TUTBLK" 5 0
+out=$("$ITSFS" check "$T/k8.dsk" 2>&1)
+n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+nprob=$(printf '%s\n' "$out" | sed -n 's/^\([0-9][0-9]*\) problems.*/\1/p')
+
+if [ "$n" -le 130 ]; then
+	ok "a pack where everything is wrong prints $n lines, not thousands"
+else
+	no "check printed $n lines"
+fi
+
+# THE FIXTURE CANNOT EXERCISE THE CAP, and pretending otherwise would be a test
+# that passes without testing.  It is two directories and four file blocks, so
+# this damage yields six problems -- nowhere near CK_MAXPRINT.  What the suite
+# can check is that the count is reported at all and matches the damage; the cap
+# itself is measured on the reference pack in docs/validation.md, where the same
+# damage gives 30,942 problems in 110 lines of output.
+if [ "$nprob" = "6" ]; then
+	ok "...and counts every one of them: $nprob problems, one per claimed block"
+else
+	no "expected 6 problems on the fixture, got '$nprob'"
+fi
+
 # AN OUT-OF-ORDER NAME AREA, which is the one kind of damage where NSALV is
 # silent and the pack is still broken.  ITS's monitor does not scan the name
 # area, it BINARY-SEARCHES it -- QLGLK in disk.1228, seven halving steps over

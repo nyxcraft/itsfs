@@ -70,6 +70,7 @@
 <li><a class="section-nav__link section-nav__link--l2" href="#hostile-input">Hostile input</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#and-then-it-was-pointed-at-the-writer">And then it was pointed at the writer</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#and-at-the-containers-which-are-what-you-download">And at the containers, which are what you download</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#what-a-maximally-damaged-pack-prints">What a maximally damaged pack prints</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#lint">Lint</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-has-been-found-so-far">What has been found so far</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-a-review-found-after-the-phases-were-done">What a review found, after the phases were done</a></li>
@@ -212,7 +213,7 @@ This is the index.</p>
 <td><code>make tape-test</code></td>
 </tr>
 <tr>
-<td>269 checks, a third of them on packs damaged on purpose</td>
+<td>271 checks, a third of them on packs damaged on purpose</td>
 <td>level 3</td>
 <td><code>make test</code></td>
 </tr>
@@ -1129,7 +1130,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>269 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>271 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -1215,6 +1216,24 @@ empty <em>save set</em> is an error. The container layer and the archive layer a
 allowed to disagree about that, and the fact that they do is the separation
 working.</p>
 <p>200 iterations × 27 commands = 5,400 runs under the sanitizers, clean.</p>
+<h2 id="what-a-maximally-damaged-pack-prints">What a maximally damaged pack prints</h2>
+<p><code>cmd_check.c</code> caps how much it will print and never caps what it counts:</p>
+<pre><code class="language-c">#define CK_MAXPRINT 100
+</code></pre>
+<p>The distinction is the point. A checker that answers a wrecked pack with a
+hundred thousand lines is one nobody reads twice; one that also under-reports
+the total is lying about the extent of the damage.</p>
+<p>Clearing <code>QLASTB</code> is the cheapest way to make everything wrong at once — the TUT
+then maps the range <code>0..0</code>, so every block on the pack falls outside it. On the
+reference pack:</p>
+<pre><code>30942 problems, 7 notes
+</code></pre>
+<p>in <strong>110 lines of output</strong>. Every problem counted, a hundred printed.</p>
+<p>The suite checks the same property at fixture scale, and cannot check all of it:
+two directories and four file blocks give six problems, nowhere near the cap. So
+it verifies the output stays short and the count is exact — six, one per claimed
+block — and the cap itself is the measurement above. A test that claimed to
+exercise <code>CK_MAXPRINT</code> on a six-problem pack would pass without testing anything.</p>
 <h2 id="lint">Lint</h2>
 <p><code>make lint</code> compiles the tree under <strong>16 warning options</strong> — including
 <code>-Wconversion</code> and <code>-Wsign-conversion</code>, which are the two that catch a 36-bit
