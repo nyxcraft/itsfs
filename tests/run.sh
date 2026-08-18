@@ -384,7 +384,11 @@ chk "get -w writes 2051 words of eight bytes" "$(wc -c < "$T/out.words" | tr -d 
 #
 "$ITSFS" cat "$T/pack.dsk" 'TEST;NUL TXT' > "$T/nul.txt" 2>/dev/null
 chk "an interior NUL survives extraction" "$(wc -c < "$T/nul.txt" | tr -d ' ')" "3"
-chk "...and the trailing pair does not" "$(od -An -c < "$T/nul.txt" | tr -s ' ')" " A \\0 B"
+# macOS `od` pads the line with a trailing space where GNU `od` does not, so
+# the comparison strips it: the check is about which characters survived
+# extraction, not about how od lays them out.
+chk "...and the trailing pair does not" \
+	"$(od -An -c < "$T/nul.txt" | tr -s ' ' | sed 's/ *$//')" " A \\0 B"
 
 out=$("$ITSFS" free "$T/pack.dsk")
 has "free reads the pack name out of the TUT" "$out" "TESTPK"
@@ -1151,9 +1155,15 @@ else
 	has "...naming the process" "$(cat "$T/inuse.out")" "refusing to write"
 fi
 
+# A DIFFERENT NAME, because whether the check above fired decides whether
+# `TEST;NEW FILE` exists by now.  On a host with /proc the put was refused and
+# the name is free; on one without, it succeeded and the name is taken -- so
+# reusing it made this check fail on macOS for "already there", which is not
+# what it is asking about.
 (
 	exec 9< "$T/r3.dsk"
-	ITSFS_IGNORE_INUSE=1 "$ITSFS" put "$T/r3.dsk" 'TEST;NEW FILE' "$T/put.txt" >/dev/null 2>&1
+	ITSFS_IGNORE_INUSE=1 "$ITSFS" put "$T/r3.dsk" 'TEST;IGNORE FILE' "$T/put.txt" \
+		>/dev/null 2>&1
 	echo $? > "$T/inuse2.rc"
 )
 chk "...and ITSFS_IGNORE_INUSE overrides it" "$(cat "$T/inuse2.rc")" "0"
