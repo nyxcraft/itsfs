@@ -1147,9 +1147,14 @@ mkfixture "$T/r3.dsk"
 )
 rc=$(cat "$T/inuse.rc")
 
+# BOTH BRANCHES MUST COUNT THE SAME, or the suite's own total depends on the
+# host and the documented-count check below cannot be satisfied by any single
+# number.  macOS reported 327 against a documented 328 for exactly this reason:
+# one branch asserted twice and the other once.
 if [ "$rc" = "0" ]; then
 	# /proc is how this is detected, so a host without it cannot tell.
 	ok "the in-use check did not fire (no /proc: it cannot tell, and says so in write.c)"
+	skip "...naming the process (the check could not fire, so there is no name)"
 else
 	chk "put refuses an image another process has open" "$rc" "1"
 	has "...naming the process" "$(cat "$T/inuse.out")" "refusing to write"
