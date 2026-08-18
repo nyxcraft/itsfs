@@ -136,6 +136,15 @@ int itsw_rename(its_writer *w, const char *dir, const char *fn1, const char *fn2
 int itsw_rmdir(its_writer *w, const char *name);
 
 /*
+ * Is this directory in the MFD?  1 yes, 0 no, -1 the MFD would not read.
+ *
+ * For a caller that wants to create one only if it is absent: `itsw_mkdir` says
+ * so on stderr and fails, which is right for `mkdir` and wrong for anything
+ * extracting an archive, where a directory that is already there is not news.
+ */
+int itsw_have_dir(its_writer *w, const char *name);
+
+/*
  * Create a file system on an image, ITS's own way.
  *
  * `nuds` is how many directory slots the MFD has room for -- a monitor

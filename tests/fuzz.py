@@ -31,7 +31,8 @@ Everything happens in a mkdtemp on packs this builds itself.  It is never
 pointed at an image on disk and takes no option that could point it at one.
 
 This is NOT part of `make test` -- the suite stays sh + coreutils, so it runs
-anywhere -- and CI does not run it.
+anywhere.  CI runs it separately, in the sanitizer job, at a low iteration
+count.
 """
 
 import argparse
@@ -224,6 +225,24 @@ LIVE = [MFDBLK, TUTBLK, TUTBLK + 1, TUTBLK + 2, TUTBLK + 3,
 DONE = {}
 
 
+def fresh_empty(binary, path, timeout):
+    """An EMPTY file system for `tar x` to extract into.
+
+    Not a copy of the fixture: the archive was written FROM the fixture, so
+    extracting it there finds every name already taken and skips the lot -- which
+    looks like a refusal and would make the control below fail for a reason that
+    has nothing to do with the archive.  Empty, and made afresh each attempt, so
+    a `check` afterwards is answering only for what `tar x` just wrote.
+
+    `mkfs` builds it.  That is the program under test writing the target rather
+    than the harness, and if it is broken the control says so immediately."""
+    if os.path.exists(path):
+        os.remove(path)
+    p = subprocess.run([binary, "mkfs", path, "FUZZ"], capture_output=True,
+                       timeout=timeout)
+    return p.returncode == 0
+
+
 def copy_damaged(good, dst, blk, word, value):
     """A fresh copy of the fixture with exactly one word changed."""
     with open(good, "rb") as s, open(dst, "wb") as d:
@@ -323,8 +342,140 @@ def damage_file(src, dst, rng):
     return n
 
 
+# ---------------------------------------------------------------------------
+# The third untrusted input: a tar archive.
+#
+# `tar t` and `tar x` parse 512-byte headers with an octal size, an octal
+# checksum, a type byte and a 100-byte name, and then read that many bytes --
+# the same shape as the .tap framing above and the same reason to damage it.  A
+# tar is also the likeliest of the three to arrive from somewhere else: it is
+# the format the rest of the world hands you.
+#
+# AND `tar x` WRITES TO A PACK, which puts it in the same class as `put`: a
+# reader that misparses a header prints nonsense, while `tar x` misparsing one
+# writes into somebody's file system.  So it gets a fresh pack per attempt and a
+# `check` over the result, exactly as the write pass does.
+TAR_COMMANDS = [
+    ["tar", "t", "ARCHIVE"],
+    ["tar", "t", "-v", "ARCHIVE"],
+]
+
+# `-m` is required for `tar x`, and both answers reach a different decoder: text
+# refuses a byte over 0177, words wants a length that is a multiple of eight.
+#
+# EACH IS PAIRED WITH AN ARCHIVE WRITTEN THE SAME WAY.  Feeding a text archive
+# to `-m words` is not a test, it is a category error: every member's length
+# fails the multiple-of-eight rule, so the whole extraction is refused before a
+# single header field matters.  That is correct behaviour and it made the first
+# version of this control fail on a sound archive.
+TAR_WRITE_COMMANDS = [
+    (["tar", "x", "-m", "text", "ARCHIVE", "@"], "text"),
+    (["tar", "x", "-m", "words", "ARCHIVE", "@"], "words"),
+]
+
+
+def build_tar(binary, pack, out, mode, timeout):
+    """A real archive, written by `tar c` from the fixture pack, in one mode.
+
+    THE TWO FILES AND NOT THE LINK, deliberately.  `tar x` cannot create an ITS
+    link, so it skips one and says so in its exit status -- which means an
+    archive containing a link makes `tar x` exit non-zero no matter how sound it
+    is, and the "did anything actually succeed" tally at the end would be
+    measuring that instead of the header parser.  The link path is still reached,
+    and reached harder: damage_tar sets a member's type byte to '2' at random, so
+    what `tar x` meets is a link whose name and size are also damaged."""
+    p = subprocess.run(
+        [binary, "tar", "c", "-m", mode, out, pack,
+         "TEST;HELLO TXT", "TEST;NUL TXT"],
+        capture_output=True, timeout=timeout,
+    )
+    return p.returncode == 0, (p.stderr or p.stdout).decode("utf-8", "replace")
+
+
+def tar_headers(b):
+    """Offsets of the 512-byte headers in a ustar archive.
+
+    Walking it needs the size field, which is the field being damaged -- so this
+    walks the UNDAMAGED copy and the offsets are then applied to the damaged one.
+    The eight fields below are worth far more than an average byte: everything a
+    reader decides is decided from them."""
+    out, i = [], 0
+    while i + 512 <= len(b):
+        if b[i] == 0:                        # the end-of-archive zero blocks
+            break
+        out.append(i)
+        try:
+            size = int(b[i + 124:i + 136].split(b"\0")[0].strip() or b"0", 8)
+        except ValueError:
+            break
+        i += 512 + (size + 511) // 512 * 512
+    return out
+
+
+# offset, length, what it is -- ustar, POSIX.1-1988
+TAR_FIELDS = [
+    (0, 100, "name"),
+    (100, 8, "mode"),
+    (124, 12, "size"),
+    (136, 12, "mtime"),
+    (148, 8, "checksum"),
+    (156, 1, "typeflag"),
+    (157, 100, "linkname"),
+    (257, 6, "magic"),
+]
+
+
+def damage_tar(src, dst, rng):
+    """Copy an archive with a header field, or a few bytes, changed."""
+    b = bytearray(open(src, "rb").read())
+    if not b:
+        return "empty"
+
+    offs = tar_headers(bytes(b))
+
+    # Two thirds of the time, go for a header field on purpose, with a value
+    # chosen to be awkward rather than random.  Random bytes reach a size field
+    # about one time in three hundred.
+    if offs and rng.random() < 0.67:
+        h = rng.choice(offs)
+        off, ln, what = rng.choice(TAR_FIELDS)
+        if what == "size":
+            v = rng.choice([b"77777777777", b"00000000001", b"37777777777",
+                            b"99999999999", b"           ", b"\0" * 11,
+                            oct(len(b) * 8)[2:].encode().rjust(11, b"0")])
+            b[h + off:h + off + 11] = v[:11].ljust(11, b"0")
+        elif what == "name":
+            v = rng.choice([b"../" * 33, b"/etc/passwd", b"\xff" * 100,
+                            b"A" * 100, b".", b"..", b"%2", b"%ZZ/x",
+                            b"a/b/c/d", b"\0" * 100])
+            b[h:h + 100] = v[:100].ljust(100, b"\0")
+        elif what == "linkname":
+            v = rng.choice([b"../" * 33, b"\xff" * 100, b"B" * 100, b"\0" * 100])
+            b[h + 157:h + 257] = v[:100].ljust(100, b"\0")
+        elif what == "typeflag":
+            b[h + 156] = rng.choice([ord("0"), ord("5"), ord("2"), ord("1"),
+                                     ord("7"), 0, 255, rng.randrange(256)])
+        else:
+            for k in range(ln):
+                b[h + off + k] = rng.randrange(256)
+        open(dst, "wb").write(bytes(b))
+        return what
+
+    n = rng.choice([1, 1, 1, 2, 4])
+    for _ in range(n):
+        i = rng.randrange(min(len(b), 4096)) if rng.random() < 0.7 \
+            else rng.randrange(len(b))
+        b[i] = rng.randrange(256)
+    # Truncation, which is the commonest real damage of all -- and for tar it
+    # means a member whose header promises more data than the file holds.
+    if rng.random() < 0.3:
+        del b[rng.randrange(len(b)):]
+    open(dst, "wb").write(bytes(b))
+    return "bytes"
+
+
 def run(binary, args, image, timeout, stdin=None, hostfile=None, expect_zero=False,
-        xdir=None):
+        xdir=None, archive=None):
     """Substitute the image for '@', run, and grade the outcome."""
     argv = [binary]
     for a in args:
@@ -334,6 +485,8 @@ def run(binary, args, image, timeout, stdin=None, hostfile=None, expect_zero=Fal
             argv.append(hostfile)
         elif a == "XDIR":
             argv.append(xdir)
+        elif a == "ARCHIVE":
+            argv.append(archive)
         else:
             argv.append(a)
     if "@" not in args:
@@ -427,6 +580,9 @@ def main():
     # otherwise make the whole container pass a test of the "not a tape" path.
     goodtap = os.path.join(tmp, "good.tap")
     worktap = os.path.join(tmp, "work.tap")
+    goodtar = {m: os.path.join(tmp, "good-%s.tar" % m) for m in ("text", "words")}
+    worktar = {m: os.path.join(tmp, "work-%s.tar" % m) for m in ("text", "words")}
+    tarwr = os.path.join(tmp, "tarx.dsk")
     xdir = os.path.join(tmp, "x")
     os.mkdir(xdir)
 
@@ -446,6 +602,48 @@ def main():
                            xdir=xdir, expect_zero=True)
         if what:
             print("the UNDAMAGED save set already fails: %s\n%s" % (what, detail))
+            return 2
+
+    for m in ("text", "words"):
+        ok, msg = build_tar(args.bin, good, goodtar[m], m, args.timeout)
+        if not ok:
+            print("could not build the %s fixture archive: %s" % (m, msg))
+            return 2
+
+    # THE CONTROL, for the same reason the tape has one: if `tar t` cannot read
+    # an undamaged archive -- a changed argument order would do it -- then every
+    # damaged one below is refused for a boring reason and the pass proves
+    # nothing while reporting zero failures.
+    for cmd in TAR_COMMANDS:
+        for m in ("text", "words"):
+            what, detail = run(args.bin, cmd, work, args.timeout,
+                               archive=goodtar[m], expect_zero=True)
+            if what:
+                print("the UNDAMAGED %s archive already fails: %s\n%s"
+                      % (m, what, detail))
+                return 2
+
+    # `tar x` EXITS 1 ON AN ARCHIVE WITH A LINK IN IT, always: nothing here can
+    # create an ITS link, so it reports the skip and says so in its status.  That
+    # is correct and permanent, so this control cannot ask for exit 0.  It asks
+    # the stronger thing instead -- that the files it COULD write are on the pack
+    # afterwards -- because "did not crash" would also be satisfied by a `tar x`
+    # that refused the archive at its first header.
+    for cmd, m in TAR_WRITE_COMMANDS:
+        if not fresh_empty(args.bin, tarwr, args.timeout):
+            print("mkfs could not build the extraction target")
+            return 2
+
+        what, detail = run(args.bin, cmd, tarwr, args.timeout, archive=goodtar[m])
+        if what:
+            print("the UNDAMAGED %s archive already fails: %s\n%s" % (m, what, detail))
+            return 2
+
+        p = subprocess.run([args.bin, "ls", tarwr, "TEST"], capture_output=True,
+                           timeout=args.timeout)
+        if b"HELLO" not in p.stdout:
+            print("tar x -m %s wrote nothing from an undamaged archive: %s"
+                  % (m, (p.stdout or p.stderr).decode("utf-8", "replace")[:400]))
             return 2
 
     bad = 0
@@ -506,13 +704,50 @@ def main():
                 bad += 1
                 print("BAD  %s: damaged tape\n     %s" % (what, detail))
 
+        # ---- and a damaged tar archive, read and then extracted ----
+        fields = {}
+        for m in ("text", "words"):
+            fields[m] = damage_tar(goodtar[m], worktar[m], rng)
+
+        for cmd in TAR_COMMANDS:
+            for m in ("text", "words"):
+                what, detail = run(args.bin, cmd, work, args.timeout,
+                                   archive=worktar[m])
+                if what:
+                    bad += 1
+                    print("BAD  %s: damaged %s archive (%s)\n     %s"
+                          % (what, m, fields[m], detail))
+
+        # `tar x` writes, so it gets a fresh pack and a `check` afterwards --
+        # the same treatment as put and del, for the same reason.
+        for cmd, m in TAR_WRITE_COMMANDS:
+            what_field = fields[m]
+            if not fresh_empty(args.bin, tarwr, args.timeout):
+                print("mkfs could not build the extraction target")
+                return 2
+            what, detail = run(args.bin, cmd, tarwr, args.timeout,
+                               archive=worktar[m])
+            if what:
+                bad += 1
+                print("BAD  %s: tar x over a damaged archive (%s)\n     %s"
+                      % (what, what_field, detail))
+                continue
+
+            what, detail = run(args.bin, ["check", "@"], tarwr, args.timeout)
+            if what:
+                bad += 1
+                print("BAD  %s: after tar x over a damaged archive (%s)\n     %s"
+                      % (what, what_field, detail))
+
         if (i + 1) % 25 == 0:
             print("  %d/%d, %d bad" % (i + 1, args.iters, bad), file=sys.stderr)
 
-    ncmd = len(COMMANDS) + 1 + 2 * len(WRITE_COMMANDS) + len(TAPE_COMMANDS)
+    ncmd = (len(COMMANDS) + 1 + 2 * len(WRITE_COMMANDS) + len(TAPE_COMMANDS)
+            + 2 * len(TAR_COMMANDS) + 2 * len(TAR_WRITE_COMMANDS))
     print("%d iterations x %d commands (%d writers rechecked, %d on damaged "
-          "containers), %d bad"
-          % (args.iters, ncmd, len(WRITE_COMMANDS), len(TAPE_COMMANDS), bad))
+          "tapes, %d on damaged tar archives), %d bad"
+          % (args.iters, ncmd, len(WRITE_COMMANDS), len(TAPE_COMMANDS),
+             len(TAR_COMMANDS) + len(TAR_WRITE_COMMANDS), bad))
 
     # The writers ran on a damaged pack `iters` times each, plus once on the
     # undamaged control.  If these numbers are near zero the pass above proved
@@ -522,6 +757,12 @@ def main():
         if n:
             print("  %-6s completed %d of %d attempts"
                   % (name, DONE.get(name, 0), n * (args.iters + 1)))
+
+    # `tar` covers the readers and `tar x` together, since DONE is keyed on the
+    # subcommand name.  If this is zero, every archive above was refused before
+    # it reached the header parser and the pass tested nothing.
+    ntar = (2 * len(TAR_COMMANDS) + len(TAR_WRITE_COMMANDS)) * (args.iters + 1)
+    print("  %-6s completed %d of %d attempts" % ("tar", DONE.get("tar", 0), ntar))
     return 1 if bad else 0
 
 

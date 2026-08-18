@@ -1299,3 +1299,26 @@ out:
 	its_mfd_free(&m);
 	return rc;
 }
+
+int
+itsw_have_dir(its_writer *w, const char *name)
+{
+	its_mfd m;
+	char have[ITS_NAME_MAX];
+	int found = 0;
+
+	if (its_mfd_read(&w->im, &m) != 0)
+		return -1;
+
+	for (unsigned i = 0; i < its_mfd_slots(&m) && !found; i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(&m, i, have, &b) != 0 || have[0] == '\0')
+			continue;
+
+		found = strcmp(have, name) == 0;
+	}
+
+	its_mfd_free(&m);
+	return found;
+}

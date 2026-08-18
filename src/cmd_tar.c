@@ -15,6 +15,10 @@
  * ITS path is at most `DIR/FN1 FN2`, twenty characters, against a 100-character
  * name field -- so what comes out is readable by every tar there is.
  *
+ * Archiving a whole directory writes a directory member for it; archiving FILES
+ * by name writes only those members, as tar does.  `tar x` therefore creates a
+ * directory it does not find, which is also what tar does.
+ *
  * THE NAME MAPPING.  ITS names a file `DIR;FN1 FN2`; that becomes `DIR/FN1 FN2`,
  * with a real directory member for `DIR/` ahead of its files.  The space stays a
  * space: it is part of the name, and turning it into a dot would make two
@@ -1117,6 +1121,28 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 			}
 
 			goto next;
+		}
+
+		/*
+		 * THE DIRECTORY MAY NOT BE IN THE ARCHIVE AT ALL.  `tar c` with
+		 * file names on the command line writes those members and no
+		 * directory member -- so extracting `TEST/HELLO TXT` into a pack
+		 * without a TEST would put nothing anywhere and say why, once per
+		 * file.  Every tar creates a missing parent on extraction; this
+		 * does the same, and an ITS directory is cheap because it owns no
+		 * blocks.  Found by a fuzzer harness whose archive was built from
+		 * two named files.
+		 */
+		if (itsw_have_dir(&wr, dir) == 0) {
+			if (itsw_mkdir(&wr, dir) != 0) {
+				nskip++;
+				goto next;
+			}
+
+			nd++;
+
+			if (verbose)
+				printf("%s/\n", dir);
 		}
 
 		if (mem.type != '0' && mem.type != '\0') {

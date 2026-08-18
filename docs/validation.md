@@ -61,9 +61,9 @@ This is the index.
 | a real ITS tape decodes to the exact words its own program prints | level 3 | `make tape-test` |
 | the system's own `tar` reads and extracts an archive `tar c` wrote | second opinion | `make test` |
 | a pack read through the kernel gives the bytes `get` gives | level 3 | `make mount-test` |
-| 328 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| 333 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
-| 5,400 commands over damaged packs and damaged tapes | level 3 | `make fuzz` |
+| 7,000 commands over damaged packs, tapes and tar archives | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
 
 What is *not* established has its own section at the end, and is worth reading
@@ -1084,7 +1084,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**328 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**333 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

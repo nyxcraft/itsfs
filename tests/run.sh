@@ -1608,6 +1608,36 @@ out=$("$ITSFS" tar x "$T/a3.tar" "$T/tar2.dsk" 2>&1); rc=$?
 chk "tar x refuses to guess text or words" "$rc" "2"
 has "...and says which to ask for" "$out" "-m text"
 
+# --- a link, and a directory the archive does not contain.
+#
+# `tar x` cannot create an ITS link -- nothing here writes one -- so it must SAY
+# so and skip, rather than quietly writing a copy of the target, which would be a
+# different pack than the one archived.
+"$ITSFS" mkfs "$T/tarl.dsk" LNKPAK >/dev/null 2>&1
+"$ITSFS" tar x -m text "$T/a1.tar" "$T/tarl.dsk" >/dev/null 2>&1
+
+# The fixture pack has no links in it, so this uses the save-set fixture's
+# directory instead: build an archive of one file NAMED on the command line,
+# which is the case that carries no directory member at all.
+out=$("$ITSFS" tar c "$T/a5.tar" "$T/tar.dsk" 'KSHACK;ONE TXT' 2>&1); rc=$?
+chk "tar c takes a single file by name" "$rc" "0"
+# Members go to stdout and the count to stderr, so this reads only stdout --
+# with 2>&1 the two interleave and the comparison depends on buffering.
+out=$("$ITSFS" tar t "$T/a5.tar" 2>/dev/null)
+chk "...and that archive is just the file" "$out" "KSHACK/ONE TXT"
+
+# THE DIRECTORY IS NOT IN IT, and every tar creates a missing parent on the way
+# out.  Before this, extracting such an archive into a fresh pack wrote nothing
+# and said "no directory named KSHACK" once per file -- found by a fuzzer harness
+# whose fixture archive was built from two named files.
+"$ITSFS" mkfs "$T/tarp.dsk" PARPAK >/dev/null 2>&1
+out=$("$ITSFS" tar x -m text "$T/a5.tar" "$T/tarp.dsk" 2>&1); rc=$?
+chk "tar x creates a directory the archive does not carry" "$rc" "0"
+out=$("$ITSFS" ls "$T/tarp.dsk" KSHACK 2>&1)
+has "...and the file is in it" "$out" "ONE"
+out=$("$ITSFS" check "$T/tarp.dsk" 2>&1); rc=$?
+chk "...and that pack checks clean" "$rc" "0"
+
 # --- names that are not path components.  SIXBIT holds `/`, `.` and `%`, and
 # the reference pack has a REAL DIRECTORY NAMED `.` in it -- the one holding
 # the monitor.  Refusing it would drop the most important directory on the

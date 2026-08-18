@@ -19,6 +19,12 @@ name: CI
 #     returns whatever was next in memory and the test passes -- so the sanitizer
 #     job is the only place several of those checks have teeth.
 #
+#   - the optional dependency still builds. `mount` is the one thing here that
+#     needs a library, so it is off by default -- which meant nothing compiled it
+#     but its author's machine, and it could have broken with every job green.
+#     The FUSE job builds it, lints it under the local warning set, and runs the
+#     mount suite, which skips itself where a runner cannot mount.
+#
 #   - the formatting rule is real. .clang-format says hand-aligned tables must be
 #     fenced with `clang-format off`, because the tool collapses the columns that
 #     ARE the documentation -- and src/its.h is one large table of exactly that
@@ -78,6 +84,32 @@ jobs:
 
       - name: Damage a pack on purpose, 100 ways, and require no finding
         run: make fuzz ITERS=100
+
+  fuse:
+    name: ubuntu-latest / FUSE=1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install libfuse3
+        run: sudo apt-get update && sudo apt-get install -y libfuse3-dev fuse3
+
+      - name: Build with the mount in it (warnings are errors)
+        run: make FUSE=1 CFLAGS="-std=c99 -O2 -Wall -Wextra -pedantic -Werror"
+
+      # The local warning set is 16 options wide and is where the mount's own
+      # problems showed up; -Werror is inside the lint target itself.
+      - name: The mount is clean under the wider warning set
+        run: make lint FUSE=1
+
+      # The default build has no mount, so the rest of the suite still has to
+      # pass with one compiled in: nothing about `mount` may change `ls`.
+      - name: The suite still passes with the mount compiled in
+        run: make FUSE=1 test
+
+      # Skips itself, loudly, on a runner that cannot mount.
+      - name: The mount reads what the commands read
+        run: make mount-test FUSE=1
 
   lint:
     name: ubuntu-latest / format
