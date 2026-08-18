@@ -123,12 +123,37 @@ cmd_info(int argc, char **argv)
 		 * things: MDNUDS is NUDSL, a constant the monitor that built the
 		 * pack was assembled with, not a count of anything.
 		 */
-		if (w[ITS_MD_CHK] == ITS_MFD_MAGIC)
+		if (w[ITS_MD_CHK] == ITS_MFD_MAGIC) {
+			uint64_t wpb = (uint64_t)im.drv->secblk * ITS_WORDS_PER_SECTOR;
+			uint64_t *all = calloc((size_t)wpb, sizeof *all);
+			uint64_t n = 0;
+
+			/*
+			 * COUNTING NAMES NEEDS THE WHOLE BLOCK, not the header
+			 * read above: the name area is at the far END of it.
+			 * The slots from MDNAMP on are allocated, and the ones
+			 * carrying a name are directories -- `rmdir` frees a
+			 * name and leaves the slot, so counting slots reports
+			 * directories that are not there.
+			 */
+			if (all == NULL) {
+				fprintf(stderr, "itsfs: out of memory\n");
+				goto out;
+			}
+
+			if (img_read_block(&im, its_mfd_block(im.drv), all, (size_t)wpb) != 0) {
+				free(all);
+				goto out;
+			}
+
+			for (uint64_t i = all[ITS_MD_NAMP]; i + ITS_LMNBLK <= wpb; i += ITS_LMNBLK)
+				if (all[i + ITS_MN_UNAM] != 0)
+					n++;
+
 			printf("directories   %llu, in an MFD with room for %llu (MDNUDS)\n",
-			       (unsigned long long)((im.drv->secblk * ITS_WORDS_PER_SECTOR -
-						     w[ITS_MD_NAMP]) /
-						    ITS_LMNBLK),
-			       (unsigned long long)w[ITS_MD_NUDS]);
+			       (unsigned long long)n, (unsigned long long)all[ITS_MD_NUDS]);
+			free(all);
+		}
 	}
 
 	rc = 0;

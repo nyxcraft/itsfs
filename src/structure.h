@@ -56,6 +56,18 @@ void its_mfd_free(its_mfd *m);
  * `name` comes back empty and the caller decides what that means.
  */
 int its_mfd_dir(const its_mfd *m, unsigned i, char name[ITS_NAME_MAX], uint64_t *blk);
+
+/*
+ * How many of those slots actually name a directory.
+ *
+ * NOT the same number as its_mfd_slots(), and the difference is what `rmdir`
+ * makes: freeing a slot zeroes its name and leaves the slot allocated, because
+ * the position of a slot IS the address of its directory and the area cannot be
+ * compacted.  QSKONC hands the same slot back to the next `mkdir`.  Before
+ * anything could free one the two counts were always equal, which is why they
+ * were the same call.
+ */
+unsigned its_mfd_ndirs(const its_mfd *m);
 unsigned its_mfd_slots(const its_mfd *m);
 
 /* A user file directory: also one block, also held whole. */

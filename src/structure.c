@@ -103,6 +103,18 @@ its_mfd_slots(const its_mfd *m)
 	return (unsigned)((m->wpb - m->namp) / ITS_LMNBLK);
 }
 
+unsigned
+its_mfd_ndirs(const its_mfd *m)
+{
+	unsigned n = 0;
+
+	for (unsigned i = (unsigned)m->namp; i + ITS_LMNBLK <= m->wpb; i += ITS_LMNBLK)
+		if (m->w[i + ITS_MN_UNAM] != 0)
+			n++;
+
+	return n;
+}
+
 /*
  * The position of an entry is the address of the directory.
  *

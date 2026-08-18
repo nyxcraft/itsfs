@@ -6,7 +6,7 @@ out of scope.
 ## The layers
 
 ```
-   cmd_*.c        front ends: info, dump, dirs, ls, cat, get, free, ...
+   cmd_*.c        front ends: info, dump, dirs, ls, cat, get, tar, mount, ...
    cmd_check.c    ...and one that starts again from its.h, sharing none of it
    ---------------------------------------------------------------------
    structure.c    the file system: MFD, UFD, name blocks, descriptors, TUT
@@ -86,9 +86,19 @@ every front end calls it.
 ## What is deliberately out of scope
 
 - **Anything that is not ITS.** TOPS-10 is `t10fs`; TOPS-20 is neither.
-- **Writing, for now.** Phase 7. Until then `img_write_words()` exists, is
-  unreachable from any command, and is there so that the read-modify-write shape
-  a shared-byte packing needs is settled before anything depends on it.
+- **A writable mount.** `mount` is read-only, and that is a statement about the
+  writer rather than about FUSE. An ITS write is whole-file: `itsw_put` takes a
+  complete file and writes data, then the allocation table, then the descriptor,
+  then the name, so that an interruption strands blocks instead of losing a
+  file. FUSE hands out byte-range writes at arbitrary offsets. Bridging the two
+  means a write-back cache in front of a writer whose first rule is "refuse, do
+  not half-do", which is a project rather than a flag.
+- **Moving a file between directories.** `mv` renames in place and refuses a
+  cross-directory rename. An entry's position in the MFD *is* its directory, so
+  moving one means rewriting two directory blocks with the file's blocks
+  referenced from neither in between. `get` and `put` are the way across.
+- **Creating a link.** `put` writes files. Nothing here writes a link, so `tar
+  x` reports and skips one rather than turning it into a copy of its target.
 - **Interpreting file contents.** `cat` writes the seven-bit characters that are
   on the disk and translates nothing — not line endings, not control characters.
   An extraction tool that quietly changes a file is worse than no extraction

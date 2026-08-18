@@ -76,28 +76,6 @@ fs_getopt(int argc, char **argv, const char *extra, struct fsopts *o)
 	return 0;
 }
 
-/* Find a directory in the MFD by name.  -1 and a message if it is not there. */
-static int
-find_dir(const its_mfd *m, const char *name, uint64_t *blk)
-{
-	char have[ITS_NAME_MAX];
-
-	for (unsigned i = 0; i < its_mfd_slots(m); i++) {
-		uint64_t b;
-
-		if (its_mfd_dir(m, i, have, &b) != 0)
-			continue;
-
-		if (have[0] != '\0' && strcmp(have, name) == 0) {
-			*blk = b;
-			return 0;
-		}
-	}
-
-	fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", name);
-	return -1;
-}
-
 static void
 print_date(const its_ent *e)
 {
@@ -134,7 +112,7 @@ cmd_dirs(int argc, char **argv)
 		goto out;
 
 	printf("# MFD in block %llu: %u directories, room for %llu (MDNUDS)\n",
-	       (unsigned long long)m.blk, its_mfd_slots(&m), (unsigned long long)m.nudsl);
+	       (unsigned long long)m.blk, its_mfd_ndirs(&m), (unsigned long long)m.nudsl);
 
 	for (unsigned i = 0; i < its_mfd_slots(&m); i++) {
 		char name[ITS_NAME_MAX];
@@ -214,7 +192,7 @@ cmd_ls(int argc, char **argv)
 	if (its_mfd_read(&im, &m) != 0)
 		goto out;
 
-	if (find_dir(&m, argv[optind + 1], &blk) != 0)
+	if (its_find_dir(&m, argv[optind + 1], &blk) != 0)
 		goto out;
 
 	if (its_ufd_read(&im, blk, &u) != 0)
@@ -304,7 +282,7 @@ open_file(its_image *im, const its_path *p, its_ufd *u, uint64_t **blocks, long 
 	if (its_mfd_read(im, &m) != 0)
 		return -1;
 
-	if (find_dir(&m, p->dir, &blk) != 0) {
+	if (its_find_dir(&m, p->dir, &blk) != 0) {
 		its_mfd_free(&m);
 		return -1;
 	}

@@ -92,4 +92,35 @@ int its_parse_path(char **argv, int i, int navail, its_path *p);
  */
 int its_write_words(FILE *out, const uint64_t *w, size_t n, const char *what);
 
+/*
+ * A directory in the MFD, by name.  Returns 0 and sets *blk, or -1 with a
+ * message naming the directory that is not there.
+ *
+ * The MFD name area is scanned rather than searched: it is NOT sorted, and the
+ * position of a slot IS the block address of the directory it names, so there
+ * is nothing to binary-search over.  (A UFD's name area is a different thing
+ * and is sorted -- see cmd_check.c.)
+ */
+int its_find_dir(const its_mfd *m, const char *name, uint64_t *blk);
+
+/*
+ * An ITS name component to a host path component, and back.
+ *
+ * SIXBIT runs 040..0137, so a name can hold `/`, `.`, `%` and the space -- and
+ * the reference pack uses three of the four, including A DIRECTORY NAMED `.`
+ * holding the monitor.  None of those can be a path component as itself, so
+ * each is percent-encoded:
+ *
+ *      %       %25     always, or the encoding would not be reversible
+ *      /       %2F     the path separator
+ *      space   %20     the separator between FN1 and FN2
+ *      .       %2E     only when the whole component is `.` or `..`
+ *
+ * Nothing else is touched, so an ordinary name is itself.  `tar` and `mount`
+ * share this so that one name means one thing in both.  -1 if it does not fit,
+ * or on an escape that is not two hex digits.
+ */
+int its_enc_component(char *out, size_t sz, const char *s);
+int its_dec_component(char *out, size_t sz, const char *s);
+
 #endif /* UTIL_H */

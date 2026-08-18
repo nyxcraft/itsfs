@@ -314,3 +314,113 @@ its_write_words(FILE *out, const uint64_t *w, size_t n, const char *what)
 
 	return 0;
 }
+
+int
+its_find_dir(const its_mfd *m, const char *name, uint64_t *blk)
+{
+	char have[ITS_NAME_MAX];
+
+	for (unsigned i = 0; i < its_mfd_slots(m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(m, i, have, &b) != 0)
+			continue;
+
+		if (have[0] != '\0' && strcmp(have, name) == 0) {
+			*blk = b;
+			return 0;
+		}
+	}
+
+	fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", name);
+	return -1;
+}
+
+/*
+ * One ITS name component to one path component.  See the note at the top for
+ * what is encoded and why; -1 if it does not fit.
+ */
+int
+its_enc_component(char *out, size_t sz, const char *s)
+{
+	size_t o = 0;
+
+	if (strcmp(s, ".") == 0 || strcmp(s, "..") == 0) {
+		int n = snprintf(out, sz, strcmp(s, ".") == 0 ? "%%2E" : "%%2E%%2E");
+
+		return (n > 0 && (size_t)n < sz) ? 0 : -1;
+	}
+
+	for (const unsigned char *p = (const unsigned char *)s; *p != '\0'; p++) {
+		const char *esc = NULL;
+
+		switch (*p) {
+		case '%':
+			esc = "%25";
+			break;
+		case '/':
+			esc = "%2F";
+			break;
+		case ' ':
+			esc = "%20";
+			break;
+		default:
+			break;
+		}
+
+		if (esc != NULL) {
+			if (o + 3 >= sz)
+				return -1;
+
+			memcpy(out + o, esc, 3);
+			o += 3;
+		}
+		else {
+			if (o + 1 >= sz)
+				return -1;
+
+			out[o++] = (char)*p;
+		}
+	}
+
+	out[o] = '\0';
+	return 0;
+}
+
+/* And back.  -1 on a percent escape that is not two hex digits. */
+int
+its_dec_component(char *out, size_t sz, const char *s)
+{
+	size_t o = 0;
+
+	for (const char *p = s; *p != '\0'; p++) {
+		unsigned v;
+
+		if (*p == '%') {
+			char h[3];
+
+			if (p[1] == '\0' || p[2] == '\0')
+				return -1;
+
+			h[0] = p[1];
+			h[1] = p[2];
+			h[2] = '\0';
+
+			if (sscanf(h, "%2x", &v) != 1)
+				return -1;
+
+			p += 2;
+		}
+		else {
+			v = (unsigned char)*p;
+		}
+
+		if (o + 1 >= sz)
+			return -1;
+
+		out[o++] = (char)v;
+	}
+
+	out[o] = '\0';
+	return 0;
+}

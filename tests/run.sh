@@ -1158,6 +1158,104 @@ fi
 )
 chk "...and ITSFS_IGNORE_INUSE overrides it" "$(cat "$T/inuse2.rc")" "0"
 
+# --- mv.  A rename MOVES the entry, because the name area is sorted and the
+# monitor binary-searches it (QLGLK).  Writing the new name where the old one
+# sat would leave a directory that reads correctly to anything that scans and
+# wrongly to the thing that searches: the file would be there and ITS would not
+# find it.  So the three cases are where the new name sorts -- middle, last,
+# first -- and each is checked by the ORDER that comes back, not by the rename
+# returning 0.
+
+"$ITSFS" mkfs "$T/mv.dsk" MVPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/mv.dsk" KSHACK >/dev/null 2>&1
+printf 'the middle one\r\n' > "$T/mv1.txt"
+for n in AAA MMM ZZZ; do
+	"$ITSFS" put "$T/mv.dsk" "KSHACK;$n TXT" "$T/mv1.txt" >/dev/null 2>&1
+done
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;MMM TXT' 'KSHACK;BBB TXT' 2>&1); rc=$?
+chk "mv renames a file" "$rc" "0"
+
+out=$("$ITSFS" ls "$T/mv.dsk" KSHACK 2>&1 | grep -a '^[A-Z-]' | awk '{print $1}' | tr '\n' ' ')
+chk "...leaving the name area sorted" "$out" "AAA BBB ZZZ "
+
+# The file itself must be untouched: same blocks, same words, same everything
+# but the two name words.
+"$ITSFS" cat "$T/mv.dsk" 'KSHACK;BBB TXT' > "$T/mvback.txt" 2>/dev/null
+
+if cmp -s "$T/mv1.txt" "$T/mvback.txt"; then
+	ok "...and the file's contents with it"
+else
+	no "...and the file's contents with it"
+fi
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;AAA TXT' 'KSHACK;ZZZZZZ TXT' 2>&1); rc=$?
+chk "mv to a name that sorts LAST" "$rc" "0"
+out=$("$ITSFS" ls "$T/mv.dsk" KSHACK 2>&1 | grep -a '^[A-Z-]' | awk '{print $1}' | tr '\n' ' ')
+chk "...moves it to the end" "$out" "BBB ZZZ ZZZZZZ "
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;ZZZZZZ TXT' 'KSHACK;-AAA TXT' 2>&1); rc=$?
+chk "mv to a name that sorts FIRST" "$rc" "0"
+out=$("$ITSFS" ls "$T/mv.dsk" KSHACK 2>&1 | grep -a '^[A-Z-]' | awk '{print $1}' | tr '\n' ' ')
+chk "...moves it to the front" "$out" "-AAA BBB ZZZ "
+
+out=$("$ITSFS" check "$T/mv.dsk" 2>&1); rc=$?
+chk "...and the pack is still clean after three renames" "$rc" "0"
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;NOSUCH TXT' 'KSHACK;X TXT' 2>&1); rc=$?
+chk "mv refuses a file that is not there" "$rc" "1"
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;BBB TXT' 'KSHACK;ZZZ TXT' 2>&1); rc=$?
+chk "mv refuses a name already in use" "$rc" "1"
+has "...saying which" "$out" "already there"
+
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;BBB TXT' 'KSHACK;lower TXT' 2>&1); rc=$?
+chk "mv refuses a name SIXBIT cannot hold" "$rc" "1"
+
+# ITS has no operation that moves a file between directories: an entry's
+# position in the MFD IS its directory.  Refused by name rather than done
+# halfway.
+out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;BBB TXT' 'OTHER;BBB TXT' 2>&1); rc=$?
+chk "mv refuses to move between directories" "$rc" "2"
+has "...and says what to do instead" "$out" "put"
+
+# --- rmdir.  It frees a SLOT, not blocks: a directory owns none, because the
+# NUDSL directory blocks are locked out when the file system is made.
+out=$("$ITSFS" rmdir "$T/mv.dsk" KSHACK 2>&1); rc=$?
+chk "rmdir refuses a directory that still holds files" "$rc" "1"
+has "...saying what it would strand" "$out" "strand"
+
+"$ITSFS" mkdir "$T/mv.dsk" EMPTY >/dev/null 2>&1
+out=$("$ITSFS" dirs "$T/mv.dsk" 2>&1)
+has "a second directory is there to remove" "$out" "EMPTY"
+
+out=$("$ITSFS" rmdir "$T/mv.dsk" EMPTY 2>&1); rc=$?
+chk "rmdir removes an empty one" "$rc" "0"
+
+out=$("$ITSFS" dirs "$T/mv.dsk" 2>&1)
+hasnt "...and it is gone from the MFD" "$out" "EMPTY"
+
+out=$("$ITSFS" check "$T/mv.dsk" 2>&1); rc=$?
+chk "...leaving the pack clean" "$rc" "0"
+
+# THE COUNT MUST FOLLOW.  A freed slot stays allocated -- its position is the
+# address of its block, so the area cannot be compacted -- and counting slots
+# rather than names would report a directory that is not there.  This is the
+# check that caught info reading past the end of the MFD header to count them.
+out=$("$ITSFS" dirs "$T/mv.dsk" 2>&1 | head -1)
+has "a freed slot is not counted as a directory" "$out" "1 directories"
+out=$("$ITSFS" info "$T/mv.dsk" 2>&1)
+has "...by info either" "$out" "directories   1,"
+
+# QSKONC: the next mkdir takes the slot back.
+out=$("$ITSFS" mkdir "$T/mv.dsk" AGAIN 2>&1); rc=$?
+chk "mkdir reuses the freed slot" "$rc" "0"
+out=$("$ITSFS" check "$T/mv.dsk" 2>&1); rc=$?
+chk "...and that checks clean too" "$rc" "0"
+
+out=$("$ITSFS" rmdir "$T/mv.dsk" NOSUCH 2>&1); rc=$?
+chk "rmdir refuses a directory that is not there" "$rc" "1"
+
 # ------------------------------------------------------------------ tapes
 #
 # The CONTAINER layer: SIMH .tap framing, records and tape marks.  What is
@@ -1402,6 +1500,136 @@ chk "save refuses a file that is not there" "$rc" "1"
 
 out=$("$ITSFS" save "$T/sv.dsk" "$T/w4.tap" 'NOTANAME' 2>&1); rc=$?
 chk "save refuses a name that is not DIR;FN1 FN2" "$rc" "1"
+
+# ------------------------------------------------------------ tar archives
+#
+# A pack in and out of an ordinary Unix tar.  The archive is graded three ways
+# and they are not the same question:
+#
+#   1. does `tar c` write what `tar t` reads          -- self-consistent
+#   2. does the SYSTEM tar read it                    -- a second implementation
+#   3. does `tar c` | `tar x` give back the same words -- lossless
+#
+# 2 is the one that matters and the one that can be skipped: a machine without
+# tar(1) still runs the rest.  1 alone would only prove this agrees with itself,
+# which is the mistake docs/validation.md is about.
+
+"$ITSFS" mkfs "$T/tar.dsk" TARPAK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/tar.dsk" KSHACK >/dev/null 2>&1
+printf 'hello, ITS\r\n' > "$T/t1.txt"
+printf 'second file\r\n' > "$T/t2.txt"
+"$ITSFS" put "$T/tar.dsk" 'KSHACK;ONE TXT' "$T/t1.txt" >/dev/null 2>&1
+"$ITSFS" put "$T/tar.dsk" 'KSHACK;TWO TXT' "$T/t2.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" tar c "$T/a1.tar" "$T/tar.dsk" 2>&1); rc=$?
+chk "tar c writes an archive" "$rc" "0"
+has "...and says what went into it" "$out" "2 files"
+
+out=$("$ITSFS" tar t "$T/a1.tar" 2>&1); rc=$?
+chk "tar t reads it back" "$rc" "0"
+has "...with the directory as a directory" "$out" "KSHACK/"
+has "...and ITS DIR;FN1 FN2 as DIR/FN1 FN2" "$out" "KSHACK/ONE TXT"
+
+# The archive must be a whole number of 512-byte blocks and end in two zero
+# ones; a tar that is neither is one every other tar will complain about.
+sz=$(wc -c < "$T/a1.tar")
+chk "an archive is a whole number of tar blocks" "$((sz % 512))" "0"
+
+# --- the system's own tar, which is the only reader here that is not ours.
+if command -v tar >/dev/null 2>&1; then
+	out=$(tar tf "$T/a1.tar" 2>&1); rc=$?
+	chk "the system tar reads what this wrote" "$rc" "0"
+	has "...seeing the same member" "$out" "KSHACK/ONE TXT"
+
+	rm -rf "$T/tx" && mkdir -p "$T/tx"
+	out=$(tar xf "$T/a1.tar" -C "$T/tx" 2>&1); rc=$?
+	chk "...and extracts it without complaint" "$rc" "0"
+
+	if cmp -s "$T/t1.txt" "$T/tx/KSHACK/ONE TXT"; then
+		ok "...to the bytes the file was put from"
+	else
+		no "...to the bytes the file was put from"
+	fi
+else
+	skip "the system tar reads what this wrote (no tar(1))"
+	skip "...seeing the same member (no tar(1))"
+	skip "...and extracts it without complaint (no tar(1))"
+	skip "...to the bytes the file was put from (no tar(1))"
+fi
+
+# --- text or words, decided per file.  A file of words that are not text must
+# come out as words, or it is silently mangled -- which is the one thing this
+# command must never do.
+"$ITSFS" put -w "$T/tar.dsk" 'KSHACK;BIN DAT' "$T/w.words" >/dev/null 2>&1 ||
+	"$ITSFS" get -w "$T/tar.dsk" 'KSHACK;ONE TXT' "$T/w.words" >/dev/null 2>&1
+
+out=$("$ITSFS" tar c -v "$T/a2.tar" "$T/tar.dsk" 2>&1)
+has "tar c says which representation each file got" "$out" "text"
+
+out=$("$ITSFS" tar c -v -m words "$T/a3.tar" "$T/tar.dsk" 2>&1)
+has "-m words applies to every file" "$out" "words"
+hasnt "...and to no file as text" "$out" "bytes  text"
+
+# --- the round trip, in words, which is the lossless one.
+"$ITSFS" mkfs "$T/tar2.dsk" RTPACK >/dev/null 2>&1
+out=$("$ITSFS" tar x -m words "$T/a3.tar" "$T/tar2.dsk" 2>&1); rc=$?
+chk "tar x reads an archive back into an image" "$rc" "0"
+
+out=$("$ITSFS" check "$T/tar2.dsk" 2>&1); rc=$?
+chk "...and the pack it made checks clean" "$rc" "0"
+
+"$ITSFS" get -w "$T/tar.dsk" 'KSHACK;ONE TXT' "$T/rt.a" >/dev/null 2>&1
+"$ITSFS" get -w "$T/tar2.dsk" 'KSHACK;ONE TXT' "$T/rt.b" >/dev/null 2>&1
+
+if cmp -s "$T/rt.a" "$T/rt.b"; then
+	ok "...with the file's words identical to the original's"
+else
+	no "...with the file's words identical to the original's"
+fi
+
+# --- `auto` is refusable rather than guessable coming back.  Bytes do not say
+# whether they are text or words, and a wrong guess writes a mangled file.
+out=$("$ITSFS" tar x "$T/a3.tar" "$T/tar2.dsk" 2>&1); rc=$?
+chk "tar x refuses to guess text or words" "$rc" "2"
+has "...and says which to ask for" "$out" "-m text"
+
+# --- names that are not path components.  SIXBIT holds `/`, `.` and `%`, and
+# the reference pack has a REAL DIRECTORY NAMED `.` in it -- the one holding
+# the monitor.  Refusing it would drop the most important directory on the
+# disk, so it is encoded, and the encoding has to survive the round trip.
+"$ITSFS" mkdir "$T/tar.dsk" . >/dev/null 2>&1
+"$ITSFS" put "$T/tar.dsk" '.;AT ITS' "$T/t1.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" tar c "$T/a4.tar" "$T/tar.dsk" 2>&1); rc=$?
+chk "a directory named . is archived rather than skipped" "$rc" "0"
+out=$("$ITSFS" tar t "$T/a4.tar" 2>&1)
+has "...percent-encoded, because . is not a path component" "$out" "%2E/"
+hasnt "...and never as a bare dot" "$out" "
+./"
+
+"$ITSFS" mkfs "$T/tar3.dsk" DOTPAK >/dev/null 2>&1
+"$ITSFS" tar x -m text "$T/a4.tar" "$T/tar3.dsk" >/dev/null 2>&1
+out=$("$ITSFS" dirs "$T/tar3.dsk" 2>&1)
+has "...and decodes back to the directory it came from" "$out" "."
+
+# --- an archive is untrusted input.  These are the three ways a tar goes wrong
+# that must be refused rather than acted on.
+dd if="$T/a1.tar" of="$T/bad1.tar" bs=1 count=600 2>/dev/null
+out=$("$ITSFS" tar t "$T/bad1.tar" 2>&1); rc=$?
+died "$rc" && no "a truncated archive does not crash the reader" ||
+	ok "a truncated archive does not crash the reader"
+
+printf 'not a tar at all, not even close, not one bit of it\n' > "$T/bad2.tar"
+dd if=/dev/zero bs=512 count=1 >> "$T/bad2.tar" 2>/dev/null
+out=$("$ITSFS" tar t "$T/bad2.tar" 2>&1); rc=$?
+chk "a file that is not a tar is refused" "$rc" "1"
+has "...by its checksum, rather than by guessing" "$out" "checksum"
+
+# A member whose name walks out of the archive.  `tar x` writes into an IMAGE
+# rather than the host, so the damage would be a file in the wrong directory
+# rather than /etc/passwd -- but `../..` is still not a name here.
+out=$("$ITSFS" tar t "$T/a1.tar" 2>&1)
+hasnt "no member name escapes its directory" "$out" ".."
 
 # ------------------------------------------------------------ command lines
 

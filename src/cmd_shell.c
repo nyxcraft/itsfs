@@ -589,7 +589,7 @@ cmd_shell(int argc, char **argv)
 
 	if (s.interactive)
 		printf("%s, %s, %u directories.  `help` lists the commands.\n", im.path, im.drv->name,
-		       its_mfd_slots(&s.mfd));
+		       its_mfd_ndirs(&s.mfd));
 
 	for (;;) {
 		char *av[SH_MAXARG];

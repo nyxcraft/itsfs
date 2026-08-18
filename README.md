@@ -13,10 +13,11 @@ machine that has never heard of a 36-bit word.**
 
 `itsfs` opens a PDP-10 disk image, finds the master file directory, lists directories,
 decodes the run-length bytecode that serves as an ITS block map, follows links, and
-copies files out. It also writes: `put`, `del`, `mkdir`, and `mkfs` to build a working
-file system from nothing. It reads and writes ITS `DUMP` save sets from tape images, and
-`check` audits a pack for damage using a second implementation that shares no code with
-the reader.
+copies files out. It writes an ordinary **tar** archive of a whole pack, and optionally
+**mounts** one on a host directory. It also writes to the pack: `put`, `del`, `mv`,
+`mkdir`, `rmdir`, and `mkfs` to build a working file system from nothing. It reads and
+writes ITS `DUMP` save sets from tape images, and `check` audits a pack for damage using
+a second implementation that shares no code with the reader.
 
 One C99 binary, no dependencies beyond POSIX.
 
@@ -46,12 +47,15 @@ BUILD  DOC         7412      8  25-jun-2026
 ## Build
 
 ```console
-$ make          # bin/itsfs
-$ make test     # the regression suite (sh + coreutils)
+$ make            # bin/itsfs
+$ make test       # the regression suite (sh + coreutils)
+$ make FUSE=1     # ...and `mount`, the one optional dependency (libfuse3)
 ```
 
 C99 and POSIX, nothing else. The binary is self-contained; copy `bin/itsfs` wherever you
-like.
+like. `mount` is the only thing that needs a library, which is why it is off by default —
+`tar`, `get` and the rest do the same work without one, and are the only path on a
+machine with no FUSE.
 
 ## Quick start
 
@@ -80,8 +84,13 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 | `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
 | `itsfs put` | write a host file into a directory — **destructive** |
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
+| `itsfs mv` | rename a file in place — **destructive** |
 | `itsfs mkdir` | make a directory — **destructive** |
+| `itsfs rmdir` | remove an empty directory — **destructive** |
 | `itsfs mkfs` | create a file system from nothing — **destructive** |
+| `itsfs tar` | a pack in and out of an ordinary Unix tar archive |
+| `itsfs mount` | mount a pack on a directory, read-only (`make FUSE=1`) |
+| `itsfs umount` | unmount one |
 | `itsfs saveset` | list or extract an ITS DUMP save set |
 | `itsfs save` | write a DUMP save set from files on a pack |
 | `itsfs tape` | SIMH `.tap` record framing — the container, not the archive |
@@ -177,10 +186,86 @@ pack, and it holds to three rules:
 monitor binary-searches it. `del` frees the blocks and zeroes the descriptor bytes in
 place; it does not compact the descriptor area, because ITS does not either.
 
+`mv` renames, and a rename **moves the entry** for the same reason — writing the new name
+where the old one sat would leave a directory that reads correctly to anything scanning it
+and wrongly to the thing searching it, so the file would be there and ITS would not find
+it. It refuses a cross-directory rename: an entry's position in the MFD *is* its
+directory, and ITS has no operation that moves a file between them.
+
+`rmdir` frees a directory's MFD slot. It frees no blocks, because a directory owns none,
+and it refuses a directory that still holds files — that would strand every block they
+own, which is exactly the damage `check` exists to report.
+
+```console
+$ itsfs mv work.dsk 'KSHACK;OLD TXT' 'KSHACK;NEW TXT'
+KSHACK;OLD TXT -> NEW TXT
+$ itsfs rmdir work.dsk KSHACK
+itsfs: 'KSHACK' still holds 37 entries -- removing its slot would strand every block they own
+```
+
 It refuses by name rather than half-doing: a name SIXBIT cannot hold, a file that already
 exists, a byte that is not seven-bit (use `-w`), a directory that is full — **a directory
 is one block and there is no way to grow one** — and a block whose reference count the
 table calls "many or more", which nobody can decrement correctly.
+
+## A whole pack as a tar archive
+
+`tar c` turns a pack into an ordinary Unix tar that any `tar xf` will read:
+
+```console
+$ itsfs tar c pack.tar rp0.dsk
+5657 files (2473 text, 3184 words), 399 links, 247 directories
+
+$ itsfs tar c part.tar rp0.dsk KSHACK      # or just one directory
+$ tar tvf part.tar | head -3
+drwxr-xr-x 0/0               0 1970-01-01 07:00 KSHACK/
+-rw-r--r-- 0/0             580 1985-12-30 07:00 KSHACK/-READ- -THIS-
+-rw-r--r-- 0/0             115 1986-06-01 08:00 KSHACK/1PROC BUGS
+```
+
+ITS's `DIR;FN1 FN2` becomes `DIR/FN1 FN2`, with a real directory member for each ITS
+directory, and an ITS link becomes a relative symlink. Name one or more directories, or
+`DIR;FN1 FN2` for a single file, to archive part of a pack. `tar t` lists an archive and
+`tar x` reads one back into an image.
+
+**A 36-bit word is not a byte, and `-m` says what to do about it.** ITS text is five
+7-bit characters per word; anything else is best kept as the word itself in eight bytes,
+which is what `get -w` writes. `-m auto`, the default, decides per file by looking at the
+words and reports the tally; `-m text` and `-m words` force one for everything.
+
+```console
+$ itsfs tar c -v part.tar rp0.dsk KSHACK
+KSHACK/                       dir
+KSHACK/-READ- -THIS-          580 bytes  text
+KSHACK/AINOTE 8             13408 bytes  words
+...
+37 files (27 text, 10 words), 2 links, 1 directories
+```
+
+Two details worth knowing. **Names get percent-encoded where they have to be** — SIXBIT
+holds `/`, `.`, `%` and the space, and the reference pack has a directory named `.`
+holding the monitor, so it appears as `%2E/`. **Links to `>` dangle**: `>` is ITS's
+"latest version", resolved when a file is opened, and 88 of the pack's 399 links point at
+one. A symlink is a fixed string, so there is nothing to point it at; `readlink` still
+shows exactly what ITS recorded.
+
+## Mounting a pack
+
+With `make FUSE=1`:
+
+```console
+$ itsfs mount rp0.dsk /mnt/its
+itsfs: rp0.dsk on /mnt/its, 247 directories, read-only
+$ ls -l /mnt/its/KSHACK | head -3
+-r--r--r-- 1 you you   580 Dec 30  1985 -READ- -THIS-
+-r--r--r-- 1 you you   115 Jun  1  1986 1PROC BUGS
+lrwxrwxrwx 1 you you    12 Jun 27  2026 DDT BIN -> ../%2E/@ DDT
+$ itsfs umount /mnt/its
+```
+
+Two levels, because ITS has two: `/DIR/FN1 FN2`. The same `-m` question and the same
+percent-encoding as `tar`. **Read-only** — see [design](docs/design.md) for why a
+writable mount is a project rather than a flag.
 
 ## Save sets
 

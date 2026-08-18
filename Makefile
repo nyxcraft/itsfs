@@ -13,17 +13,27 @@ CPPFLAGS += -D_FILE_OFFSET_BITS=64
 BIN := bin
 SRC := src
 
-BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c cmd_write.c cmd_tape.c cmd_saveset.c \
+BASE := itsfs.c cmd_dump.c cmd_pack.c cmd_word.c cmd_fs.c cmd_check.c cmd_manifest.c cmd_shell.c cmd_write.c cmd_tape.c cmd_saveset.c cmd_tar.c \
         util.c image.c structure.c write.c itspack.c itsgeom.c itstext.c
 HDRS := $(SRC)/cmds.h $(SRC)/util.h $(SRC)/image.h $(SRC)/itspack.h $(SRC)/itsgeom.h \
         $(SRC)/itstext.h $(SRC)/its.h $(SRC)/structure.h $(SRC)/write.h
+
+# The one optional dependency.  `make FUSE=1` builds `mount`/`umount` against
+# libfuse3; the default build has no libraries at all, and every file command
+# works without a mount.
+FUSE ?= 0
+ifeq ($(FUSE),1)
+  CPPFLAGS += -DHAVE_FUSE $(shell pkg-config --cflags fuse3)
+  FUSELIBS := $(shell pkg-config --libs fuse3)
+  BASE     += cmd_mount.c
+endif
 
 OBJSRC := $(addprefix $(SRC)/, $(BASE))
 
 all: $(BIN)/itsfs
 
 $(BIN)/itsfs: $(OBJSRC) $(HDRS) | $(BIN)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(OBJSRC)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(OBJSRC) $(FUSELIBS)
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -43,9 +53,14 @@ LINTFLAGS ?= -std=c99 -O2 -Wall -Wextra -pedantic -Wshadow -Wconversion \
              -Wmissing-prototypes -Wredundant-decls -Wundef -Wwrite-strings \
              -Wpointer-arith -Wformat=2 -Wswitch-enum -Wvla
 
+# -Werror IS THE POINT.  Without it this compiled with -fsyntax-only, which
+# fails on errors and not on warnings -- so the target printed "no warnings"
+# whether or not there were any, and a warning could sit here indefinitely
+# behind a passing check.  Found when `make lint FUSE=1` printed the pass line
+# under six -Wcast-qual warnings.
 lint: lint-format
 	@rc=0; for f in $(OBJSRC); do \
-	   $(CC) $(LINTFLAGS) $(CPPFLAGS) -fsyntax-only $$f || rc=1; done; \
+	   $(CC) $(LINTFLAGS) -Werror $(CPPFLAGS) -fsyntax-only $$f || rc=1; done; \
 	 test $$rc -eq 0 && echo "lint: no warnings under $$(echo $(LINTFLAGS) | tr ' ' '\n' | grep -c '^-W') warning options"; \
 	 exit $$rc
 
@@ -355,6 +370,11 @@ itsload: all
 # It runs the WRITERS as well as the readers, so it works entirely inside a
 # mkdtemp of its own on packs it built itself.  It is never pointed at anything
 # on disk here, and takes no argument that could be.
+# The FUSE mount, against the commands that need no mount.  Needs `FUSE=1` and
+# a machine that can actually mount; skips itself loudly otherwise.
+mount-test: $(BIN)/itsfs
+	@sh tests/mount.sh $(BIN)/itsfs "$(IMAGE)" 2>&1
+
 fuzz: $(OBJSRC) $(HDRS) | $(BIN)
 	$(CC) $(SANFLAGS) $(CPPFLAGS) -o $(BIN)/itsfs-fuzz $(OBJSRC)
 	@python3 tests/fuzz.py --bin $(BIN)/itsfs-fuzz --iters $(ITERS)

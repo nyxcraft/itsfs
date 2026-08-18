@@ -381,7 +381,7 @@ manifest(its_image *im, FILE *out, const char *only)
 		qsort(lines, nlines, sizeof *lines, cmp_line);
 
 	fprintf(out, "%s\n", MF_MAGIC);
-	fprintf(out, "# pack %s, %u directories, %s\n", im->drv->name, its_mfd_slots(&m),
+	fprintf(out, "# pack %s, %u directories, %s\n", im->drv->name, its_mfd_ndirs(&m),
 		im->pk->name);
 	fprintf(out, "# type    words blocks checksum path\n");
 

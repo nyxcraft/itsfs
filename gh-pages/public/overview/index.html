@@ -51,10 +51,11 @@
 machine that has never heard of a 36-bit word.</strong></p>
 <p><code>itsfs</code> opens a PDP-10 disk image, finds the master file directory, lists directories,
 decodes the run-length bytecode that serves as an ITS block map, follows links, and
-copies files out. It also writes: <code>put</code>, <code>del</code>, <code>mkdir</code>, and <code>mkfs</code> to build a working
-file system from nothing. It reads and writes ITS <code>DUMP</code> save sets from tape images, and
-<code>check</code> audits a pack for damage using a second implementation that shares no code with
-the reader.</p>
+copies files out. It writes an ordinary <strong>tar</strong> archive of a whole pack, and optionally
+<strong>mounts</strong> one on a host directory. It also writes to the pack: <code>put</code>, <code>del</code>, <code>mv</code>,
+<code>mkdir</code>, <code>rmdir</code>, and <code>mkfs</code> to build a working file system from nothing. It reads and
+writes ITS <code>DUMP</code> save sets from tape images, and <code>check</code> audits a pack for damage using
+a second implementation that shares no code with the reader.</p>
 <p>One C99 binary, no dependencies beyond POSIX.</p>
 <pre><code class="language-console">$ itsfs info rp0.dsk
 file          rp0.dsk
@@ -78,11 +79,14 @@ AINOTE 8           1676      2  24-oct-1986
 BUILD  DOC         7412      8  25-jun-2026
 </code></pre>
 <h2 id="build">Build</h2>
-<pre><code class="language-console">$ make          # bin/itsfs
-$ make test     # the regression suite (sh + coreutils)
+<pre><code class="language-console">$ make            # bin/itsfs
+$ make test       # the regression suite (sh + coreutils)
+$ make FUSE=1     # ...and `mount`, the one optional dependency (libfuse3)
 </code></pre>
 <p>C99 and POSIX, nothing else. The binary is self-contained; copy <code>bin/itsfs</code> wherever you
-like.</p>
+like. <code>mount</code> is the only thing that needs a library, which is why it is off by default —
+<code>tar</code>, <code>get</code> and the rest do the same work without one, and are the only path on a
+machine with no FUSE.</p>
 <h2 id="quick-start">Quick start</h2>
 <pre><code class="language-console">$ itsfs info rp0.dsk                      # what is this image?
 $ itsfs dirs rp0.dsk                       # what directories are on it?
@@ -149,12 +153,32 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <td>remove a file — <code>rm</code> is the same command — <strong>destructive</strong></td>
 </tr>
 <tr>
+<td><code>itsfs mv</code></td>
+<td>rename a file in place — <strong>destructive</strong></td>
+</tr>
+<tr>
 <td><code>itsfs mkdir</code></td>
 <td>make a directory — <strong>destructive</strong></td>
 </tr>
 <tr>
+<td><code>itsfs rmdir</code></td>
+<td>remove an empty directory — <strong>destructive</strong></td>
+</tr>
+<tr>
 <td><code>itsfs mkfs</code></td>
 <td>create a file system from nothing — <strong>destructive</strong></td>
+</tr>
+<tr>
+<td><code>itsfs tar</code></td>
+<td>a pack in and out of an ordinary Unix tar archive</td>
+</tr>
+<tr>
+<td><code>itsfs mount</code></td>
+<td>mount a pack on a directory, read-only (<code>make FUSE=1</code>)</td>
+</tr>
+<tr>
+<td><code>itsfs umount</code></td>
+<td>unmount one</td>
 </tr>
 <tr>
 <td><code>itsfs saveset</code></td>
@@ -255,10 +279,68 @@ use that no file claims, which loses nothing. The other order loses a file.</li>
 <p><code>put</code> inserts the name in <strong>sorted position</strong>, because an ITS name area is sorted and the
 monitor binary-searches it. <code>del</code> frees the blocks and zeroes the descriptor bytes in
 place; it does not compact the descriptor area, because ITS does not either.</p>
+<p><code>mv</code> renames, and a rename <strong>moves the entry</strong> for the same reason — writing the new name
+where the old one sat would leave a directory that reads correctly to anything scanning it
+and wrongly to the thing searching it, so the file would be there and ITS would not find
+it. It refuses a cross-directory rename: an entry's position in the MFD <em>is</em> its
+directory, and ITS has no operation that moves a file between them.</p>
+<p><code>rmdir</code> frees a directory's MFD slot. It frees no blocks, because a directory owns none,
+and it refuses a directory that still holds files — that would strand every block they
+own, which is exactly the damage <code>check</code> exists to report.</p>
+<pre><code class="language-console">$ itsfs mv work.dsk 'KSHACK;OLD TXT' 'KSHACK;NEW TXT'
+KSHACK;OLD TXT -&gt; NEW TXT
+$ itsfs rmdir work.dsk KSHACK
+itsfs: 'KSHACK' still holds 37 entries -- removing its slot would strand every block they own
+</code></pre>
 <p>It refuses by name rather than half-doing: a name SIXBIT cannot hold, a file that already
 exists, a byte that is not seven-bit (use <code>-w</code>), a directory that is full — <strong>a directory
 is one block and there is no way to grow one</strong> — and a block whose reference count the
 table calls &quot;many or more&quot;, which nobody can decrement correctly.</p>
+<h2 id="a-whole-pack-as-a-tar-archive">A whole pack as a tar archive</h2>
+<p><code>tar c</code> turns a pack into an ordinary Unix tar that any <code>tar xf</code> will read:</p>
+<pre><code class="language-console">$ itsfs tar c pack.tar rp0.dsk
+5657 files (2473 text, 3184 words), 399 links, 247 directories
+
+$ itsfs tar c part.tar rp0.dsk KSHACK      # or just one directory
+$ tar tvf part.tar | head -3
+drwxr-xr-x 0/0               0 1970-01-01 07:00 KSHACK/
+-rw-r--r-- 0/0             580 1985-12-30 07:00 KSHACK/-READ- -THIS-
+-rw-r--r-- 0/0             115 1986-06-01 08:00 KSHACK/1PROC BUGS
+</code></pre>
+<p>ITS's <code>DIR;FN1 FN2</code> becomes <code>DIR/FN1 FN2</code>, with a real directory member for each ITS
+directory, and an ITS link becomes a relative symlink. Name one or more directories, or
+<code>DIR;FN1 FN2</code> for a single file, to archive part of a pack. <code>tar t</code> lists an archive and
+<code>tar x</code> reads one back into an image.</p>
+<p><strong>A 36-bit word is not a byte, and <code>-m</code> says what to do about it.</strong> ITS text is five
+7-bit characters per word; anything else is best kept as the word itself in eight bytes,
+which is what <code>get -w</code> writes. <code>-m auto</code>, the default, decides per file by looking at the
+words and reports the tally; <code>-m text</code> and <code>-m words</code> force one for everything.</p>
+<pre><code class="language-console">$ itsfs tar c -v part.tar rp0.dsk KSHACK
+KSHACK/                       dir
+KSHACK/-READ- -THIS-          580 bytes  text
+KSHACK/AINOTE 8             13408 bytes  words
+...
+37 files (27 text, 10 words), 2 links, 1 directories
+</code></pre>
+<p>Two details worth knowing. <strong>Names get percent-encoded where they have to be</strong> — SIXBIT
+holds <code>/</code>, <code>.</code>, <code>%</code> and the space, and the reference pack has a directory named <code>.</code>
+holding the monitor, so it appears as <code>%2E/</code>. <strong>Links to <code>&gt;</code> dangle</strong>: <code>&gt;</code> is ITS's
+&quot;latest version&quot;, resolved when a file is opened, and 88 of the pack's 399 links point at
+one. A symlink is a fixed string, so there is nothing to point it at; <code>readlink</code> still
+shows exactly what ITS recorded.</p>
+<h2 id="mounting-a-pack">Mounting a pack</h2>
+<p>With <code>make FUSE=1</code>:</p>
+<pre><code class="language-console">$ itsfs mount rp0.dsk /mnt/its
+itsfs: rp0.dsk on /mnt/its, 247 directories, read-only
+$ ls -l /mnt/its/KSHACK | head -3
+-r--r--r-- 1 you you   580 Dec 30  1985 -READ- -THIS-
+-r--r--r-- 1 you you   115 Jun  1  1986 1PROC BUGS
+lrwxrwxrwx 1 you you    12 Jun 27  2026 DDT BIN -&gt; ../%2E/@ DDT
+$ itsfs umount /mnt/its
+</code></pre>
+<p>Two levels, because ITS has two: <code>/DIR/FN1 FN2</code>. The same <code>-m</code> question and the same
+percent-encoding as <code>tar</code>. <strong>Read-only</strong> — see <a href="../design/index.html">design</a> for why a
+writable mount is a project rather than a flag.</p>
 <h2 id="save-sets">Save sets</h2>
 <p>An ITS <code>DUMP</code> save set is an archive written onto tape. <code>itsfs</code> reads and writes them,
 and the tape itself is an ordinary SIMH <code>.tap</code> file.</p>

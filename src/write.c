@@ -1078,3 +1078,224 @@ out:
 	free(tut);
 	return rc;
 }
+
+/* ---------------------------------------------------------------- rename */
+
+/*
+ * Rename an entry in place.  Everything about the file stays -- its blocks, its
+ * descriptor, its dates -- and only the two name words change.
+ *
+ * WHICH MEANS MOVING IT, because a UFD name area is SORTED and the monitor
+ * binary-searches it (QLGLK, seven halving steps over 128 name blocks; see
+ * cmd_check.c).  A rename that wrote the new name where the old one sat would
+ * leave an area that reads correctly to anything that scans and incorrectly to
+ * the thing that searches -- the file would be there and ITS would not find it.
+ *
+ * So this is `del`'s QSQSH followed by `put`'s insert, over the same five words:
+ * close the gap where the entry was, then open one where it now belongs.  The
+ * entry itself is carried across whole, which is what keeps the descriptor
+ * offset, the word count and the dates attached to the file they describe.
+ */
+int
+itsw_rename(its_writer *w, const char *dir, const char *fn1, const char *fn2, const char *nfn1,
+	    const char *nfn2)
+{
+	its_mfd m;
+	its_ufd u;
+	uint64_t dirblk = 0;
+	uint64_t n1 = 0, n2 = 0;
+	uint64_t saved[ITS_LUNBLK];
+	unsigned idx, slot;
+	its_ent e;
+	int found = 0, exists = 0, rc = -1, have_ufd = 0;
+	char have[ITS_NAME_MAX];
+
+	if (its_sixbit_make(nfn1, &n1) != 0 || its_sixbit_make(nfn2 ? nfn2 : "", &n2) != 0 ||
+	    nfn1[0] == '\0') {
+		fprintf(stderr, "itsfs: '%s %s' is not a SIXBIT name: at most six characters "
+				"each, 040..137, and there is no lower case\n",
+			nfn1, nfn2 ? nfn2 : "");
+		return -1;
+	}
+
+	if (its_mfd_read(&w->im, &m) != 0)
+		return -1;
+
+	for (unsigned i = 0; i < its_mfd_slots(&m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(&m, i, have, &b) != 0 || have[0] == '\0')
+			continue;
+
+		if (strcmp(have, dir) == 0) {
+			dirblk = b;
+			found = 1;
+			break;
+		}
+	}
+
+	its_mfd_free(&m);
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", dir);
+		return -1;
+	}
+
+	if (its_ufd_read(&w->im, dirblk, &u) != 0)
+		return -1;
+	have_ufd = 1;
+
+	found = 0;
+	idx = (unsigned)u.namp;
+
+	while (its_ufd_next(&u, &idx, &e)) {
+		if (strcmp(e.fn1, fn1) == 0 && strcmp(e.fn2, fn2 ? fn2 : "") == 0) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no entry '%s;%s %s'\n", dir, fn1, fn2 ? fn2 : "");
+		goto out;
+	}
+
+	/* The new name must not already be there.  name_slot scans the whole
+	 * area for exactly this reason -- see the note on it. */
+	(void)name_slot(&u, n1, n2, &exists);
+
+	if (exists) {
+		fprintf(stderr, "itsfs: '%s;%s %s' is already there\n", dir, nfn1,
+			nfn2 ? nfn2 : "");
+		goto out;
+	}
+
+	memcpy(saved, &u.w[e.word], sizeof saved);
+	saved[ITS_UN_FN1] = n1;
+	saved[ITS_UN_FN2] = n2;
+
+	/* Out: QSQSH, exactly as del does it. */
+	memmove(&u.w[u.namp + ITS_LUNBLK], &u.w[u.namp], (e.word - u.namp) * sizeof *u.w);
+	memset(&u.w[u.namp], 0, ITS_LUNBLK * sizeof *u.w);
+	u.namp += ITS_LUNBLK;
+	u.w[ITS_UD_NAMP] = u.namp;
+
+	/* And back in, at the place the new name sorts to. */
+	slot = name_slot(&u, n1, n2, &exists);
+	memmove(&u.w[u.namp - ITS_LUNBLK], &u.w[u.namp], (slot - u.namp) * sizeof *u.w);
+	memcpy(&u.w[slot - ITS_LUNBLK], saved, sizeof saved);
+	u.namp -= ITS_LUNBLK;
+	u.w[ITS_UD_NAMP] = u.namp;
+
+	if (put_block(w, dirblk, u.w, u.wpb) != 0)
+		goto out;
+
+	rc = 0;
+out:
+	if (have_ufd)
+		its_ufd_free(&u);
+	return rc;
+}
+
+/* ----------------------------------------------------------------- rmdir */
+
+/*
+ * Remove a directory, which is to say free its MFD slot.
+ *
+ * IT FREES NO BLOCKS, because a directory never held any: the NUDSL directory
+ * blocks are locked out when the file system is made, and `mkdir` allocates
+ * nothing (see its note).  A slot is a name; removing the name is the whole
+ * operation, and QSKONC will hand the same slot back to the next `mkdir`.
+ *
+ * IT REFUSES A DIRECTORY THAT IS NOT EMPTY.  Freeing the slot of a directory
+ * that still holds files does not delete those files -- it strands every block
+ * they own, marked in use by the allocation table and claimed by nothing.  That
+ * is precisely the damage `check` exists to report, and the project's own test
+ * suite made it once by freeing a live slot on purpose.
+ *
+ * THE MFD ENTRY GOES FIRST, then the block is zeroed.  An interruption between
+ * the two leaves a slot that is free and a block holding a stale directory --
+ * which is what an unused slot is anyway, and which the next `mkdir` overwrites
+ * with a fresh one.  The other order would leave the MFD naming a block of
+ * zeros, which is not a directory at all.
+ */
+int
+itsw_rmdir(its_writer *w, const char *name)
+{
+	its_mfd m;
+	its_ufd u;
+	uint64_t *zero = NULL;
+	uint64_t dirblk = 0;
+	unsigned slot = 0, nent = 0, idx;
+	its_ent e;
+	int found = 0, rc = -1;
+	char have[ITS_NAME_MAX];
+
+	if (name == NULL || name[0] == '\0') {
+		fprintf(stderr, "itsfs: rmdir wants a directory name\n");
+		return -1;
+	}
+
+	if (its_mfd_read(&w->im, &m) != 0)
+		return -1;
+
+	for (unsigned i = (unsigned)m.namp; i + ITS_LMNBLK <= m.wpb; i += ITS_LMNBLK) {
+		uint64_t b;
+		unsigned which = (i - (unsigned)m.namp) / ITS_LMNBLK;
+
+		if (its_mfd_dir(&m, which, have, &b) != 0 || have[0] == '\0')
+			continue;
+
+		if (strcmp(have, name) == 0) {
+			slot = i;
+			dirblk = b;
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", name);
+		goto out;
+	}
+
+	if (its_ufd_read(&w->im, dirblk, &u) != 0)
+		goto out;
+
+	idx = (unsigned)u.namp;
+
+	while (its_ufd_next(&u, &idx, &e))
+		if (e.fn1[0] != '\0' || e.fn2[0] != '\0')
+			nent++;
+
+	its_ufd_free(&u);
+
+	if (nent > 0) {
+		fprintf(stderr, "itsfs: '%s' still holds %u entr%s -- removing its slot would "
+				"strand every block they own\n",
+			name, nent, nent == 1 ? "y" : "ies");
+		goto out;
+	}
+
+	m.w[slot + ITS_MN_UNAM] = 0;
+	m.w[slot + 1] = 0;
+
+	if (put_block(w, m.blk, m.w, m.wpb) != 0)
+		goto out;
+
+	zero = calloc(w->wpb, sizeof *zero);
+
+	if (zero == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		goto out;
+	}
+
+	if (put_block(w, dirblk, zero, w->wpb) != 0)
+		goto out;
+
+	rc = 0;
+out:
+	free(zero);
+	its_mfd_free(&m);
+	return rc;
+}

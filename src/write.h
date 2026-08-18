@@ -121,6 +121,21 @@ int itsw_del(its_writer *w, const char *dir, const char *fn1, const char *fn2);
 int itsw_mkdir(its_writer *w, const char *name);
 
 /*
+ * Rename an entry.  The file is untouched -- blocks, descriptor and dates all
+ * stay -- but the entry MOVES, because the name area is sorted and ITS binary-
+ * searches it.  Refuses a name SIXBIT cannot hold and a name already in use.
+ */
+int itsw_rename(its_writer *w, const char *dir, const char *fn1, const char *fn2,
+		const char *nfn1, const char *nfn2);
+
+/*
+ * Remove a directory: free its MFD slot.  Frees no blocks, because a directory
+ * owns none.  REFUSES a directory that still holds entries, since freeing that
+ * slot strands every block its files own.
+ */
+int itsw_rmdir(its_writer *w, const char *name);
+
+/*
  * Create a file system on an image, ITS's own way.
  *
  * `nuds` is how many directory slots the MFD has room for -- a monitor

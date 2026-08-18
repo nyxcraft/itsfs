@@ -26,9 +26,18 @@ int cmd_shell(int argc, char **argv);
 int cmd_put(int argc, char **argv);
 int cmd_del(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
+int cmd_mv(int argc, char **argv);
+int cmd_rmdir(int argc, char **argv);
 int cmd_mkfs(int argc, char **argv);
 int cmd_tape(int argc, char **argv);
 int cmd_saveset(int argc, char **argv);
 int cmd_save(int argc, char **argv);
+int cmd_tar(int argc, char **argv);
+
+/* Only built with `make FUSE=1`; see cmd_mount.c and the Makefile. */
+#ifdef HAVE_FUSE
+int cmd_mount(int argc, char **argv);
+int cmd_umount(int argc, char **argv);
+#endif
 
 #endif /* CMDS_H */

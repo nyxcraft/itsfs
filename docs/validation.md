@@ -59,7 +59,9 @@ This is the index.
 | 137 extracted files are byte-identical to their host originals | level 3 | `make oracle` |
 | `dbd9` matches a pack KLH10's own converter wrote | level 3 | `make klh10` |
 | a real ITS tape decodes to the exact words its own program prints | level 3 | `make tape-test` |
-| 277 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| the system's own `tar` reads and extracts an archive `tar c` wrote | second opinion | `make test` |
+| a pack read through the kernel gives the bytes `get` gives | level 3 | `make mount-test` |
+| 328 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
 | 5,400 commands over damaged packs and damaged tapes | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
@@ -1082,7 +1084,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**277 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**328 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

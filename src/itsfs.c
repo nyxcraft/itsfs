@@ -66,10 +66,17 @@ static const struct subcmd {
 	{ "del",      cmd_del,      "remove a file (destructive)"               },
 	{ "rm",       cmd_del,      "remove a file -- the same command as del"  },
 	{ "mkdir",    cmd_mkdir,    "make a directory (destructive)"            },
+	{ "mv",       cmd_mv,       "rename a file in place (destructive)"      },
+	{ "rmdir",    cmd_rmdir,    "remove an empty directory (destructive)"   },
 	{ "mkfs",     cmd_mkfs,     "create a file system (destructive)"        },
 	{ "tape",     cmd_tape,     "SIMH .tap record framing (container only)"  },
 	{ "saveset",  cmd_saveset,  "list or extract an ITS DUMP save set"      },
 	{ "save",     cmd_save,     "write a DUMP save set from files on a pack" },
+	{ "tar",      cmd_tar,      "a pack in and out of a Unix tar archive"   },
+#ifdef HAVE_FUSE
+	{ "mount",    cmd_mount,    "mount a pack on a directory, read-only"    },
+	{ "umount",   cmd_umount,   "unmount one"                               },
+#endif
 };
 
 /* clang-format on */

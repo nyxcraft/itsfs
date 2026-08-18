@@ -421,3 +421,132 @@ usage:
 			"       NSALV, which boots from tape.\n");
 	return 2;
 }
+
+/*
+ * `itsfs mv [-p packing] [-d drive] image OLD NEW`
+ *
+ * Rename inside one directory.  ITS has no operation that moves a file BETWEEN
+ * directories -- an entry's position in the MFD is its directory, and moving one
+ * would mean rewriting two directory blocks with the file's blocks referenced
+ * from neither in between -- so this refuses a cross-directory rename by name
+ * rather than doing half of it.  `get` and `put` are the way across.
+ */
+int
+cmd_mv(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	its_path from, to;
+	int c, rc, nargs;
+
+	while ((c = getopt(argc, argv, "p:d:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	/* image OLD NEW, with each name one argument or three. */
+	nargs = argc - optind - 1;
+
+	if (nargs == 2)
+		nargs = 1;
+	else if (nargs == 6)
+		nargs = 3;
+	else
+		goto usage;
+
+	if (its_parse_path(argv, optind + 1, nargs, &from) != 0)
+		return 2;
+
+	if (its_parse_path(argv, optind + 1 + nargs, nargs, &to) != 0)
+		return 2;
+
+	if (strcmp(from.dir, to.dir) != 0) {
+		fprintf(stderr, "itsfs: '%s' and '%s' are different directories, and ITS has no "
+				"operation that moves a file between them -- `get` it out and "
+				"`put` it back\n",
+			from.dir, to.dir);
+		return 2;
+	}
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	rc = itsw_rename(&w, from.dir, from.fn1, from.fn2, to.fn1, to.fn2) == 0 ? 0 : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "%s;%s %s -> %s %s\n", from.dir, from.fn1, from.fn2, to.fn1,
+			to.fn2);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs mv [-p packing] [-d drive] image OLD NEW\n"
+			"       a name is 'DIR;FN1 FN2' or DIR FN1 FN2, and both must name\n"
+			"       the same directory\n"
+			"       DESTRUCTIVE.  Work on a copy.\n");
+	return 2;
+}
+
+/*
+ * `itsfs rmdir [-p packing] [-d drive] image NAME`
+ *
+ * Free a directory's MFD slot.  Refuses one that still holds entries; see
+ * itsw_rmdir for why that refusal is not a convenience.
+ */
+int
+cmd_rmdir(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	int c, rc;
+
+	while ((c = getopt(argc, argv, "p:d:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	if (optind != argc - 2)
+		goto usage;
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	rc = itsw_rmdir(&w, argv[optind + 1]) == 0 ? 0 : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "removed %s\n", argv[optind + 1]);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs rmdir [-p packing] [-d drive] image NAME\n"
+			"       the directory must be empty\n"
+			"       DESTRUCTIVE.  Work on a copy.\n");
+	return 2;
+}
