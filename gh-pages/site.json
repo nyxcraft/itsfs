@@ -22,7 +22,7 @@
     { "slug": "overview", "source": "README.md", "template": "page", "group": "start",
       "title": "Overview",
       "tagline": "What it is, and every command",
-      "blurb": "The quick reference: what exists today, the full subcommand list, how ITS spells a file name, and the line between what has been proven — including by ITS itself — and what is only claimed.",
+      "blurb": "The quick reference: what itsfs is and what it does, the full subcommand list, how ITS spells a file name, and worked examples for reading a pack, writing to one, moving files through DUMP save sets, and building a file system from nothing.",
       "featured": true },
 
     { "slug": "design", "source": "docs/design.md", "group": "start",
