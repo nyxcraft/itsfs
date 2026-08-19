@@ -27,6 +27,7 @@ int cmd_put(int argc, char **argv);
 int cmd_del(int argc, char **argv);
 int cmd_mkdir(int argc, char **argv);
 int cmd_mv(int argc, char **argv);
+int cmd_ln(int argc, char **argv);
 int cmd_rmdir(int argc, char **argv);
 int cmd_mkfs(int argc, char **argv);
 int cmd_tape(int argc, char **argv);

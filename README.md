@@ -85,6 +85,7 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 | `itsfs put` | write a host file into a directory — **destructive** |
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
 | `itsfs mv` | rename a file in place — **destructive** |
+| `itsfs ln` | make a link — **destructive** |
 | `itsfs mkdir` | make a directory — **destructive** |
 | `itsfs rmdir` | remove an empty directory — **destructive** |
 | `itsfs mkfs` | create a file system from nothing — **destructive** |
@@ -192,6 +193,16 @@ and wrongly to the thing searching it, so the file would be there and ITS would 
 it. It refuses a cross-directory rename: an entry's position in the MFD *is* its
 directory, and ITS has no operation that moves a file between them.
 
+`ln` makes a link, whose "block list" *is* its target's name — three components
+written into the descriptor area with one bit set in the entry, so a link costs no blocks
+at all. The target need not exist: ITS resolves one when the file is opened, and 7 of the
+reference pack's 399 links point at nothing.
+
+```console
+$ itsfs ln work.dsk 'SYS;TS LISP' 'SYS;TS L'
+SYS;TS L -> SYS;TS LISP
+```
+
 `rmdir` frees a directory's MFD slot. It frees no blocks, because a directory owns none,
 and it refuses a directory that still holds files — that would strand every block they
 own, which is exactly the damage `check` exists to report.
@@ -226,7 +237,9 @@ drwxr-xr-x 0/0               0 1970-01-01 07:00 KSHACK/
 ITS's `DIR;FN1 FN2` becomes `DIR/FN1 FN2`, with a real directory member for each ITS
 directory, and an ITS link becomes a relative symlink. Name one or more directories, or
 `DIR;FN1 FN2` for a single file, to archive part of a pack. `tar t` lists an archive and
-`tar x` reads one back into an image.
+`tar x` reads one back into an image — files, directories and links alike, so a pack
+round-trips whole. The reference pack's 6,303 entries go out to a tar and back into an
+empty file system with identical contents and identical block accounting.
 
 **A 36-bit word is not a byte, and `-m` says what to do about it.** ITS text is five
 7-bit characters per word; anything else is best kept as the word itself in eight bytes,

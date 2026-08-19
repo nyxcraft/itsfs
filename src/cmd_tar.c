@@ -69,11 +69,9 @@
  * what ITS decides at open time.  The symlink still carries exactly what the
  * disk records, so `readlink` shows the target ITS wrote.
  *
- * WHAT `tar x` CANNOT DO, said here rather than discovered: it writes files and
- * directories, and REFUSES a symbolic link.  Creating an ITS link means writing
- * a name into a descriptor field, and `write.c` has no operation for it -- `put`
- * writes files.  A link is reported and skipped rather than turned into a copy
- * of its target, which would be a different pack than the one that was archived.
+ * `tar x` RESTORES LINKS as links, through `itsw_link`, so an archive round-trips
+ * whole.  A HARD link (tar type 1) is still refused: ITS has no such thing --
+ * an entry names blocks or it names another entry, and there is no third case.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -1053,6 +1051,51 @@ bytes_to_words(const unsigned char *b, size_t len, int text, uint64_t *nwords)
 	return w;
 }
 
+/*
+ * The symlink text `tar c` writes, back to an ITS target.
+ *
+ * It writes `../DIR/FN1 FN2` -- out of the directory the link sits in and into
+ * the target's -- so undoing it is stripping the `../` and reading what is left
+ * as a member path.  A linkname with no `../` is taken as a sibling, in the
+ * link's own directory, which is what a bare name means in a symlink and what
+ * another tar might have produced.
+ */
+static int
+linkname_to_its(const char *lp, const char *owndir, char *tdir, char *tfn1, char *tfn2)
+{
+	if (strncmp(lp, "../", 3) == 0)
+		return member_to_its(lp + 3, tdir, tfn1, tfn2);
+
+	if (strchr(lp, '/') != NULL)
+		return -1; /* neither a sibling nor one level out */
+
+	snprintf(tdir, ITS_NAME_MAX, "%s", owndir);
+
+	{
+		const char *sp = strchr(lp, ' ');
+		char raw[ITS_NAME_MAX * 3];
+		size_t n = sp ? (size_t)(sp - lp) : strlen(lp);
+
+		tfn2[0] = '\0';
+
+		if (n == 0 || n >= sizeof raw)
+			return -1;
+
+		snprintf(raw, sizeof raw, "%.*s", (int)n, lp);
+
+		if (its_dec_component(tfn1, ITS_NAME_MAX, raw) != 0)
+			return -1;
+
+		if (sp == NULL)
+			return 0;
+
+		if (strlen(sp + 1) >= sizeof raw)
+			return -1;
+
+		return its_dec_component(tfn2, ITS_NAME_MAX, sp + 1);
+	}
+}
+
 static int
 tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int mode, int verbose,
 	    int optind_)
@@ -1060,7 +1103,7 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 	its_writer wr;
 	FILE *f;
 	struct member mem;
-	unsigned long nf = 0, nd = 0, nskip = 0;
+	unsigned long nf = 0, nd = 0, nl = 0, nskip = 0;
 	int r, rc = 2;
 
 	(void)argc;
@@ -1099,9 +1142,10 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 		uint64_t nw = 0;
 		size_t pad;
 
-		if (mem.type == '2' || mem.type == '1') {
-			fprintf(stderr, "itsfs: skipping %s: this cannot create an ITS link\n",
-				mem.name);
+		if (mem.type == '1') {
+			/* ITS has no hard links: an entry names blocks or it
+			 * names another entry, and there is no third thing. */
+			fprintf(stderr, "itsfs: skipping %s: ITS has no hard links\n", mem.name);
 			nskip++;
 			goto next;
 		}
@@ -1109,6 +1153,34 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 		if (member_to_its(mem.name, dir, fn1, fn2) != 0) {
 			fprintf(stderr, "itsfs: skipping %s: not DIR/FN1 FN2\n", mem.name);
 			nskip++;
+			goto next;
+		}
+
+		if (mem.type == '2') {
+			char tdir[ITS_NAME_MAX], tfn1[ITS_NAME_MAX], tfn2[ITS_NAME_MAX];
+
+			if (linkname_to_its(mem.link, dir, tdir, tfn1, tfn2) != 0) {
+				fprintf(stderr, "itsfs: skipping %s: |%s| is not an ITS "
+						"target\n",
+					mem.name, mem.link);
+				nskip++;
+				goto next;
+			}
+
+			if (itsw_have_dir(&wr, dir) == 0 && itsw_mkdir(&wr, dir) == 0)
+				nd++;
+
+			if (itsw_link(&wr, dir, fn1, fn2, tdir, tfn1, tfn2) == 0) {
+				nl++;
+
+				if (verbose)
+					printf("%s;%s %s -> %s;%s %s\n", dir, fn1, fn2, tdir,
+					       tfn1, tfn2);
+			}
+			else {
+				nskip++;
+			}
+
 			goto next;
 		}
 
@@ -1208,7 +1280,7 @@ done:
 	if (f != stdin)
 		fclose(f);
 
-	fprintf(stderr, "%lu files, %lu directories", nf, nd);
+	fprintf(stderr, "%lu files, %lu links, %lu directories", nf, nl, nd);
 
 	if (nskip)
 		fprintf(stderr, ", %lu SKIPPED", nskip);

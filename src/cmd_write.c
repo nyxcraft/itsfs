@@ -550,3 +550,73 @@ usage:
 			"       DESTRUCTIVE.  Work on a copy.\n");
 	return 2;
 }
+
+/*
+ * `itsfs ln [-p packing] [-d drive] image TARGET LINKNAME`
+ *
+ * The argument order is ln(1)'s: what it points at, then what it is called.
+ *
+ * A link may point ANYWHERE, including at nothing: ITS resolves a target when
+ * the file is opened, and 7 of the 399 links on the reference pack point at a
+ * file that is not there.  So this does not check that the target exists --
+ * refusing to make a link ITS would have made would be this project inventing a
+ * rule.  It does check that the target is a name SIXBIT can hold.
+ */
+int
+cmd_ln(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	its_path tgt, name;
+	int c, rc, nargs;
+
+	while ((c = getopt(argc, argv, "p:d:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	nargs = argc - optind - 1;
+
+	if (nargs == 2)
+		nargs = 1;
+	else if (nargs == 6)
+		nargs = 3;
+	else
+		goto usage;
+
+	if (its_parse_path(argv, optind + 1, nargs, &tgt) != 0 ||
+	    its_parse_path(argv, optind + 1 + nargs, nargs, &name) != 0)
+		return 2;
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	rc = itsw_link(&w, name.dir, name.fn1, name.fn2, tgt.dir, tgt.fn1, tgt.fn2) == 0 ? 0 : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "%s;%s %s -> %s;%s %s\n", name.dir, name.fn1, name.fn2, tgt.dir,
+			tgt.fn1, tgt.fn2);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs ln [-p packing] [-d drive] image TARGET LINKNAME\n"
+			"       a name is 'DIR;FN1 FN2' or DIR FN1 FN2\n"
+			"       the target need not exist: ITS resolves one when the file is\n"
+			"       opened, and links to nothing are ordinary on a real pack\n"
+			"       DESTRUCTIVE.  Work on a copy.\n");
+	return 2;
+}

@@ -1322,3 +1322,213 @@ itsw_have_dir(its_writer *w, const char *name)
 	its_mfd_free(&m);
 	return found;
 }
+
+/* ------------------------------------------------------------------ link */
+
+/*
+ * Encode a link's target into six-bit bytes: `DIR`, `FN1`, `FN2` in that order.
+ *
+ * THE LAYOUT WAS READ OFF THE DISK RATHER THAN REASONED ABOUT, because there
+ * are three rules and two of them are only visible in a case the reference pack
+ * happens to contain.  From `KSHACK;DDT BIN`, whose target is `.;@ DDT`:
+ *
+ *     16 33 40 33 44 44 64 00      '.' SEP '@' SEP 'D' 'D' 'T' END
+ *
+ * so a component SHORTER than six characters is closed by ITS_LNK_SEP.  From
+ * `.INFO.;DDT ORDER`, whose target is `.INFO.;DDTORD >` and whose first two
+ * components are exactly six:
+ *
+ *     16 51 56 46 57 16 44 44 64 57 62 44 36 00
+ *     '.' 'I' 'N' 'F' 'O' '.' 'D' 'D' 'T' 'O' 'R' 'D' '>' END
+ *
+ * so a FULL-WIDTH component is closed by its width and gets no separator at
+ * all -- the reader counts to six and stops.  And from `C;CLIB PRGLST`, whose
+ * target's LAST component is full width, the byte after `PRGLST` is a zero:
+ * the terminator is written even when nothing is ambiguous without it.
+ *
+ * QUOTING: a byte that would otherwise read as a separator is preceded by
+ * ITS_LNK_QUOTE.  Those two bytes are `;` and `:` as characters, both legal in
+ * SIXBIT, and no target on the reference pack contains either -- which is why
+ * its.h marks the quote character [s] rather than [v].  It is written here
+ * anyway, because the alternative is a name that silently means something else.
+ */
+static int
+link_encode(const char *dir, const char *fn1, const char *fn2, unsigned char *out, size_t max,
+	    unsigned *nout)
+{
+	const char *comp[3];
+	size_t n = 0;
+
+	comp[0] = dir;
+	comp[1] = fn1;
+	comp[2] = fn2 ? fn2 : "";
+
+	for (int c = 0; c < 3; c++) {
+		size_t len = strlen(comp[c]);
+
+		if (len > ITS_SIXBIT_CHARS)
+			return -1;
+
+		for (size_t i = 0; i < len; i++) {
+			unsigned char v = (unsigned char)comp[c][i];
+
+			if (v < 040 || v > 0137)
+				return -1;
+
+			v = (unsigned char)(v - 040);
+
+			if (v == ITS_LNK_SEP || v == ITS_LNK_QUOTE) {
+				if (n + 1 >= max)
+					return -1;
+
+				out[n++] = ITS_LNK_QUOTE;
+			}
+
+			if (n >= max)
+				return -1;
+
+			out[n++] = v;
+		}
+
+		/* A component of exactly six characters ends by its width. */
+		if (len < ITS_SIXBIT_CHARS && c < 2) {
+			if (n >= max)
+				return -1;
+
+			out[n++] = ITS_LNK_SEP;
+		}
+	}
+
+	if (n >= max)
+		return -1;
+
+	out[n++] = 0;
+	*nout = (unsigned)n;
+	return 0;
+}
+
+/*
+ * Make a link.  It allocates NO BLOCKS -- a link's "block list" IS its target's
+ * name, written into the descriptor area with UNLNKB set in the entry -- so the
+ * allocation table is not touched and neither is UDBLKS.
+ *
+ * The order is `put`'s order minus the parts that do not apply: everything that
+ * can be refused first, then the descriptor bytes, then the name last, so that
+ * an interruption leaves descriptor bytes nothing points at rather than a name
+ * pointing at nothing.
+ */
+int
+itsw_link(its_writer *w, const char *dir, const char *fn1, const char *fn2, const char *tdir,
+	  const char *tfn1, const char *tfn2)
+{
+	its_mfd m;
+	its_ufd u;
+	uint64_t dirblk = 0;
+	uint64_t n1 = 0, n2 = 0;
+	unsigned char desc[3 * (2 * ITS_SIXBIT_CHARS + 1) + 2];
+	unsigned ndesc = 0, slot, descoff;
+	int exists = 0, found = 0, rc = -1, have_ufd = 0;
+	char have[ITS_NAME_MAX];
+
+	if (its_sixbit_make(fn1, &n1) != 0 || its_sixbit_make(fn2 ? fn2 : "", &n2) != 0 ||
+	    fn1[0] == '\0') {
+		fprintf(stderr, "itsfs: '%s %s' is not a SIXBIT name: at most six characters "
+				"each, 040..137, and there is no lower case\n",
+			fn1, fn2 ? fn2 : "");
+		return -1;
+	}
+
+	if (tdir == NULL || tdir[0] == '\0' || tfn1 == NULL || tfn1[0] == '\0') {
+		fprintf(stderr, "itsfs: a link needs a target directory and file name\n");
+		return -1;
+	}
+
+	if (link_encode(tdir, tfn1, tfn2, desc, sizeof desc, &ndesc) != 0) {
+		fprintf(stderr, "itsfs: '%s;%s %s' is not a target a link can hold\n", tdir, tfn1,
+			tfn2 ? tfn2 : "");
+		return -1;
+	}
+
+	if (its_mfd_read(&w->im, &m) != 0)
+		return -1;
+
+	for (unsigned i = 0; i < its_mfd_slots(&m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(&m, i, have, &b) != 0 || have[0] == '\0')
+			continue;
+
+		if (strcmp(have, dir) == 0) {
+			dirblk = b;
+			found = 1;
+			break;
+		}
+	}
+
+	its_mfd_free(&m);
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", dir);
+		return -1;
+	}
+
+	if (its_ufd_read(&w->im, dirblk, &u) != 0)
+		return -1;
+	have_ufd = 1;
+
+	slot = name_slot(&u, n1, n2, &exists);
+
+	if (exists) {
+		fprintf(stderr, "itsfs: '%s;%s %s' already exists -- delete it first\n", dir, fn1,
+			fn2 ? fn2 : "");
+		goto out;
+	}
+
+	descoff = (unsigned)u.w[ITS_UD_ESCP];
+
+	{
+		uint64_t desc_end = ITS_UD_DESC + (descoff + ndesc + ITS_UFDBPW - 1) / ITS_UFDBPW;
+		uint64_t name_start = u.namp - ITS_LUNBLK;
+
+		if (u.namp < ITS_LUNBLK || desc_end > name_start) {
+			fprintf(stderr, "itsfs: directory '%s' is full: the descriptor area would "
+					"reach word %llu and the names start at %llu\n",
+				dir, (unsigned long long)desc_end,
+				(unsigned long long)name_start);
+			goto out;
+		}
+	}
+
+	for (unsigned i = 0; i < ndesc; i++)
+		if (desc_put(u.w, u.wpb, descoff + i, desc[i]) != 0) {
+			fprintf(stderr, "itsfs: the link's target does not fit in '%s'\n", dir);
+			goto out;
+		}
+
+	u.w[ITS_UD_ESCP] = descoff + ndesc;
+
+	memmove(&u.w[u.namp - ITS_LUNBLK], &u.w[u.namp], (slot - u.namp) * sizeof *u.w);
+
+	{
+		unsigned at = slot - ITS_LUNBLK;
+
+		u.w[at + ITS_UN_FN1] = n1;
+		u.w[at + ITS_UN_FN2] = n2;
+		/* UNLNKB says what this is; UNWRDC is meaningless for a link and
+		 * every link on the reference pack carries zero there. */
+		u.w[at + ITS_UN_RNDM] = ((uint64_t)1 << ITS_UN_LNK_P) | descoff;
+		u.w[at + ITS_UN_DATE] = 0;
+		u.w[at + ITS_UN_REF] = (uint64_t)0777 << ITS_UN_AUTH_P;
+	}
+
+	u.w[ITS_UD_NAMP] = u.namp - ITS_LUNBLK;
+
+	if (put_block(w, dirblk, u.w, u.wpb) != 0)
+		goto out;
+
+	rc = 0;
+out:
+	if (have_ufd)
+		its_ufd_free(&u);
+	return rc;
+}

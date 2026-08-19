@@ -205,6 +205,15 @@ WRITE_COMMANDS = [
     ["del", "@", "TEST;A LINK"],      # a link: three names in the same field
     ["del", "@", "TEST;NUL TXT"],     # the multi-block file
     ["mkdir", "@", "FUZZD"],          # allocates an MFD slot and a block
+    # A link WRITES INTO THE DESCRIPTOR AREA at an offset read off the damaged
+    # disk (UDESCP), which is the same shape as `put`'s descriptor write with
+    # none of the allocation -- so a damaged UDESCP reaches it directly.
+    ["ln", "@", "TEST;HELLO TXT", "TEST;FUZZL X"],
+    ["ln", "@", "EMPTY;NOSUCH FILE", "TEST;FUZZL Y"],
+    # Renaming MOVES an entry, so it memmoves inside the name area using
+    # UDNAMP and the entry's own word offset, both off the disk.
+    ["mv", "@", "TEST;HELLO TXT", "TEST;ZZZZZZ TXT"],
+    ["rmdir", "@", "EMPTY"],          # frees an MFD slot and zeroes its block
 ]
 
 # `mkfs` is deliberately absent: it overwrites the pack from nothing and reads
@@ -752,11 +761,15 @@ def main():
     # The writers ran on a damaged pack `iters` times each, plus once on the
     # undamaged control.  If these numbers are near zero the pass above proved
     # nothing, however green it looked.
-    for name in ("put", "del", "mkdir"):
+    seen = []
+    for c in WRITE_COMMANDS:
+        if c[0] not in seen:
+            seen.append(c[0])
+
+    for name in seen:
         n = sum(1 for c in WRITE_COMMANDS if c[0] == name)
-        if n:
-            print("  %-6s completed %d of %d attempts"
-                  % (name, DONE.get(name, 0), n * (args.iters + 1)))
+        print("  %-6s completed %d of %d attempts"
+              % (name, DONE.get(name, 0), n * (args.iters + 1)))
 
     # `tar` covers the readers and `tar x` together, since DONE is keyed on the
     # subcommand name.  If this is zero, every archive above was refused before

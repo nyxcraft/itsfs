@@ -1234,6 +1234,109 @@ out=$("$ITSFS" mv "$T/mv.dsk" 'KSHACK;BBB TXT' 'OTHER;BBB TXT' 2>&1); rc=$?
 chk "mv refuses to move between directories" "$rc" "2"
 has "...and says what to do instead" "$out" "put"
 
+# --- ln.  A link's "block list" IS its target's name: three components, DIR
+# then FN1 then FN2, six-bit bytes of (char - 040), written into the descriptor
+# area with UNLNKB set in the entry.  It allocates nothing.
+#
+# THE ENCODING WAS READ OFF A REAL PACK, because two of its three rules are only
+# visible in a case that has to be looked for -- see the note on link_encode in
+# write.c, which quotes the bytes ITS wrote for three links.  What is checked
+# here is that a link this makes reads back as the link that was asked for, and
+# that `check` and the reader agree it is one.
+
+"$ITSFS" mkfs "$T/ln.dsk" LNPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/ln.dsk" SYS >/dev/null 2>&1
+printf 'the target\r\n' > "$T/lnt.txt"
+"$ITSFS" put "$T/ln.dsk" 'SYS;TS LISP' "$T/lnt.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;TS LISP' 'SYS;TS L' 2>&1); rc=$?
+chk "ln makes a link" "$rc" "0"
+
+out=$("$ITSFS" ls -l "$T/ln.dsk" SYS 2>&1)
+has "...that the reader reads as a link" "$out" "link"
+has "...with the target it was given" "$out" "-> SYS;TS LISP"
+
+out=$("$ITSFS" check "$T/ln.dsk" 2>&1); rc=$?
+chk "...and the pack checks clean" "$rc" "0"
+has "...counting it as a link, resolved" "$out" "1 links (0 of them unresolved)"
+
+# IT ALLOCATES NO BLOCKS.  A link owns none -- its target's name lives in the
+# descriptor area, which is inside the directory block that already exists.
+before=$("$ITSFS" free "$T/ln.dsk" 2>/dev/null | sed -n 's/^free  *\([0-9]*\) blocks.*/\1/p')
+"$ITSFS" ln "$T/ln.dsk" 'SYS;TS LISP' 'SYS;TS L2' >/dev/null 2>&1
+after=$("$ITSFS" free "$T/ln.dsk" 2>/dev/null | sed -n 's/^free  *\([0-9]*\) blocks.*/\1/p')
+chk "a link costs no blocks" "$before" "$after"
+
+# The name area is sorted and the monitor binary-searches it, so a link goes in
+# at its sorted position exactly as a file does.
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;TS LISP' 'SYS;AAA AAA' 2>&1); rc=$?
+chk "ln inserts in sorted position" "$rc" "0"
+out=$("$ITSFS" ls "$T/ln.dsk" SYS 2>&1 | grep -a '^[A-Z]' | head -1 | awk '{print $1}')
+chk "...at the front, where AAA belongs" "$out" "AAA"
+out=$("$ITSFS" check "$T/ln.dsk" 2>&1); rc=$?
+chk "...leaving the pack clean" "$rc" "0"
+
+# A LINK TO NOTHING IS ORDINARY.  ITS resolves a target when the file is opened,
+# and 7 of the 399 links on the reference pack point at a file that is not
+# there, so refusing to make one would be inventing a rule ITS does not have.
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;NOSUCH FILE' 'SYS;DANGLE X' 2>&1); rc=$?
+chk "ln makes a link to a file that is not there" "$rc" "0"
+out=$("$ITSFS" check "$T/ln.dsk" 2>&1)
+has "...and check reports it as unresolved rather than damaged" "$out" "unresolved"
+out=$("$ITSFS" check "$T/ln.dsk" 2>&1); rc=$?
+chk "...which is a note, not a problem" "$rc" "0"
+
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;TS LISP' 'SYS;TS L' 2>&1); rc=$?
+chk "ln refuses a name already in use" "$rc" "1"
+
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;TS LISP' 'NOSUCH;X Y' 2>&1); rc=$?
+chk "ln refuses a directory that is not there" "$rc" "1"
+
+out=$("$ITSFS" ln "$T/ln.dsk" 'SYS;lower CASE' 'SYS;X Y' 2>&1); rc=$?
+chk "ln refuses a target SIXBIT cannot hold" "$rc" "1"
+
+# --- and the round trip that link creation is what makes possible.
+"$ITSFS" tar c -m words "$T/lnk.tar" "$T/ln.dsk" >/dev/null 2>&1
+"$ITSFS" mkfs "$T/lnr.dsk" LNRT >/dev/null 2>&1
+out=$("$ITSFS" tar x -m words "$T/lnk.tar" "$T/lnr.dsk" 2>&1); rc=$?
+chk "tar x restores links rather than skipping them" "$rc" "0"
+has "...and says how many" "$out" "links"
+
+a=$("$ITSFS" ls -l "$T/ln.dsk" SYS 2>/dev/null | grep -ac -- "->")
+b=$("$ITSFS" ls -l "$T/lnr.dsk" SYS 2>/dev/null | grep -ac -- "->")
+chk "...all of them: $a out, $b back" "$a" "$b"
+
+a=$("$ITSFS" ls -l "$T/ln.dsk" SYS 2>/dev/null | sed -n 's/.*-> //p' | sort | tr '\n' ',')
+b=$("$ITSFS" ls -l "$T/lnr.dsk" SYS 2>/dev/null | sed -n 's/.*-> //p' | sort | tr '\n' ',')
+chk "...pointing where they pointed" "$a" "$b"
+
+out=$("$ITSFS" check "$T/lnr.dsk" 2>&1); rc=$?
+chk "...and the rebuilt pack checks clean" "$rc" "0"
+
+# A tar HARD link has no ITS meaning: an entry names blocks or it names another
+# entry.  Type 1 must be refused rather than guessed at.
+"$ITSFS" tar c "$T/hl.tar" "$T/ln.dsk" 'SYS;TS LISP' >/dev/null 2>&1
+if command -v python3 >/dev/null 2>&1; then
+	python3 - "$T/hl.tar" <<'PY' 2>/dev/null
+import sys
+b = bytearray(open(sys.argv[1], "rb").read())
+b[156] = ord("1")                       # typeflag: hard link
+b[157:257] = b"SYS/TS LISP".ljust(100, b"\0")
+s = 0
+b[148:156] = b" " * 8
+for i in range(512):
+    s += b[i]
+b[148:155] = ("%06o\0" % s).encode()
+b[155] = 0x20
+open(sys.argv[1], "wb").write(bytes(b))
+PY
+	"$ITSFS" mkfs "$T/hl.dsk" HLPACK >/dev/null 2>&1
+	out=$("$ITSFS" tar x -m words "$T/hl.tar" "$T/hl.dsk" 2>&1)
+	has "tar x refuses a hard link, by name" "$out" "no hard links"
+else
+	skip "tar x refuses a hard link, by name (no python3)"
+fi
+
 # --- rmdir.  It frees a SLOT, not blocks: a directory owns none, because the
 # NUDSL directory blocks are locked out when the file system is made.
 out=$("$ITSFS" rmdir "$T/mv.dsk" KSHACK 2>&1); rc=$?

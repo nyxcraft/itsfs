@@ -157,6 +157,10 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <td>rename a file in place — <strong>destructive</strong></td>
 </tr>
 <tr>
+<td><code>itsfs ln</code></td>
+<td>make a link — <strong>destructive</strong></td>
+</tr>
+<tr>
 <td><code>itsfs mkdir</code></td>
 <td>make a directory — <strong>destructive</strong></td>
 </tr>
@@ -284,6 +288,13 @@ where the old one sat would leave a directory that reads correctly to anything s
 and wrongly to the thing searching it, so the file would be there and ITS would not find
 it. It refuses a cross-directory rename: an entry's position in the MFD <em>is</em> its
 directory, and ITS has no operation that moves a file between them.</p>
+<p><code>ln</code> makes a link, whose &quot;block list&quot; <em>is</em> its target's name — three components
+written into the descriptor area with one bit set in the entry, so a link costs no blocks
+at all. The target need not exist: ITS resolves one when the file is opened, and 7 of the
+reference pack's 399 links point at nothing.</p>
+<pre><code class="language-console">$ itsfs ln work.dsk 'SYS;TS LISP' 'SYS;TS L'
+SYS;TS L -&gt; SYS;TS LISP
+</code></pre>
 <p><code>rmdir</code> frees a directory's MFD slot. It frees no blocks, because a directory owns none,
 and it refuses a directory that still holds files — that would strand every block they
 own, which is exactly the damage <code>check</code> exists to report.</p>
@@ -310,7 +321,9 @@ drwxr-xr-x 0/0               0 1970-01-01 07:00 KSHACK/
 <p>ITS's <code>DIR;FN1 FN2</code> becomes <code>DIR/FN1 FN2</code>, with a real directory member for each ITS
 directory, and an ITS link becomes a relative symlink. Name one or more directories, or
 <code>DIR;FN1 FN2</code> for a single file, to archive part of a pack. <code>tar t</code> lists an archive and
-<code>tar x</code> reads one back into an image.</p>
+<code>tar x</code> reads one back into an image — files, directories and links alike, so a pack
+round-trips whole. The reference pack's 6,303 entries go out to a tar and back into an
+empty file system with identical contents and identical block accounting.</p>
 <p><strong>A 36-bit word is not a byte, and <code>-m</code> says what to do about it.</strong> ITS text is five
 7-bit characters per word; anything else is best kept as the word itself in eight bytes,
 which is what <code>get -w</code> writes. <code>-m auto</code>, the default, decides per file by looking at the

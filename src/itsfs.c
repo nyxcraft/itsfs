@@ -67,6 +67,7 @@ static const struct subcmd {
 	{ "rm",       cmd_del,      "remove a file -- the same command as del"  },
 	{ "mkdir",    cmd_mkdir,    "make a directory (destructive)"            },
 	{ "mv",       cmd_mv,       "rename a file in place (destructive)"      },
+	{ "ln",       cmd_ln,       "make a link (destructive)"                 },
 	{ "rmdir",    cmd_rmdir,    "remove an empty directory (destructive)"   },
 	{ "mkfs",     cmd_mkfs,     "create a file system (destructive)"        },
 	{ "tape",     cmd_tape,     "SIMH .tap record framing (container only)"  },

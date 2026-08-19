@@ -145,6 +145,16 @@ int itsw_rmdir(its_writer *w, const char *name);
 int itsw_have_dir(its_writer *w, const char *name);
 
 /*
+ * Make a link: an entry whose descriptor holds its TARGET'S NAME rather than a
+ * block list, with UNLNKB set.  Allocates nothing, because a link owns no
+ * blocks.  The target need not exist -- 7 of the 399 links on the reference
+ * pack point at nothing, and ITS resolves a target when the file is opened, not
+ * when the link is made.
+ */
+int itsw_link(its_writer *w, const char *dir, const char *fn1, const char *fn2,
+	      const char *tdir, const char *tfn1, const char *tfn2);
+
+/*
  * Create a file system on an image, ITS's own way.
  *
  * `nuds` is how many directory slots the MFD has room for -- a monitor
