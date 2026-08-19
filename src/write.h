@@ -155,6 +155,15 @@ int itsw_link(its_writer *w, const char *dir, const char *fn1, const char *fn2,
 	      const char *tdir, const char *tfn1, const char *tfn2);
 
 /*
+ * Set the pack's ID and/or its number -- QPAKID and QPKNUM in the allocation
+ * table's header.  Either may be NULL to leave it alone.
+ *
+ * The one writer with no ordering rule: a label is referenced by nothing
+ * structural, so there is no half-changed state to leave behind.
+ */
+int itsw_labelit(its_writer *w, const char *id, const int64_t *packnum);
+
+/*
  * Create a file system on an image, ITS's own way.
  *
  * `nuds` is how many directory slots the MFD has room for -- a monitor

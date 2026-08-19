@@ -423,7 +423,14 @@ sh_stat(struct sh *s, const char *fn1, const char *fn2)
 	printf("  flags    %s\n", e.deleted ? "UNIGFL set -- ignore this entry" : "none set");
 	printf("UNDATE     %012llo\n", (unsigned long long)e.date);
 	printf("  written  %u-%02u-%u\n", e.day, e.month, e.year);
-	printf("  UNTIM    %u  (raw; the unit is not established -- see docs)\n", e.time);
+	/* Half-seconds since midnight -- see the note in its.h, which quotes the
+	 * two places the monitor says so.  All ones is "unknown", the same
+	 * sentinel ITS writes into a DUMP volume header. */
+	if (e.time == 0777777)
+		printf("  UNTIM    %u  (all ones: no time recorded)\n", e.time);
+	else
+		printf("  UNTIM    %u  (%02u:%02u:%02u%s)\n", e.time, e.time / 2 / 3600,
+		       e.time / 2 % 3600 / 60, e.time / 2 % 60, (e.time & 1) ? ".5" : "");
 	printf("UNREF      %012llo\n", (unsigned long long)e.ref);
 	/*
 	 * UNAUTH IS A DIRECTORY, BY BLOCK NUMBER, and this is where that was

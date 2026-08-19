@@ -73,6 +73,7 @@ static const struct subcmd {
 	{ "cp",       cmd_cp,       "copy a file within a pack (destructive)"   },
 	{ "rmdir",    cmd_rmdir,    "remove an empty directory (destructive)"   },
 	{ "mkfs",     cmd_mkfs,     "create a file system (destructive)"        },
+	{ "labelit",  cmd_labelit,  "read or set the pack ID and number"        },
 	{ "tape",     cmd_tape,     "SIMH .tap record framing (container only)"  },
 	{ "saveset",  cmd_saveset,  "list or extract an ITS DUMP save set"      },
 	{ "save",     cmd_save,     "write a DUMP save set from files on a pack" },

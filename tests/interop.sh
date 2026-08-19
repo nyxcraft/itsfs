@@ -65,6 +65,28 @@ IMAGE=${2:?usage: interop.sh <itsfs> <image> <pdp10> [scratch]}
 PDP10=${3:?usage: interop.sh <itsfs> <image> <pdp10> [scratch]}
 T=${4:-/tmp/itsfs-interop}
 
+# ---------------------------------------------------------------------------
+# KILL THE EMULATOR ON THE WAY OUT, and this is not a tidiness measure.
+#
+# The emulator is spawned by expect, not by this script, so when the expect
+# script exits with SIMH still sitting at its prompt, SIMH is orphaned onto
+# init and SPINS AT 100%% OF A CORE FOREVER.  That is not hypothetical: five of
+# them were found running two and three days after the runs that started them,
+# ~96%% CPU each, and nothing in this suite would ever have noticed.
+#
+# Matched on the BINARY and on this run's own directory, so it cannot touch an
+# emulator somebody else is using -- and by walking `ps` rather than
+# `pkill -f "$T"`, which would also match this script's own command line when the
+# directory was passed as an argument, and kill the harness mid-run.
+emu_cleanup() {
+	for _p in $(ps -eo pid,args 2>/dev/null |
+		awk -v d="$T" '$0 ~ d && ($2 ~ /pdp10$/ || $2 ~ /kn10/) { print $1 }'); do
+		kill "$_p" 2>/dev/null || true
+	done
+}
+trap emu_cleanup EXIT INT TERM
+
+
 DIR=${DIR:-KSHACK}
 FN1=${FN1:-ITSFS}
 FN2=${FN2:-TXT}

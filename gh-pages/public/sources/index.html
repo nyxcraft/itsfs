@@ -120,7 +120,15 @@ ITS's own code instead now, and say so.</p>
 <tbody>
 <tr>
 <td><code>src/system/disk.1228</code></td>
-<td>that a &quot;track&quot; is a block (line 48); <code>QFL2</code>, the MFD-slot arithmetic</td>
+<td>that a &quot;track&quot; is a block (line 48); <code>QFL2</code>, the MFD-slot arithmetic; that <code>UNDATE</code>'s right half <em>is</em> <code>TIMOFF</code> (<code>HRR TT,TIMOFF</code>, lines 190 and 505)</td>
+</tr>
+<tr>
+<td><code>src/system/time.953</code></td>
+<td>that <code>TIMOFF</code> is &quot;the re-calculated number of HALF-SECONDS SINCE MIDNIGHT&quot; (line 346), which settles <code>UNTIM</code></td>
+</tr>
+<tr>
+<td><code>src/system/sysjob.119</code></td>
+<td>the same field again, from the other side: &quot;TIME OF DAY IN .5 SEC UNITS&quot; (line 1165)</td>
 </tr>
 <tr>
 <td><code>src/system/rp06.defs1</code> and the four beside it</td>

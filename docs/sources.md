@@ -78,7 +78,9 @@ Two other files in the same tree supplied facts that FSDEFS does not carry:
 
 | file | what it settled |
 |---|---|
-| `src/system/disk.1228` | that a "track" is a block (line 48); `QFL2`, the MFD-slot arithmetic |
+| `src/system/disk.1228` | that a "track" is a block (line 48); `QFL2`, the MFD-slot arithmetic; that `UNDATE`'s right half *is* `TIMOFF` (`HRR TT,TIMOFF`, lines 190 and 505) |
+| `src/system/time.953` | that `TIMOFF` is "the re-calculated number of HALF-SECONDS SINCE MIDNIGHT" (line 346), which settles `UNTIM` |
+| `src/system/sysjob.119` | the same field again, from the other side: "TIME OF DAY IN .5 SEC UNITS" (line 1165) |
 | `src/system/rp06.defs1` and the four beside it | the drive geometry table, per drive |
 
 one is not a source but a second opinion, and it is now used:

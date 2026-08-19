@@ -106,6 +106,15 @@ one.</li>
 <li>72 blocks <em>inside</em> the swapping area (below <code>QSWAPA</code>) are in use by files.
 <code>QSWAPA</code> is documented as &quot;new files will not be written lower than this&quot;, which
 is a rule about writing rather than a rule about what is there.</li>
+<li><strong><code>UNTIM</code> is half-seconds since midnight</strong>, and the monitor says so rather than
+the pack implying it. <code>disk.1228</code> builds <code>UNDATE</code> with <code>HRR TT,TIMOFF</code>, so the
+right half <em>is</em> <code>TIMOFF</code>; <code>time.953</code> stores it under the comment &quot;STORE
+RE-CALCULATED NUMBER OF HALF-SECONDS SINCE MIDNIGHT&quot;, one line below <code>LSH B,1 ;CONVERT TIME SINCE MIDNIGHT TO HALF-SECONDS</code>, and <code>sysjob.119</code> reads it as
+&quot;TIME OF DAY IN .5 SEC UNITS&quot;. The pack agrees, tightly: 6,019 of 6,056 entries
+hold a real value, every one below 2×86400, the largest 172,470 — 23:57:15,
+within 165 seconds of the top of the range. 4,158 exceed 86,400, which rules
+out plain seconds. Four hold all ones, which is the &quot;unknown&quot; ITS also writes
+into a DUMP volume header. <code>stat</code> prints the time of day.</li>
 <li><strong><code>UNAUTH</code> is the author's directory, by BLOCK number</strong> — and six entries on
 the pack say so. 6,050 of 6,056 carry all ones, which is &quot;no author&quot; and
 resolves to nothing; the six that do not are what settle the direction of the
@@ -163,7 +172,7 @@ perfectly ordinary UFD.</li>
 <tr>
 <td><code>UNDATE</code> fields</td>
 <td>four byte pointers</td>
-<td>three; <code>UNTIM</code>'s unit is unknown</td>
+<td>four; <code>UNTIM</code> is half-seconds since midnight</td>
 </tr>
 <tr>
 <td><code>UNREF</code> fields</td>

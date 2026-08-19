@@ -33,6 +33,7 @@ int cmd_ln(int argc, char **argv);
 int cmd_cp(int argc, char **argv);
 int cmd_rmdir(int argc, char **argv);
 int cmd_mkfs(int argc, char **argv);
+int cmd_labelit(int argc, char **argv);
 int cmd_tape(int argc, char **argv);
 int cmd_saveset(int argc, char **argv);
 int cmd_save(int argc, char **argv);

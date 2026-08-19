@@ -197,7 +197,7 @@
 
 /* in UNDATE */
 #define ITS_UN_TIM_P	0
-#define ITS_UN_TIM_S	18	/* UNTIM==2200,,    compacted creation time   [s] */
+#define ITS_UN_TIM_S	18	/* UNTIM==2200,,    time: half-seconds       [v] */
 #define ITS_UN_DAY_P	18
 #define ITS_UN_DAY_S	5	/* UNDAY==220500,,  day                       [v] */
 #define ITS_UN_MON_P	23
@@ -280,6 +280,28 @@
 #define ITS_LNK_SEP	033	/* no DEFSYM; NSALV LTYPE's `';`              [v] */
 #define ITS_LNK_QUOTE	032	/* no DEFSYM; NSALV LTYPE's `':`              [s] */
 /*
+ * UNTIM IS HALF-SECONDS SINCE MIDNIGHT, and this was `[s]` until the monitor was
+ * read rather than the field measured.  `disk.1228` builds UNDATE as
+ *
+ *      SKIPL TT,QDATE
+ *       HRR TT,TIMOFF          ;the right half IS TIMOFF
+ *      MOVEM TT,UNDATE(C)
+ *
+ * and TIMOFF is documented twice where it is maintained:
+ *
+ *      time.953:346    MOVEM B,TIMOFF  ;STORE RE-CALCULATED NUMBER OF
+ *                                       HALF-SECONDS SINCE MIDNIGHT
+ *      sysjob.119:1165 MOVE C,TIMOFF   ;TIME OF DAY IN .5 SEC UNITS.
+ *
+ * with `LSH B,1  ;CONVERT TIME SINCE MIDNIGHT TO HALF-SECONDS` immediately
+ * above the first, and a clock test written `64.*2-1` beside it.
+ *
+ * The pack agrees and the fit is tight: of 6,056 entries, 6,019 hold a real
+ * value and every one is below 2*86400; the largest is 172,470, which is
+ * 23:57:15 -- within 165 seconds of the top of the range.  4,158 of them exceed
+ * 86,400, which rules out plain seconds outright.  Four entries hold all ones,
+ * the same "unknown" ITS writes into a DUMP volume header.
+ *
  * [s] ON THE QUOTE IS NOT FOR WANT OF LOOKING.  Every one of the 296 distinct
  * link targets on the reference pack was checked, and the character set across
  * all of them is

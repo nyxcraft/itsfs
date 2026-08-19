@@ -49,6 +49,28 @@ BIN=${3:?usage: interop-klh10.sh <itsfs> <image> <klh10 bindir> <its tree> [scra
 ITS=${4:?usage: interop-klh10.sh <itsfs> <image> <klh10 bindir> <its tree> [scratch]}
 T=${5:-$(mktemp -d)}
 
+# ---------------------------------------------------------------------------
+# KILL THE EMULATOR ON THE WAY OUT, and this is not a tidiness measure.
+#
+# The emulator is spawned by expect, not by this script, so when the expect
+# script exits with SIMH still sitting at its prompt, SIMH is orphaned onto
+# init and SPINS AT 100%% OF A CORE FOREVER.  That is not hypothetical: five of
+# them were found running two and three days after the runs that started them,
+# ~96%% CPU each, and nothing in this suite would ever have noticed.
+#
+# Matched on the BINARY and on this run's own directory, so it cannot touch an
+# emulator somebody else is using -- and by walking `ps` rather than
+# `pkill -f "$T"`, which would also match this script's own command line when the
+# directory was passed as an argument, and kill the harness mid-run.
+emu_cleanup() {
+	for _p in $(ps -eo pid,args 2>/dev/null |
+		awk -v d="$T" '$0 ~ d && ($2 ~ /pdp10$/ || $2 ~ /kn10/) { print $1 }'); do
+		kill "$_p" 2>/dev/null || true
+	done
+}
+trap emu_cleanup EXIT INT TERM
+
+
 # The loader and DDT come from the ITS tree, not from the KLH10 build: they are
 # PDP-10 programs that KLH10 loads, not host binaries that KLH10 runs.
 LOADERS=$ITS/build/klh10

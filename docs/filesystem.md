@@ -234,10 +234,6 @@ endings; `itsfs cat` does not translate them, or anything else.
 
 What is not known. Each is `[s]` in `its.h`, and none of it is guessed at in code.
 
-**`UNTIM`, the compacted creation time.** 18 bits. The values seen are too large
-for seconds since midnight (132,288 on one file); half-seconds fits every sample,
-and that is a guess. `itsfs` prints the raw number and no time of day.
-
 **`UNBYTE`, byte size and odd-byte count.** FSDEFS gives four encodings by range:
 
 ```

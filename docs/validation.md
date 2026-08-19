@@ -62,9 +62,10 @@ This is the index.
 | the system's own `tar` reads and extracts an archive `tar c` wrote | second opinion | `make test` |
 | a link this project writes is byte-identical to one ITS wrote, in all three encodings | level 1 | by hand, see `link_encode` |
 | `UNAUTH` resolves to a directory whose identity fits the file, on all six entries that carry one | level 3 | by hand, see `cmd_shell.c` |
+| `UNTIM` is half-seconds since midnight — the monitor says so twice, and 6,019 entries fit the bound | level 3 | by hand, see `its.h` |
 | a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical | level 3 | by hand |
 | a pack read through the kernel gives the bytes `get` gives | level 3 | `make mount-test` |
-| 371 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| 384 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
 | 7,000 commands over damaged packs, tapes and tar archives | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
@@ -1087,7 +1088,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**371 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**384 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -1889,6 +1890,37 @@ The defence is the same each time and it is cheap: **make the check fail on
 purpose.** Point a link at a heading that does not exist. Grep for a string you
 know is on line 1. If the check still passes, it was never checking. Every guard
 added in this session was verified that way before being believed.
+
+## A passing test that ran for two days
+
+Five SIMH processes were found spinning at ~96% of a core each, two and three
+days after the runs that started them. Every one belonged to a harness here, and
+every one of those harnesses had reported **ok**.
+
+The emulator is spawned by `expect`, not by the shell script around it, so when
+the expect script exits with SIMH still sitting at its prompt, SIMH is orphaned
+onto `init` and never stops. Nothing in the suite looked, because nothing in the
+suite had any reason to: the assertions were all about what ITS *said*, and it
+had said the right things.
+
+What makes this worth a section is not the waste. It is that **a green result was
+not the whole result**, in a project whose entire method is refusing to accept a
+green result at face value. The check that would have caught it is trivial and
+was never written, because the harnesses were graded on what they *asserted*
+rather than on what they *left behind*.
+
+All six emulator harnesses now kill anything they started, matched on the binary
+and on their own run directory. Two details of that are load-bearing:
+
+- The match walks `ps` rather than using `pkill -f "$T"`. The obvious form also
+  matches the harness's own command line, whenever the directory was passed as an
+  argument — so it would kill the harness mid-run, which is a worse bug than the
+  one being fixed.
+- The trap fires on `INT` and `TERM` as well as `EXIT`, since an interrupted run
+  is exactly the case that produced the orphans.
+
+`make emu-clean` sweeps any that survive, because a harness killed with `-9`
+cannot run its own trap.
 
 ## What is not established
 

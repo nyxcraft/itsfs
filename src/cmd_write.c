@@ -835,3 +835,95 @@ usage:
 			"       DESTRUCTIVE.  Work on a copy.\n");
 	return 2;
 }
+
+/*
+ * `itsfs labelit [-p packing] [-d drive] [-n number] image [ID]`
+ *
+ * Read the pack's label, or set it.  With no ID and no `-n` it only reports,
+ * which makes the read the default and the write the thing you ask for.
+ */
+int
+cmd_labelit(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	int64_t num = -1;
+	int c, rc;
+
+	while ((c = getopt(argc, argv, "p:d:n:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		case 'n': {
+			uint64_t v;
+
+			if (parse_count(optarg, &v) != 0)
+				return 2;
+
+			num = (int64_t)v;
+			break;
+		}
+		default:
+			goto usage;
+		}
+	}
+
+	if (optind != argc - 1 && optind != argc - 2)
+		goto usage;
+
+	/* Read-only unless something is being set: opening for writing refuses
+	 * an image another process has open, and reporting a label should not. */
+	if (optind == argc - 1 && num < 0) {
+		its_image im;
+		its_tut t;
+
+		if (img_open(&im, argv[optind], pk, drv, 0) != 0)
+			return 1;
+
+		if (im.drv == NULL) {
+			fprintf(stderr, "itsfs: %s: no drive geometry -- name one with -d\n",
+				im.path);
+			img_close(&im);
+			return 1;
+		}
+
+		if (its_tut_read(&im, &t) != 0) {
+			img_close(&im);
+			return 1;
+		}
+
+		printf("ID     %s\n", t.pakid);
+		printf("number %llu\n", (unsigned long long)t.pknum);
+		its_tut_free(&t);
+		img_close(&im);
+		return 0;
+	}
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	rc = itsw_labelit(&w, optind == argc - 2 ? argv[optind + 1] : NULL,
+			  num >= 0 ? &num : NULL) == 0
+		     ? 0
+		     : 1;
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	if (rc == 0)
+		fprintf(stderr, "labelled %s\n", argv[optind]);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs labelit [-p packing] [-d drive] [-n number] image [ID]\n"
+			"       with no ID and no -n it reports the label and changes nothing\n"
+			"       DESTRUCTIVE when it sets one.  Work on a copy.\n");
+	return 2;
+}

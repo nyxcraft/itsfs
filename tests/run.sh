@@ -806,7 +806,12 @@ has "blocks shows the run rather than three numbers" "$out" "2000..2002 (3)"
 
 out=$(printf 'cd TEST\nstat HELLO TXT\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
 has "stat shows the raw words as well as the decoded fields" "$out" "UNRNDM"
-has "...including the ones nothing here interprets" "$out" "the unit is not established"
+# The point of this one is that stat shows fields this project does not ACT on,
+# so somebody investigating an unknown one can see it.  It used to assert on
+# UNTIM's "the unit is not established", which stopped being true when the
+# monitor settled it -- see its.h.  UNPKN is the field that is still inert here:
+# multi-pack is out of scope, and it is printed anyway.
+has "...including the ones nothing here acts on" "$out" "UNPKN"
 
 out=$(printf 'ls\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
 has "ls with no current directory says what to do" "$out" "cd DIR"
@@ -1618,6 +1623,58 @@ chk "save refuses a file that is not there" "$rc" "1"
 
 out=$("$ITSFS" save "$T/sv.dsk" "$T/w4.tap" 'NOTANAME' 2>&1); rc=$?
 chk "save refuses a name that is not DIR;FN1 FN2" "$rc" "1"
+
+# --- UNTIM, which stat decodes now.  It is half-seconds since midnight: the
+# monitor's own comments say so in two files (see its.h), and the reference pack
+# fits the bound tightly -- 6,019 real values, largest 172,470 = 23:57:15, and
+# 4,158 of them above 86,400, which rules out plain seconds.
+#
+# The fixture's entries carry no time, so what is checked here is the DECODE and
+# the sentinel rather than a value off a real pack.
+out=$(printf 'cd TEST\nstat HELLO TXT\nquit\n' | "$ITSFS" shell "$T/pack.dsk" 2>&1)
+has "stat decodes UNTIM as a time of day" "$out" "UNTIM"
+
+case $out in
+*"UNTIM    0  (00:00:00)"* | *"UNTIM    0  (all ones"*)
+	ok "...and zero reads as midnight rather than as raw" ;;
+*)
+	no "...and zero reads as midnight rather than as raw (got: $(echo "$out" | grep -a UNTIM))" ;;
+esac
+
+# --- labelit.  `mkfs` wrote QPAKID and QPKNUM and nothing else ever touched
+# them, which made a pack's label the one thing on it that could not be
+# corrected without rebuilding the file system.  It is also the only write here
+# with no ordering rule to obey: a label is referenced by nothing structural, so
+# there is no half-changed state it could leave.
+
+"$ITSFS" mkfs "$T/lab.dsk" OLDPAK >/dev/null 2>&1
+
+out=$("$ITSFS" labelit "$T/lab.dsk" 2>&1); rc=$?
+chk "labelit reports a label" "$rc" "0"
+has "...the ID mkfs wrote" "$out" "OLDPAK"
+has "...and the pack number" "$out" "number 0"
+
+out=$("$ITSFS" labelit -n 3 "$T/lab.dsk" NEWPAK 2>&1); rc=$?
+chk "labelit sets both" "$rc" "0"
+
+out=$("$ITSFS" labelit "$T/lab.dsk" 2>&1)
+has "...and it reads back" "$out" "NEWPAK"
+has "...number and all" "$out" "number 3"
+
+# `free` reads the same two words by a different path, so it is the check that
+# the label went where the rest of the program looks for it.
+out=$("$ITSFS" free "$T/lab.dsk" 2>&1)
+has "free sees the new label too" "$out" "NEWPAK (number 3)"
+
+out=$("$ITSFS" check "$T/lab.dsk" 2>&1); rc=$?
+chk "...and the pack still checks clean" "$rc" "0"
+
+out=$("$ITSFS" labelit "$T/lab.dsk" lower 2>&1); rc=$?
+chk "labelit refuses an ID SIXBIT cannot hold" "$rc" "1"
+
+out=$("$ITSFS" labelit -n 999999999 "$T/lab.dsk" X 2>&1); rc=$?
+chk "labelit refuses a pack number wider than 18 bits" "$rc" "1"
+has "...saying what the range is" "$out" "18 bits"
 
 # --- cp.  It may cross directories, unlike mv, and the difference is what a
 # failure leaves behind: a copy reads one entry and writes a second, so an

@@ -332,9 +332,6 @@ endings; <code>itsfs cat</code> does not translate them, or anything else.</p>
 <hr />
 <h2 id="gap-register">Gap register</h2>
 <p>What is not known. Each is <code>[s]</code> in <code>its.h</code>, and none of it is guessed at in code.</p>
-<p><strong><code>UNTIM</code>, the compacted creation time.</strong> 18 bits. The values seen are too large
-for seconds since midnight (132,288 on one file); half-seconds fits every sample,
-and that is a guess. <code>itsfs</code> prints the raw number and no time of day.</p>
 <p><strong><code>UNBYTE</code>, byte size and odd-byte count.</strong> FSDEFS gives four encodings by range:</p>
 <pre><code>400+100xS+C    S=1 to 3      C=0 to 35.
 200+20xS+C     S=4 to 7      C=0 to 8

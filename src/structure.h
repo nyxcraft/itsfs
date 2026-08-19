@@ -101,7 +101,7 @@ typedef struct {
 	unsigned author; /* UNAUTH: the author's DIRECTORY, by block; 0777 none */
 	unsigned bytesz; /* UNBYTE, raw */
 	unsigned year, month, day;
-	unsigned time; /* UNTIM, raw -- see its.h, the unit is not settled */
+	unsigned time; /* UNTIM: half-seconds since midnight; 0777777 unknown */
 	int is_link;
 	int deleted; /* any of UNIGFL set */
 	uint64_t rndm, date, ref;

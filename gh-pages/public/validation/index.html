@@ -89,6 +89,7 @@
 <li><a class="section-nav__link section-nav__link--l3" href="#the-rest-of-them-counted">The rest of them, counted</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#the-tool-you-verify-with-can-lie-by-omission">The tool you verify with can lie by omission</a></li>
 <li><a class="section-nav__link section-nav__link--l3" href="#it-happened-three-times-which-makes-it-a-pattern-rather-than-an-anecdote">It happened three times, which makes it a pattern rather than an anecdote</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#a-passing-test-that-ran-for-two-days">A passing test that ran for two days</a></li>
 <li><a class="section-nav__link section-nav__link--l2" href="#what-is-not-established">What is not established</a></li>
 </ul>
         </nav>
@@ -229,6 +230,11 @@ This is the index.</p>
 <td>by hand, see <code>cmd_shell.c</code></td>
 </tr>
 <tr>
+<td><code>UNTIM</code> is half-seconds since midnight — the monitor says so twice, and 6,019 entries fit the bound</td>
+<td>level 3</td>
+<td>by hand, see <code>its.h</code></td>
+</tr>
+<tr>
 <td>a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical</td>
 <td>level 3</td>
 <td>by hand</td>
@@ -239,7 +245,7 @@ This is the index.</p>
 <td><code>make mount-test</code></td>
 </tr>
 <tr>
-<td>371 checks, a third of them on packs damaged on purpose</td>
+<td>384 checks, a third of them on packs damaged on purpose</td>
 <td>level 3</td>
 <td><code>make test</code></td>
 </tr>
@@ -1156,7 +1162,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>371 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>384 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no
@@ -1905,6 +1911,32 @@ occasionally hand you the second while you record the first.</p>
 purpose.</strong> Point a link at a heading that does not exist. Grep for a string you
 know is on line 1. If the check still passes, it was never checking. Every guard
 added in this session was verified that way before being believed.</p>
+<h2 id="a-passing-test-that-ran-for-two-days">A passing test that ran for two days</h2>
+<p>Five SIMH processes were found spinning at ~96% of a core each, two and three
+days after the runs that started them. Every one belonged to a harness here, and
+every one of those harnesses had reported <strong>ok</strong>.</p>
+<p>The emulator is spawned by <code>expect</code>, not by the shell script around it, so when
+the expect script exits with SIMH still sitting at its prompt, SIMH is orphaned
+onto <code>init</code> and never stops. Nothing in the suite looked, because nothing in the
+suite had any reason to: the assertions were all about what ITS <em>said</em>, and it
+had said the right things.</p>
+<p>What makes this worth a section is not the waste. It is that <strong>a green result was
+not the whole result</strong>, in a project whose entire method is refusing to accept a
+green result at face value. The check that would have caught it is trivial and
+was never written, because the harnesses were graded on what they <em>asserted</em>
+rather than on what they <em>left behind</em>.</p>
+<p>All six emulator harnesses now kill anything they started, matched on the binary
+and on their own run directory. Two details of that are load-bearing:</p>
+<ul>
+<li>The match walks <code>ps</code> rather than using <code>pkill -f &quot;$T&quot;</code>. The obvious form also
+matches the harness's own command line, whenever the directory was passed as an
+argument — so it would kill the harness mid-run, which is a worse bug than the
+one being fixed.</li>
+<li>The trap fires on <code>INT</code> and <code>TERM</code> as well as <code>EXIT</code>, since an interrupted run
+is exactly the case that produced the orphans.</li>
+</ul>
+<p><code>make emu-clean</code> sweeps any that survive, because a harness killed with <code>-9</code>
+cannot run its own trap.</p>
 <h2 id="what-is-not-established">What is not established</h2>
 <p>Stated plainly, because a validation document that only lists successes is
 marketing:</p>

@@ -1534,3 +1534,57 @@ out:
 		its_ufd_free(&u);
 	return rc;
 }
+
+/* --------------------------------------------------------------- labelit */
+
+/*
+ * Read or set the pack's ID and number: QPAKID and QPKNUM, words 1 and 0 of the
+ * allocation table's header.
+ *
+ * `mkfs` writes both and nothing else ever touched them, which made a pack's
+ * label the one thing on it that could not be corrected without rebuilding the
+ * whole file system.  The label is not referenced by anything structural -- no
+ * descriptor, no directory, no allocation -- so writing it is a single word and
+ * cannot leave the pack half-changed.  That is why this is the one writer with
+ * no ordering rule to obey.
+ */
+int
+itsw_labelit(its_writer *w, const char *id, const int64_t *packnum)
+{
+	its_tut t;
+	uint64_t sixid = 0;
+	int rc = -1;
+
+	if (id != NULL && (its_sixbit_make(id, &sixid) != 0 || id[0] == '\0')) {
+		fprintf(stderr, "itsfs: '%s' is not a SIXBIT pack ID: at most six characters, "
+				"040..137, and there is no lower case\n",
+			id);
+		return -1;
+	}
+
+	if (packnum != NULL && (*packnum < 0 || *packnum > 0777777)) {
+		fprintf(stderr, "itsfs: a pack number is 18 bits: 0 to %d\n", 0777777);
+		return -1;
+	}
+
+	if (its_tut_read(&w->im, &t) != 0)
+		return -1;
+
+	if (id != NULL)
+		t.w[ITS_Q_PAKID] = sixid;
+
+	if (packnum != NULL)
+		t.w[ITS_Q_PKNUM] = (uint64_t)*packnum;
+
+	if (id != NULL || packnum != NULL) {
+		/* The header is in the table's FIRST block, so only that one is
+		 * written back -- the other three hold nothing this touched. */
+		if (put_block(w, its_tut_block(w->im.drv), t.w, w->wpb) != 0)
+			goto out;
+	}
+
+	rc = 0;
+out:
+	its_tut_free(&t);
+	return rc;
+}

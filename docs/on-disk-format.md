@@ -65,6 +65,16 @@ still not:
 - 72 blocks *inside* the swapping area (below `QSWAPA`) are in use by files.
   `QSWAPA` is documented as "new files will not be written lower than this", which
   is a rule about writing rather than a rule about what is there.
+- **`UNTIM` is half-seconds since midnight**, and the monitor says so rather than
+  the pack implying it. `disk.1228` builds `UNDATE` with `HRR TT,TIMOFF`, so the
+  right half *is* `TIMOFF`; `time.953` stores it under the comment "STORE
+  RE-CALCULATED NUMBER OF HALF-SECONDS SINCE MIDNIGHT", one line below `LSH B,1
+  ;CONVERT TIME SINCE MIDNIGHT TO HALF-SECONDS`, and `sysjob.119` reads it as
+  "TIME OF DAY IN .5 SEC UNITS". The pack agrees, tightly: 6,019 of 6,056 entries
+  hold a real value, every one below 2×86400, the largest 172,470 — 23:57:15,
+  within 165 seconds of the top of the range. 4,158 exceed 86,400, which rules
+  out plain seconds. Four hold all ones, which is the "unknown" ITS also writes
+  into a DUMP volume header. `stat` prints the time of day.
 - **`UNAUTH` is the author's directory, by BLOCK number** — and six entries on
   the pack say so. 6,050 of 6,056 carry all ones, which is "no author" and
   resolves to nothing; the six that do not are what settle the direction of the
@@ -95,7 +105,7 @@ Stated by FSDEFS. The full transcription with evidence markers is
 | UFD header words | all five | four of five; `UDALLO` read but not interpreted |
 | name block words | all five | yes |
 | `UNRNDM` fields | four byte pointers | all four |
-| `UNDATE` fields | four byte pointers | three; `UNTIM`'s unit is unknown |
+| `UNDATE` fields | four byte pointers | four; `UNTIM` is half-seconds since midnight |
 | `UNREF` fields | three byte pointers | `UNAUTH` on six entries, all-ones on the other 6,050; `UNBYTE` zero everywhere |
 | flag bits | five values | one (`UNLINK`); the field's width is deduced |
 | descriptor opcodes | five kinds | four; the skip codes are unreachable in ITS itself |

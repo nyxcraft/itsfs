@@ -381,6 +381,17 @@ fuzz: $(OBJSRC) $(HDRS) | $(BIN)
 
 ITERS ?= 100
 
+# A SWEEP, for emulators an interrupted run left behind.  The harnesses trap
+# their own now, but a `kill -9` of a harness cannot run a trap, and an orphaned
+# SIMH spins at 100%% of a core indefinitely -- five of them once ran for two
+# days.  Matched on the binary, and it says what it is about to kill.
+emu-clean:
+	@ps -eo pid,etime,args 2>/dev/null | awk '$$3 ~ /(pdp10|kn10-ks-its)$$/ \
+	   { print "  killing", $$1, "(up", $$2 ")"; print $$1 > "/dev/stderr" }' \
+	 | grep killing || echo "  no emulator processes"
+	@ps -eo pid,args 2>/dev/null | awk '$$2 ~ /(pdp10|kn10-ks-its)$$/ { print $$1 }' \
+	 | xargs -r kill 2>/dev/null || true
+
 clean:
 	rm -rf $(BIN)
 
