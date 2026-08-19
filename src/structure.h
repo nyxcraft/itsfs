@@ -68,6 +68,14 @@ int its_mfd_dir(const its_mfd *m, unsigned i, char name[ITS_NAME_MAX], uint64_t 
  * were the same call.
  */
 unsigned its_mfd_ndirs(const its_mfd *m);
+
+/*
+ * The directory whose UFD is in `blk`, if the MFD names one.  1 found, 0 not.
+ *
+ * This is what reads UNAUTH: an entry's author is a DIRECTORY, recorded by the
+ * block its UFD occupies -- see cmd_shell.c for how that was settled.
+ */
+int its_dir_by_block(const its_mfd *m, uint64_t blk, char name[ITS_NAME_MAX]);
 unsigned its_mfd_slots(const its_mfd *m);
 
 /* A user file directory: also one block, also held whole. */
@@ -90,7 +98,7 @@ typedef struct {
 	unsigned desc;	 /* UNDSCP: six-bit byte offset of the descriptor */
 	unsigned pack;	 /* UNPKN */
 	unsigned lastwc; /* UNWRDC: words in the last block; 0 means full */
-	unsigned author; /* UNAUTH; all ones means "no directory" */
+	unsigned author; /* UNAUTH: the author's DIRECTORY, by block; 0777 none */
 	unsigned bytesz; /* UNBYTE, raw */
 	unsigned year, month, day;
 	unsigned time; /* UNTIM, raw -- see its.h, the unit is not settled */

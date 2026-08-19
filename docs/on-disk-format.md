@@ -65,8 +65,15 @@ still not:
 - 72 blocks *inside* the swapping area (below `QSWAPA`) are in use by files.
   `QSWAPA` is documented as "new files will not be written lower than this", which
   is a rule about writing rather than a rule about what is there.
-- Every `UNAUTH` on the pack is all ones — "no directory" — so nothing has ever
-  resolved an author index.
+- **`UNAUTH` is the author's directory, by BLOCK number** — and six entries on
+  the pack say so. 6,050 of 6,056 carry all ones, which is "no author" and
+  resolves to nothing; the six that do not are what settle the direction of the
+  indexing, which `FSDEFS` leaves open by calling it an "MFD index". Read as slot
+  indices they land in empty slots. Read as UFD block numbers every one names a
+  real directory, and the names are the argument rather than the arithmetic:
+  `EMACS;TSTCH 1` authored by `TEACH`, `EMACS;TSINFO 63` by `INFO`, `SYS3;TS
+  VIEW` by `KMP`, `MAXDMP;LOSER 1` by `ALJABR`. A wrong reading would have to
+  produce six plausible authors by luck. `stat` resolves it.
 - Every `UNBYTE` on the pack is zero, meaning 36-bit bytes, including on files
   that are plainly seven-bit text. Three of the four `UNBYTE` encodings have
   therefore never been exercised.
@@ -89,7 +96,7 @@ Stated by FSDEFS. The full transcription with evidence markers is
 | name block words | all five | yes |
 | `UNRNDM` fields | four byte pointers | all four |
 | `UNDATE` fields | four byte pointers | three; `UNTIM`'s unit is unknown |
-| `UNREF` fields | three byte pointers | one; `UNAUTH` all-ones everywhere, `UNBYTE` zero everywhere |
+| `UNREF` fields | three byte pointers | `UNAUTH` on six entries, all-ones on the other 6,050; `UNBYTE` zero everywhere |
 | flag bits | five values | one (`UNLINK`); the field's width is deduced |
 | descriptor opcodes | five kinds | four; the skip codes are unreachable in ITS itself |
 | link encoding | with five examples | yes, and its documentation is wrong about the base |

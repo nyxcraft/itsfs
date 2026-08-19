@@ -81,11 +81,14 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 | `itsfs check` | check a pack — **shares no code with the reader** |
 | `itsfs manifest` | fingerprint a pack: one line per directory, file and link |
 | `itsfs verify` | diff a pack against a manifest |
+| `itsfs ncheck` | which file claims a block — the inverse of a descriptor |
+| `itsfs du` | blocks and words per directory |
 | `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
 | `itsfs put` | write a host file into a directory — **destructive** |
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
 | `itsfs mv` | rename a file in place — **destructive** |
 | `itsfs ln` | make a link — **destructive** |
+| `itsfs cp` | copy a file within a pack — **destructive** |
 | `itsfs mkdir` | make a directory — **destructive** |
 | `itsfs rmdir` | remove an empty directory — **destructive** |
 | `itsfs mkfs` | create a file system from nothing — **destructive** |
@@ -142,6 +145,25 @@ search from   block 3102 (QTUTP)
 free              6719 blocks   17.6%
 in use           30940 blocks   81.1%
 locked out         505 blocks    1.3%
+```
+
+`ncheck` answers the question a descriptor cannot: given a block, which file holds it?
+Nothing on the disk indexes that way, so it is a walk of every descriptor on the pack —
+which means asking about twenty blocks costs what asking about one does.
+
+```console
+$ itsfs ncheck rp0.dsk 16074 19081
+16074    KSHACK;NSALV 261
+19081    no file claims it, and the table says locked out
+```
+
+`du` totals each directory. ITS has two levels and no nesting, so a directory *is* a
+subtree and nothing recurses; a directory's own `UDBLKS` is printed against the sum of
+its files, because the two disagreeing is worth seeing.
+
+```console
+$ itsfs du rp0.dsk | tail -1
+   30940 28497505  5657   399  total, in 247 directories
 ```
 
 `check` walks the pack independently of the reader and reconciles what the files claim
@@ -201,7 +223,15 @@ reference pack's 399 links point at nothing.
 ```console
 $ itsfs ln work.dsk 'SYS;TS LISP' 'SYS;TS L'
 SYS;TS L -> SYS;TS LISP
+$ itsfs cp work.dsk 'KSHACK;BUILD DOC' 'KSHACK;BUILD BAK'
+KSHACK;BUILD DOC -> KSHACK;BUILD BAK (7412 words)
 ```
+
+`cp` may cross directories where `mv` may not, and the difference is what a failure
+leaves: a copy reads one entry and writes a second, so an interruption leaves the source
+whole and the destination unmade. A link is copied **as a link**, pointing where the
+original points — following it would produce a pack with two copies of a file where ITS
+had one file and a reference to it.
 
 `rmdir` frees a directory's MFD slot. It frees no blocks, because a directory owns none,
 and it refuses a directory that still holds files — that would strand every block they
@@ -400,6 +430,7 @@ Full documentation: **[nyxcraft.github.io/itsfs](https://nyxcraft.github.io/itsf
 - [Geometry](docs/geometry.md) — why a block number is not an offset
 - [Word packing](docs/word-packing.md) — why the bottom layer is not a byte-order codec
 - [On-disk format](docs/on-disk-format.md) — confirmed facts, and what the source settles
+- [Containers](docs/containers.md) — tar, save sets and the mount, and words into bytes
 - [Sources](docs/sources.md) — where every constant comes from
 - [Validation](docs/validation.md) — how correctness is established here, and what has been
 

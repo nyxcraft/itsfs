@@ -141,6 +141,14 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <td>diff a pack against a manifest</td>
 </tr>
 <tr>
+<td><code>itsfs ncheck</code></td>
+<td>which file claims a block — the inverse of a descriptor</td>
+</tr>
+<tr>
+<td><code>itsfs du</code></td>
+<td>blocks and words per directory</td>
+</tr>
+<tr>
 <td><code>itsfs shell</code></td>
 <td>interactive explorer — <code>cd</code>, <code>ls</code>, <code>type</code>, <code>blocks</code>, <code>stat</code></td>
 </tr>
@@ -159,6 +167,10 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <tr>
 <td><code>itsfs ln</code></td>
 <td>make a link — <strong>destructive</strong></td>
+</tr>
+<tr>
+<td><code>itsfs cp</code></td>
+<td>copy a file within a pack — <strong>destructive</strong></td>
 </tr>
 <tr>
 <td><code>itsfs mkdir</code></td>
@@ -248,6 +260,19 @@ free              6719 blocks   17.6%
 in use           30940 blocks   81.1%
 locked out         505 blocks    1.3%
 </code></pre>
+<p><code>ncheck</code> answers the question a descriptor cannot: given a block, which file holds it?
+Nothing on the disk indexes that way, so it is a walk of every descriptor on the pack —
+which means asking about twenty blocks costs what asking about one does.</p>
+<pre><code class="language-console">$ itsfs ncheck rp0.dsk 16074 19081
+16074    KSHACK;NSALV 261
+19081    no file claims it, and the table says locked out
+</code></pre>
+<p><code>du</code> totals each directory. ITS has two levels and no nesting, so a directory <em>is</em> a
+subtree and nothing recurses; a directory's own <code>UDBLKS</code> is printed against the sum of
+its files, because the two disagreeing is worth seeing.</p>
+<pre><code class="language-console">$ itsfs du rp0.dsk | tail -1
+   30940 28497505  5657   399  total, in 247 directories
+</code></pre>
 <p><code>check</code> walks the pack independently of the reader and reconciles what the files claim
 against what the table says:</p>
 <pre><code class="language-console">$ itsfs check rp0.dsk
@@ -294,7 +319,14 @@ at all. The target need not exist: ITS resolves one when the file is opened, and
 reference pack's 399 links point at nothing.</p>
 <pre><code class="language-console">$ itsfs ln work.dsk 'SYS;TS LISP' 'SYS;TS L'
 SYS;TS L -&gt; SYS;TS LISP
+$ itsfs cp work.dsk 'KSHACK;BUILD DOC' 'KSHACK;BUILD BAK'
+KSHACK;BUILD DOC -&gt; KSHACK;BUILD BAK (7412 words)
 </code></pre>
+<p><code>cp</code> may cross directories where <code>mv</code> may not, and the difference is what a failure
+leaves: a copy reads one entry and writes a second, so an interruption leaves the source
+whole and the destination unmade. A link is copied <strong>as a link</strong>, pointing where the
+original points — following it would produce a pack with two copies of a file where ITS
+had one file and a reference to it.</p>
 <p><code>rmdir</code> frees a directory's MFD slot. It frees no blocks, because a directory owns none,
 and it refuses a directory that still holds files — that would strand every block they
 own, which is exactly the damage <code>check</code> exists to report.</p>
@@ -452,6 +484,7 @@ V7/2.xBSD, <a href="https://github.com/nyxcraft/t10fs"><code>t10fs</code></a> re
 <li><a href="../geometry/index.html">Geometry</a> — why a block number is not an offset</li>
 <li><a href="../word-packing/index.html">Word packing</a> — why the bottom layer is not a byte-order codec</li>
 <li><a href="../on-disk-format/index.html">On-disk format</a> — confirmed facts, and what the source settles</li>
+<li><a href="../containers/index.html">Containers</a> — tar, save sets and the mount, and words into bytes</li>
 <li><a href="../sources/index.html">Sources</a> — where every constant comes from</li>
 <li><a href="../validation/index.html">Validation</a> — how correctness is established here, and what has been</li>
 </ul>

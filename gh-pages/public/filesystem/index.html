@@ -350,9 +350,14 @@ flags in that word sit. Not implemented, and not guessed at.</p>
 <code>UNCDEL</code> are given as values relative to the bit <code>UNLNKB</code> addresses. Their width
 is not stated anywhere; six bits is what the values need and does not collide
 with <code>UNWRDC</code> above them. Deduced, and marked as deduced.</p>
-<p><strong><code>UNAUTH</code>, the author.</strong> &quot;MFD index of author, all 1 =&gt; no directory&quot;. Every
-entry on the reference pack is all ones, so the index has never been resolved
-against the MFD and the direction of the indexing is untested.</p>
+<p><strong><code>UNAUTH</code>, the author.</strong> &quot;MFD index of author, all 1 =&gt; no directory&quot; — and
+the phrase &quot;MFD index&quot; is the ambiguity, because a directory has both a slot in
+the MFD name area and a block its UFD occupies. <strong>It is the block.</strong> 6,050 of the
+reference pack's 6,056 entries carry all ones and settle nothing, but six carry a
+real value, and those six decide it: as slot indices they point at empty slots,
+while as block numbers each names a directory whose identity fits the file --
+<code>EMACS;TSTCH 1</code> authored by <code>TEACH</code>, <code>EMACS;TSINFO 63</code> by <code>INFO</code>, <code>SYS3;TS VIEW</code>
+by <code>KMP</code>. <code>stat</code> resolves an author to its directory name.</p>
 <p><strong>Multi-pack file systems.</strong> <code>UNPKN</code> is a pack number in every name block, and
 <code>QTRSRV</code> names a secondary pack. Clearly provided for; entirely unexercised here.
 <code>t10fs</code> found two real bugs the first time it read a genuinely multi-unit

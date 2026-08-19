@@ -425,7 +425,31 @@ sh_stat(struct sh *s, const char *fn1, const char *fn2)
 	printf("  written  %u-%02u-%u\n", e.day, e.month, e.year);
 	printf("  UNTIM    %u  (raw; the unit is not established -- see docs)\n", e.time);
 	printf("UNREF      %012llo\n", (unsigned long long)e.ref);
-	printf("  UNAUTH   %o%s\n", e.author, e.author == 0777 ? "  (all ones: no directory)" : "");
+	/*
+	 * UNAUTH IS A DIRECTORY, BY BLOCK NUMBER, and this is where that was
+	 * settled.  FSDEFS calls it "MFD index of author, all 1 => no
+	 * directory", which leaves the direction of the indexing open, and the
+	 * docs recorded it as open because 6,050 of the reference pack's 6,056
+	 * entries carry all ones and resolve to nothing.
+	 *
+	 * SIX DO NOT, and they decide it.  Read as MFD slot indices they land in
+	 * empty slots; read as UFD BLOCK numbers every one of them names a real
+	 * directory, and the names are the argument: EMACS;TSTCH 1 authored by
+	 * TEACH, EMACS;TSINFO 63 by INFO, SYS3;TS VIEW by KMP.  A wrong reading
+	 * would have to produce six plausible authors by luck.
+	 */
+	if (e.author == 0777) {
+		printf("  UNAUTH   %o  (all ones: no author)\n", e.author);
+	}
+	else {
+		char adir[ITS_NAME_MAX];
+
+		if (its_dir_by_block(&s->mfd, e.author, adir))
+			printf("  UNAUTH   %o  (author: the directory %s, in block %u)\n",
+			       e.author, adir, e.author);
+		else
+			printf("  UNAUTH   %o  (no directory is in that block)\n", e.author);
+	}
 	printf("  UNBYTE   %o%s\n", e.bytesz, e.bytesz == 0 ? "  (36-bit bytes)" : "");
 
 	if (!e.is_link) {

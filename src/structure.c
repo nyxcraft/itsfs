@@ -103,6 +103,29 @@ its_mfd_slots(const its_mfd *m)
 	return (unsigned)((m->wpb - m->namp) / ITS_LMNBLK);
 }
 
+/*
+ * The directory whose UFD lives in this block, if any.  1 found, 0 not.
+ *
+ * The inverse of its_mfd_dir, and what makes UNAUTH readable: an entry's author
+ * is recorded as the author's directory, by BLOCK number.  See cmd_shell.c.
+ */
+int
+its_dir_by_block(const its_mfd *m, uint64_t blk, char name[ITS_NAME_MAX])
+{
+	for (unsigned i = 0; i < its_mfd_slots(m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(m, i, name, &b) != 0 || name[0] == '\0')
+			continue;
+
+		if (b == blk)
+			return 1;
+	}
+
+	name[0] = '\0';
+	return 0;
+}
+
 unsigned
 its_mfd_ndirs(const its_mfd *m)
 {

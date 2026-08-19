@@ -1619,6 +1619,84 @@ chk "save refuses a file that is not there" "$rc" "1"
 out=$("$ITSFS" save "$T/sv.dsk" "$T/w4.tap" 'NOTANAME' 2>&1); rc=$?
 chk "save refuses a name that is not DIR;FN1 FN2" "$rc" "1"
 
+# --- cp.  It may cross directories, unlike mv, and the difference is what a
+# failure leaves behind: a copy reads one entry and writes a second, so an
+# interruption leaves the source whole and the destination unmade.
+
+"$ITSFS" mkfs "$T/cp.dsk" CPPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/cp.dsk" SRC >/dev/null 2>&1
+"$ITSFS" mkdir "$T/cp.dsk" DST >/dev/null 2>&1
+printf 'copy me\r\n' > "$T/cp.txt"
+"$ITSFS" put "$T/cp.dsk" 'SRC;A TXT' "$T/cp.txt" >/dev/null 2>&1
+"$ITSFS" ln "$T/cp.dsk" 'SRC;A TXT' 'SRC;A LINK' >/dev/null 2>&1
+
+out=$("$ITSFS" cp "$T/cp.dsk" 'SRC;A TXT' 'DST;B TXT' 2>&1); rc=$?
+chk "cp copies a file across directories" "$rc" "0"
+
+"$ITSFS" get "$T/cp.dsk" 'DST;B TXT' "$T/cpb.txt" >/dev/null 2>&1
+
+if cmp -s "$T/cp.txt" "$T/cpb.txt"; then
+	ok "...with the same contents"
+else
+	no "...with the same contents"
+fi
+
+out=$("$ITSFS" ls "$T/cp.dsk" SRC 2>&1)
+has "...leaving the source where it was" "$out" "A"
+
+# A LINK IS COPIED AS A LINK, pointing where the original points.  Following it
+# would produce a pack with two copies of a file where ITS had one file and a
+# reference to it -- a different file system, quietly.
+out=$("$ITSFS" cp "$T/cp.dsk" 'SRC;A LINK' 'DST;B LINK' 2>&1); rc=$?
+chk "cp copies a link as a link" "$rc" "0"
+out=$("$ITSFS" ls -l "$T/cp.dsk" DST 2>&1)
+has "...still pointing where the original pointed" "$out" "-> SRC;A TXT"
+
+out=$("$ITSFS" check "$T/cp.dsk" 2>&1); rc=$?
+chk "...and the pack checks clean" "$rc" "0"
+
+out=$("$ITSFS" cp "$T/cp.dsk" 'SRC;NOSUCH TXT' 'DST;X TXT' 2>&1); rc=$?
+chk "cp refuses a source that is not there" "$rc" "1"
+
+out=$("$ITSFS" cp "$T/cp.dsk" 'SRC;A TXT' 'DST;B TXT' 2>&1); rc=$?
+chk "cp refuses a destination that exists" "$rc" "1"
+
+# --- ncheck.  The inverse of a descriptor: nothing on the disk indexes from a
+# block back to its file, so this is a walk of every descriptor on the pack.
+out=$("$ITSFS" du "$T/cp.dsk" 2>&1)
+has "du reports per directory" "$out" "SRC"
+has "...and a total" "$out" "total, in 2 directories"
+
+# du's totals must be check's totals -- two independent walks of the same pack.
+a=$("$ITSFS" du "$T/cp.dsk" 2>/dev/null | sed -n 's/^ *\([0-9]*\) .*total.*/\1/p')
+b=$("$ITSFS" check "$T/cp.dsk" 2>/dev/null | sed -n 's/^claimed *\([0-9]*\) blocks.*/\1/p')
+chk "du and check agree about the blocks in use: $a" "$a" "$b"
+
+# The block a file holds, asked for by number.  `blocks` in the shell says which
+# blocks a file has; this is the same fact from the other end.
+# The shell prints a single-block file's run as just the number, indented; a
+# multi-block run as `first..last (n)`.  Either way the first field of the first
+# run line is a block the file holds.
+blk=$(printf 'cd SRC\nblocks A TXT\nquit\n' | "$ITSFS" shell "$T/cp.dsk" 2>/dev/null |
+	sed -n '2s/^ *\([0-9]*\).*/\1/p')
+chk "the shell names a block the file holds" "$(expr "$blk" : '[0-9][0-9]*')" "${#blk}"
+
+out=$("$ITSFS" ncheck "$T/cp.dsk" "$blk" 2>&1)
+has "ncheck names the file that claims that block" "$out" "SRC;A TXT"
+
+# A block nothing claims, and the table's opinion of it.  Block 0 is inside the
+# swapping area and locked out on every pack this makes.
+out=$("$ITSFS" ncheck "$T/cp.dsk" 0 2>&1)
+has "ncheck says when no file claims a block" "$out" "no file claims it"
+has "...and what the table says about it" "$out" "locked out"
+
+out=$("$ITSFS" ncheck "$T/cp.dsk" 999999 2>&1); rc=$?
+died "$rc" && no "a block past the end of the drive does not crash ncheck" ||
+	ok "a block past the end of the drive does not crash ncheck"
+
+out=$("$ITSFS" ncheck "$T/cp.dsk" 2>&1); rc=$?
+chk "ncheck with no block is a usage error" "$rc" "2"
+
 # ------------------------------------------------------------ tar archives
 #
 # A pack in and out of an ordinary Unix tar.  The archive is graded three ways

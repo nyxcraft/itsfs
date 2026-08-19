@@ -603,9 +603,11 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 		 * last block that is exactly full records zero. */
 		u.w[at + ITS_UN_RNDM] = ((uint64_t)lastwc << ITS_UN_WRDC_P) | descoff;
 		u.w[at + ITS_UN_DATE] = 0;
-		/* UNAUTH all ones is "no directory", which is what every entry
-		 * on the reference pack carries.  Claiming an author this
-		 * project cannot name would be an invention. */
+		/* UNAUTH all ones is "no author".  Six entries on the reference
+		 * pack DO name one -- see cmd_shell.c, where that settled which
+		 * way the field indexes -- but this project has no directory to
+		 * claim as the author of what it writes, and inventing one would
+		 * be worse than recording none. */
 		u.w[at + ITS_UN_REF] = (uint64_t)0777 << ITS_UN_AUTH_P;
 	}
 

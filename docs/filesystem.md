@@ -259,9 +259,14 @@ flags in that word sit. Not implemented, and not guessed at.
 is not stated anywhere; six bits is what the values need and does not collide
 with `UNWRDC` above them. Deduced, and marked as deduced.
 
-**`UNAUTH`, the author.** "MFD index of author, all 1 => no directory". Every
-entry on the reference pack is all ones, so the index has never been resolved
-against the MFD and the direction of the indexing is untested.
+**`UNAUTH`, the author.** "MFD index of author, all 1 => no directory" — and
+the phrase "MFD index" is the ambiguity, because a directory has both a slot in
+the MFD name area and a block its UFD occupies. **It is the block.** 6,050 of the
+reference pack's 6,056 entries carry all ones and settle nothing, but six carry a
+real value, and those six decide it: as slot indices they point at empty slots,
+while as block numbers each names a directory whose identity fits the file --
+`EMACS;TSTCH 1` authored by `TEACH`, `EMACS;TSINFO 63` by `INFO`, `SYS3;TS VIEW`
+by `KMP`. `stat` resolves an author to its directory name.
 
 **Multi-pack file systems.** `UNPKN` is a pack number in every name block, and
 `QTRSRV` names a secondary pack. Clearly provided for; entirely unexercised here.

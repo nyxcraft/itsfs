@@ -57,6 +57,10 @@
       "tagline": "Confirmed, observed, sourced",
       "blurb": "Kept scrupulously apart: what has been measured on a real pack, what was observed before any theory existed, what the monitor source states, and — field by field — which of it has actually been exercised." },
 
+    { "slug": "containers", "source": "docs/containers.md", "group": "format",
+      "tagline": "Off the pack: tar, save sets, a mount",
+      "blurb": "The three ways a file leaves an ITS pack, and the question all of them have to answer: a 36-bit word is not a byte, and there are two honest ways to make bytes out of one. Also the percent-encoding that lets a directory named `.` exist on a host, why an mtime is noon rather than midnight, why links to `>` dangle, and why a mount is read-only." },
+
     { "slug": "sources", "source": "docs/sources.md", "group": "evidence",
       "title": "Sources",
       "tagline": "Where every constant comes from",

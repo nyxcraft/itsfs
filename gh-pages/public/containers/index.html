@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Containers | itsfs</title>
+  <meta name="description" content="Three ways off the pack, and the one question all three have to answer.">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="site-doc">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="page-shell">
+    <header class="site-header site-header--compact">
+      <a class="brand" href="../index.html">
+        <img class="brand__icon" src="../assets/logo-itsfs.svg" alt="" aria-hidden="true">
+        <span class="brand__name">itsfs</span><span class="brand__badge">all ten phases done: ITS opens a file this project wrote and prints it</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../overview/index.html">Overview</a>
+        <a href="../design/index.html">Design</a>
+        <a href="../roadmap/index.html">Roadmap</a>
+        <a href="https://github.com/nyxcraft/itsfs">GitHub</a>
+      </nav>
+    </header>
+
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="../index.html">Home</a>
+      <span class="breadcrumbs__sep" aria-hidden="true">›</span>
+      <span aria-current="page">Containers</span>
+    </nav>
+
+    <main id="main-content" class="docs-layout" tabindex="-1">
+      <aside class="docs-sidebar">
+        <p class="docs-sidebar__eyebrow">On this page</p>
+        <nav class="section-nav" aria-label="On this page">
+<ul class="section-nav__list">
+<li><a class="section-nav__link section-nav__link--l2" href="#the-question-every-one-of-them-asks">The question every one of them asks</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#names-that-are-not-path-components">Names that are not path components</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#tar--an-its-pack-as-an-ordinary-unix-archive">`tar` — an ITS pack as an ordinary Unix archive</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#what-round-tripping-proves">What round-tripping proves</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#saveset--itss-own-archive">`saveset` — ITS&#x27;s own archive</a></li>
+<li><a class="section-nav__link section-nav__link--l2" href="#mount--a-pack-on-a-directory">`mount` — a pack on a directory</a></li>
+<li><a class="section-nav__link section-nav__link--l3" href="#why-read-only-is-a-statement-about-the-writer">Why read-only is a statement about the writer</a></li>
+</ul>
+        </nav>
+      </aside>
+
+      <article class="docs-article">
+        <header class="docs-article__header">
+          <p class="eyebrow">Documentation</p>
+          <h1>Containers</h1>
+          <p class="docs-article__summary">Three ways off the pack, and the one question all three have to answer.</p>
+          <p class="docs-article__source">Containers</p>
+        </header>
+        <div class="prose">
+<p>Three ways off the pack, and the one question all three have to answer.</p>
+<p>A pack is 36-bit words. A tape, a tar member and a byte read through a mount are
+bytes. Everything on this page is about that gap, and about the formats that
+carry an ITS file somewhere else.</p>
+<h2 id="the-question-every-one-of-them-asks">The question every one of them asks</h2>
+<p><strong>A 36-bit word is not a byte, and there is no single right way to make bytes out
+of one.</strong> There are two honest ways and they are not interchangeable:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>what it is</th>
+<th>right for</th>
+<th>wrong for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>text</strong></td>
+<td>five 7-bit characters per word, most significant first</td>
+<td>source, documentation, mail — anything ITS calls text</td>
+<td>a binary, which it turns into garbage <em>silently</em></td>
+</tr>
+<tr>
+<td><strong>words</strong></td>
+<td>the word in an 8-byte little-endian container</td>
+<td>anything at all, losslessly</td>
+<td>reading, since it is not text any more</td>
+</tr>
+</tbody>
+</table>
+<p><code>cat</code> and <code>get</code> write text; <code>get -w</code> writes words. <code>tar</code> and <code>mount</code> take <code>-m</code>,
+which selects <code>text</code>, <code>words</code>, or <strong><code>auto</code></strong> — the default, which decides per
+file by looking at the words.</p>
+<p>The test for <code>auto</code> is deliberately strict, because a wrong answer is a mangled
+file. Five 7-bit characters occupy 35 of a word's 36 bits, so ITS text leaves the
+last bit clear in <em>every</em> word; that plus a small set of permitted control
+characters is the whole test. Anything that fails it is words, which is never
+wrong, only unreadable.</p>
+<p>Whichever way it goes, <strong>it is reported</strong>: <code>tar c</code> prints the tally, and <code>-v</code>
+names the representation used for every file.</p>
+<p>Going the other way, <code>tar x</code> <strong>refuses to guess</strong>. Bytes coming back do not say
+which they are, and a wrong guess writes a mangled file into a pack, so <code>-m text</code>
+or <code>-m words</code> has to be given.</p>
+<h2 id="names-that-are-not-path-components">Names that are not path components</h2>
+<p>SIXBIT runs from 040 to 0137, which includes <code>/</code>, <code>.</code>, <code>%</code> and the space. The
+reference pack uses three of the four, and one of them matters more than the
+others: <strong>there is a directory on it whose name is <code>.</code></strong>, holding <code>@ ITS</code>,
+<code>@ DDT</code> and <code>@ NSALV</code> — which is to say the monitor itself. A bare <code>.</code> is not a
+name a tar member or a mount path can have.</p>
+<p>So <code>tar</code> and <code>mount</code> share one percent-encoding, in <code>util.c</code>:</p>
+<table>
+<thead>
+<tr>
+<th>in an ITS name</th>
+<th>becomes</th>
+<th>why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>%</code></td>
+<td><code>%25</code></td>
+<td>always, or the encoding would not be reversible — ten names on the pack contain one</td>
+</tr>
+<tr>
+<td><code>/</code></td>
+<td><code>%2F</code></td>
+<td>it is the path separator</td>
+</tr>
+<tr>
+<td>space</td>
+<td><code>%20</code></td>
+<td>it separates <code>FN1</code> from <code>FN2</code> here</td>
+</tr>
+<tr>
+<td><code>.</code> or <code>..</code></td>
+<td><code>%2E</code>, <code>%2E%2E</code></td>
+<td>only when it is the <em>whole</em> component</td>
+</tr>
+</tbody>
+</table>
+<p>Nothing else is touched, so an ordinary name is itself: <code>KSHACK/BUILD DOC</code> reads
+as it should, and the directory named <code>.</code> appears as <code>%2E</code>.</p>
+<h2 id="tar--an-its-pack-as-an-ordinary-unix-archive"><code>tar</code> — an ITS pack as an ordinary Unix archive</h2>
+<p>USTAR (POSIX.1-1988): a 512-byte header, 512-byte blocks, two zero blocks at the
+end. No GNU or pax extensions are needed, because an ITS path is at most
+<code>DIR/FN1 FN2</code> — twenty characters against a 100-character name field — so what
+comes out is readable by every tar there is.</p>
+<ul>
+<li>ITS's <code>DIR;FN1 FN2</code> is tar's <code>DIR/FN1 FN2</code>, with a real directory member per
+ITS directory.</li>
+<li>An ITS <strong>link becomes a relative symlink</strong>, <code>../DIR/FN1 FN2</code>.</li>
+<li>Archiving a whole directory writes a directory member for it; archiving <em>files</em>
+by name writes only those, as tar does — and <code>tar x</code> creates a directory it
+does not find, also as tar does.</li>
+<li><code>tar x</code> restores files, directories <strong>and links</strong>, so a pack round-trips whole.
+A tar <em>hard</em> link is refused: ITS has no such thing, an entry names blocks or
+it names another entry.</li>
+</ul>
+<p><strong>Dates.</strong> An ITS date is a <em>day</em> — <code>UNDATE</code> holds year, month and day, and the
+time beside it is in a unit this project has not established. So an mtime here is
+<strong>noon UTC</strong> on the day the disk records. Not midnight: an mtime is an instant and
+every reader prints it in its own zone, so midnight on the 30th is the 29th to
+anybody west of Greenwich, and the date would change silently by extraction. Noon
+puts UTC-12 through UTC+11 on the day ITS actually wrote. A date before 1970
+becomes the epoch, because a ustar mtime is octal and cannot be negative — the
+reference pack has files dated 1969, and writing one as unsigned produced the
+year 2241 until <code>tar xf</code> said so.</p>
+<p><strong>Links to <code>&gt;</code> dangle</strong>, and that is the honest answer rather than a defect. <code>&gt;</code>
+is ITS's &quot;the highest version there is&quot;, resolved when a file is opened; 88 of
+the pack's 399 links point at one, and more chain to one through another link. A
+symlink is a fixed string, so there is nothing to point it at. The symlink still
+carries exactly what the disk records, so <code>readlink</code> shows the target ITS wrote.</p>
+<h3 id="what-round-tripping-proves">What round-tripping proves</h3>
+<p>The reference pack's <strong>6,303 entries</strong> — 5,657 files, 399 links, 247 directories
+— out to a tar archive and back into an empty file system built by <code>mkfs</code>, with:</p>
+<ul>
+<li>identical manifests, entry for entry: type, length and checksum</li>
+<li>identical block accounting: 30,940 in use, 6,719 free, 505 locked out</li>
+<li>the same 7 links unresolved</li>
+<li><code>check</code> finding no problems in the result</li>
+</ul>
+<h2 id="saveset--itss-own-archive"><code>saveset</code> — ITS's own archive</h2>
+<p>A <code>DUMP</code> save set is what ITS itself writes to tape, and <code>tape</code> is the SIMH <code>.tap</code>
+record framing under it. They are separate commands because they are separate
+formats, and because most ITS tapes are not save sets at all.</p>
+<p>This is the format to use when the other end is <strong>ITS</strong>: <code>make itsdump</code> compares
+a tape <code>save</code> wrote against one ITS's own DUMP wrote, byte for byte, and <code>make itsload</code> has ITS's own LOAD read one back — the only level-1 evidence in the
+project. See <a href="../validation/index.html">validation</a>.</p>
+<p><code>tar</code> is the format to use when the other end is <code>tar xf</code> and a text editor.</p>
+<h2 id="mount--a-pack-on-a-directory"><code>mount</code> — a pack on a directory</h2>
+<p>Read-only, and built only with <code>make FUSE=1</code>. libfuse3 is the project's one
+optional dependency; everything else is C99 and POSIX, and the file commands do
+the same work without a mount.</p>
+<pre><code>/                       the master file directory
+/KSHACK                 a directory
+/KSHACK/BUILD DOC       ITS's KSHACK;BUILD DOC
+/%2E/@ ITS              the directory named `.`, and the monitor in it
+</code></pre>
+<p>Two levels, because ITS has two. An ITS link is a symlink. <code>statfs</code> reports the
+allocation table, so <code>df</code> works.</p>
+<p><strong><code>stat</code> has to agree with <code>read</code></strong>, which is what makes a mount stricter than an
+archive: <code>st_size</code> is the length of the bytes <code>read()</code> will produce, so <code>getattr</code>
+decodes the file to measure it. <code>ls -l</code> of a directory therefore costs a decode
+per file. It is bounded work on a local image and it is the only way the two can
+agree.</p>
+<p><strong>Single-threaded</strong>, deliberately: <code>its_image</code> holds a file handle and a buffer
+and is not thread-safe, so <code>-s</code> is forced rather than left to the caller.</p>
+<h3 id="why-read-only-is-a-statement-about-the-writer">Why read-only is a statement about the writer</h3>
+<p>Not about FUSE. An ITS write is <strong>whole-file</strong>: <code>itsw_put</code> takes a complete file
+and writes data, then the allocation table, then the descriptor, then the name,
+in that order, so that an interruption strands blocks rather than losing a file.
+FUSE hands out byte-range writes at arbitrary offsets against a file that already
+exists. Bridging the two means holding a whole file in memory and flushing it on
+<code>release()</code> — a write-back cache with its own failure modes, in front of a writer
+whose first rule is <em>refuse, do not half-do</em>. That is a project rather than a
+flag, and it is <a href="../design/index.html">out of scope</a> until it is one.</p>
+
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Nicholas J. Kisseberth · <a href="../index.html">itsfs</a> · <a href="https://github.com/nyxcraft/itsfs">License</a></p>
+      <p class="site-footer__attr">Software Architecture, Design &amp; Engineering by Nicholas J. Kisseberth.</p>
+    </footer>
+  </div>
+
+  <script>
+  // Section viewer: split the page into one panel per H2 and show one at a time, driven by the
+  // left-rail "On this page" links (and any in-prose # link). Degrades to the full page when
+  // JavaScript is off -- the panels are only hidden once .js-sections is set here.
+  (function () {
+    var prose = document.querySelector('.prose');
+    if (!prose) return;
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.section-nav a[href^="#"]'));
+
+    var kids = Array.prototype.slice.call(prose.childNodes);
+    var groups = [], preface = [], cur = null;
+    kids.forEach(function (n) {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = { id: n.id, nodes: [n] }; groups.push(cur); }
+      else if (cur) { cur.nodes.push(n); }
+      else { preface.push(n); }
+    });
+    if (!groups.length) return;                 // no H2s -> leave the page as one scroll
+    groups[0].nodes = preface.concat(groups[0].nodes);
+
+    prose.innerHTML = '';
+    prose.classList.add('js-sections');
+    var anchorToSection = {};
+    var sections = groups.map(function (g) {
+      var s = document.createElement('section');
+      s.className = 'doc-section';
+      g.nodes.forEach(function (n) { s.appendChild(n); });
+      prose.appendChild(s);
+      Array.prototype.forEach.call(s.querySelectorAll('[id]'), function (el) { anchorToSection[el.id] = s; });
+      if (g.id) anchorToSection[g.id] = s;
+      return s;
+    });
+
+    function activate(anchor, scroll) {
+      var target = anchorToSection[anchor] || sections[0];
+      sections.forEach(function (s) { s.classList.toggle('is-active', s === target); });
+      navLinks.forEach(function (a) {
+        var id = decodeURIComponent(a.getAttribute('href').slice(1));
+        a.classList.toggle('is-active', anchorToSection[id] === target);
+      });
+      if (scroll) {
+        var el = (anchor && document.getElementById(anchor)) || target;
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+    function fromHash(scroll) { activate(decodeURIComponent((location.hash || '').slice(1)), scroll); }
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = decodeURIComponent(a.getAttribute('href').slice(1));
+      if (anchorToSection[id]) activate(id, true);
+    });
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    fromHash(false);
+  })();
+  </script>
+</body>
+</html>

@@ -106,8 +106,14 @@ one.</li>
 <li>72 blocks <em>inside</em> the swapping area (below <code>QSWAPA</code>) are in use by files.
 <code>QSWAPA</code> is documented as &quot;new files will not be written lower than this&quot;, which
 is a rule about writing rather than a rule about what is there.</li>
-<li>Every <code>UNAUTH</code> on the pack is all ones — &quot;no directory&quot; — so nothing has ever
-resolved an author index.</li>
+<li><strong><code>UNAUTH</code> is the author's directory, by BLOCK number</strong> — and six entries on
+the pack say so. 6,050 of 6,056 carry all ones, which is &quot;no author&quot; and
+resolves to nothing; the six that do not are what settle the direction of the
+indexing, which <code>FSDEFS</code> leaves open by calling it an &quot;MFD index&quot;. Read as slot
+indices they land in empty slots. Read as UFD block numbers every one names a
+real directory, and the names are the argument rather than the arithmetic:
+<code>EMACS;TSTCH 1</code> authored by <code>TEACH</code>, <code>EMACS;TSINFO 63</code> by <code>INFO</code>, <code>SYS3;TS VIEW</code> by <code>KMP</code>, <code>MAXDMP;LOSER 1</code> by <code>ALJABR</code>. A wrong reading would have to
+produce six plausible authors by luck. <code>stat</code> resolves it.</li>
 <li>Every <code>UNBYTE</code> on the pack is zero, meaning 36-bit bytes, including on files
 that are plainly seven-bit text. Three of the four <code>UNBYTE</code> encodings have
 therefore never been exercised.</li>
@@ -162,7 +168,7 @@ perfectly ordinary UFD.</li>
 <tr>
 <td><code>UNREF</code> fields</td>
 <td>three byte pointers</td>
-<td>one; <code>UNAUTH</code> all-ones everywhere, <code>UNBYTE</code> zero everywhere</td>
+<td><code>UNAUTH</code> on six entries, all-ones on the other 6,050; <code>UNBYTE</code> zero everywhere</td>
 </tr>
 <tr>
 <td>flag bits</td>

@@ -224,6 +224,11 @@ This is the index.</p>
 <td>by hand, see <code>link_encode</code></td>
 </tr>
 <tr>
+<td><code>UNAUTH</code> resolves to a directory whose identity fits the file, on all six entries that carry one</td>
+<td>level 3</td>
+<td>by hand, see <code>cmd_shell.c</code></td>
+</tr>
+<tr>
 <td>a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical</td>
 <td>level 3</td>
 <td>by hand</td>
@@ -234,7 +239,7 @@ This is the index.</p>
 <td><code>make mount-test</code></td>
 </tr>
 <tr>
-<td>354 checks, a third of them on packs damaged on purpose</td>
+<td>371 checks, a third of them on packs damaged on purpose</td>
 <td>level 3</td>
 <td><code>make test</code></td>
 </tr>
@@ -1151,7 +1156,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>354 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>371 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

@@ -33,6 +33,8 @@
 #include "its.h"
 #include "itspack.h"
 #include "itstext.h"
+#include "image.h"
+#include "structure.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -617,6 +619,219 @@ usage:
 			"       a name is 'DIR;FN1 FN2' or DIR FN1 FN2\n"
 			"       the target need not exist: ITS resolves one when the file is\n"
 			"       opened, and links to nothing are ordinary on a real pack\n"
+			"       DESTRUCTIVE.  Work on a copy.\n");
+	return 2;
+}
+
+/*
+ * `itsfs cp [-p packing] [-d drive] image SRC DST`
+ *
+ * Copy inside one pack.  Unlike `mv` this may cross directories, and the reason
+ * is the failure it can leave: a copy READS one entry and WRITES a second, so an
+ * interruption leaves the source untouched and the destination unmade.  A move
+ * across directories would have to unmake the source, and between the two the
+ * file's blocks would be claimed by neither directory.
+ *
+ * A LINK IS COPIED AS A LINK, pointing where the original points -- not
+ * followed.  Copying the data a link resolves to would silently produce a pack
+ * with two copies of one file where ITS had one file and a reference to it.
+ */
+int
+cmd_cp(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	its_writer w;
+	its_path from, to;
+	its_mfd m;
+	its_ufd u;
+	its_ent e;
+	uint64_t dirblk = 0, *blocks = NULL, *words = NULL, nwords = 0, got = 0;
+	const char *err = NULL;
+	long nb = 0;
+	unsigned idx;
+	int c, rc = 1, nargs, found = 0, have_ufd = 0;
+	char have[ITS_NAME_MAX];
+
+	while ((c = getopt(argc, argv, "p:d:")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	nargs = argc - optind - 1;
+
+	if (nargs == 2)
+		nargs = 1;
+	else if (nargs == 6)
+		nargs = 3;
+	else
+		goto usage;
+
+	if (its_parse_path(argv, optind + 1, nargs, &from) != 0 ||
+	    its_parse_path(argv, optind + 1 + nargs, nargs, &to) != 0)
+		return 2;
+
+	if (itsw_open(&w, argv[optind], pk, drv) != 0)
+		return 1;
+
+	/* ---- read the source, before anything is written */
+
+	if (its_mfd_read(&w.im, &m) != 0)
+		goto out;
+
+	for (unsigned i = 0; i < its_mfd_slots(&m); i++) {
+		uint64_t b;
+
+		if (its_mfd_dir(&m, i, have, &b) != 0 || have[0] == '\0')
+			continue;
+
+		if (strcmp(have, from.dir) == 0) {
+			dirblk = b;
+			found = 1;
+			break;
+		}
+	}
+
+	its_mfd_free(&m);
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no directory named '%s' in the MFD\n", from.dir);
+		goto out;
+	}
+
+	if (its_ufd_read(&w.im, dirblk, &u) != 0)
+		goto out;
+	have_ufd = 1;
+
+	found = 0;
+	idx = (unsigned)u.namp;
+
+	while (its_ufd_next(&u, &idx, &e))
+		if (strcmp(e.fn1, from.fn1) == 0 && strcmp(e.fn2, from.fn2) == 0) {
+			found = 1;
+			break;
+		}
+
+	if (!found) {
+		fprintf(stderr, "itsfs: no entry '%s;%s %s'\n", from.dir, from.fn1, from.fn2);
+		goto out;
+	}
+
+	if (e.is_link) {
+		char tgt[ITS_NAME_MAX * 3];
+		char *sep, *sp, t1[ITS_NAME_MAX], t2[ITS_NAME_MAX];
+
+		if (its_link_target(&u, e.desc, tgt, sizeof tgt, &err) != 0) {
+			fprintf(stderr, "itsfs: %s;%s %s: %s\n", from.dir, from.fn1, from.fn2,
+				err ? err : "unreadable link");
+			goto out;
+		}
+
+		sep = strchr(tgt, ';');
+
+		if (sep == NULL) {
+			fprintf(stderr, "itsfs: link target |%s| has no directory\n", tgt);
+			goto out;
+		}
+
+		*sep = '\0';
+		sp = sep + 1;
+
+		while (*sp == ' ')
+			sp++;
+
+		{
+			char *space = strchr(sp, ' ');
+
+			if (space != NULL) {
+				*space = '\0';
+				snprintf(t1, sizeof t1, "%s", sp);
+				snprintf(t2, sizeof t2, "%s", space + 1);
+			}
+			else {
+				snprintf(t1, sizeof t1, "%s", sp);
+				t2[0] = '\0';
+			}
+		}
+
+		its_ufd_free(&u);
+		have_ufd = 0;
+		rc = itsw_link(&w, to.dir, to.fn1, to.fn2, tgt, t1, t2) == 0 ? 0 : 1;
+
+		if (rc == 0)
+			fprintf(stderr, "%s;%s %s -> %s;%s %s (a link, copied as one)\n", to.dir,
+				to.fn1, to.fn2, tgt, t1, t2);
+
+		goto out;
+	}
+
+	nb = its_desc_blocks(&u, w.im.drv, e.desc, NULL, 0, &err);
+
+	if (nb < 0) {
+		fprintf(stderr, "itsfs: %s;%s %s: %s\n", from.dir, from.fn1, from.fn2,
+			err ? err : "bad descriptor");
+		goto out;
+	}
+
+	nwords = its_file_words(u.wpb, nb, e.lastwc);
+	blocks = calloc((size_t)nb + 1, sizeof *blocks);
+	words = calloc((size_t)nwords + 1, sizeof *words);
+
+	if (blocks == NULL || words == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		goto out;
+	}
+
+	if (its_desc_blocks(&u, w.im.drv, e.desc, blocks, (size_t)nb, &err) != nb) {
+		fprintf(stderr, "itsfs: %s;%s %s: the descriptor decoded differently twice\n",
+			from.dir, from.fn1, from.fn2);
+		goto out;
+	}
+
+	for (long i = 0; i < nb && got < nwords; i++) {
+		size_t want = nwords - got < u.wpb ? (size_t)(nwords - got) : u.wpb;
+
+		if (img_read_block(&w.im, blocks[i], words + got, want) != 0)
+			goto out;
+
+		got += want;
+	}
+
+	its_ufd_free(&u);
+	have_ufd = 0;
+
+	rc = itsw_put(&w, to.dir, to.fn1, to.fn2, words, nwords) == 0 ? 0 : 1;
+
+	if (rc == 0)
+		fprintf(stderr, "%s;%s %s -> %s;%s %s (%llu words)\n", from.dir, from.fn1,
+			from.fn2, to.dir, to.fn1, to.fn2, (unsigned long long)nwords);
+out:
+	free(words);
+	free(blocks);
+
+	if (have_ufd)
+		its_ufd_free(&u);
+
+	if (itsw_close(&w) != 0)
+		rc = 1;
+
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs cp [-p packing] [-d drive] image SRC DST\n"
+			"       a name is 'DIR;FN1 FN2' or DIR FN1 FN2; the two may be in\n"
+			"       different directories, unlike mv\n"
+			"       a link is copied as a link, not followed\n"
 			"       DESTRUCTIVE.  Work on a copy.\n");
 	return 2;
 }
