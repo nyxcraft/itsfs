@@ -25,6 +25,12 @@ name: CI
 #     The FUSE job builds it, lints it under the local warning set, and runs the
 #     mount suite, which skips itself where a runner cannot mount.
 #
+# EVERY JOB HAS A TIMEOUT, and the reason is in the run history: the FUSE job
+# once stalled six hours inside `apt-get update` on an Ubuntu mirror and took the
+# whole run with it, on a commit whose other five jobs had already passed.  A
+# hung mirror should fail one job in minutes, not burn a run's budget for a
+# working afternoon.
+#
 #   - the formatting rule is real. .clang-format says hand-aligned tables must be
 #     fenced with `clang-format off`, because the tool collapses the columns that
 #     ARE the documentation -- and src/its.h is one large table of exactly that
@@ -57,6 +63,7 @@ jobs:
   test:
     name: ${{ matrix.os }} / ${{ matrix.cc }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +83,7 @@ jobs:
   sanitizers:
     name: ubuntu-latest / ASan+UBSan
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -88,11 +96,18 @@ jobs:
   fuse:
     name: ubuntu-latest / FUSE=1
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
+      # Retries and a per-connection timeout, for the same reason as above: the
+      # default is to wait indefinitely on a mirror that has stopped answering.
       - name: Install libfuse3
-        run: sudo apt-get update && sudo apt-get install -y libfuse3-dev fuse3
+        timeout-minutes: 6
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 \
+            install -y libfuse3-dev fuse3
 
       - name: Build with the mount in it (warnings are errors)
         run: make FUSE=1 CFLAGS="-std=c99 -O2 -Wall -Wextra -pedantic -Werror"
@@ -114,6 +129,7 @@ jobs:
   lint:
     name: ubuntu-latest / format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
