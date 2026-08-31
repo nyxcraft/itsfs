@@ -245,7 +245,7 @@ This is the index.</p>
 <td><code>make mount-test</code></td>
 </tr>
 <tr>
-<td>384 checks, a third of them on packs damaged on purpose</td>
+<td>400 checks, a third of them on packs damaged on purpose</td>
 <td>level 3</td>
 <td><code>make test</code></td>
 </tr>
@@ -1162,7 +1162,7 @@ rather than assumed.</p>
 <h2 id="hostile-input">Hostile input</h2>
 <p>The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.</p>
-<p><strong>384 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
+<p><strong>400 checks</strong> in <code>tests/run.sh</code>, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an <code>MDNAMP</code> outside the block,
 a UFD whose <code>UDNAMP</code> is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

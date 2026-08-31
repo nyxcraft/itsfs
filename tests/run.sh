@@ -1641,6 +1641,84 @@ case $out in
 	no "...and zero reads as midnight rather than as raw (got: $(echo "$out" | grep -a UNTIM))" ;;
 esac
 
+# --- the date a write leaves behind.
+#
+# `put` wrote UNDATE as zero, which a live ITS lists as `0/0/1900 00:00:00` --
+# visibly unlike anything ITS wrote, and exactly one entry of the reference
+# pack's 6,056 carries a null date.  ITS never leaves it: ADSKUP in disk.1228
+# sets UNDATE from QDATE and TIMOFF on every write.  Reported by another session
+# staging files onto a live ITS.
+"$ITSFS" mkfs "$T/dt.dsk" DTPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/dt.dsk" TEST >/dev/null 2>&1
+"$ITSFS" put "$T/dt.dsk" 'TEST;DATED TXT' "$T/put.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" ls -l "$T/dt.dsk" TEST 2>&1)
+hasnt "put no longer leaves a null date" "$out" "(no date)"
+
+# The year the host says, so this cannot pass by writing any old number.
+yr=$(date +%Y)
+has "...it writes today's date" "$out" "$yr"
+
+out=$(printf 'cd TEST\nstat DATED TXT\nquit\n' | "$ITSFS" shell "$T/dt.dsk" 2>&1)
+has "...and a time of day with it" "$out" "UNTIM"
+hasnt "...which is not midnight-as-nothing" "$out" "UNTIM    0  "
+
+# A link is an entry too, and ITS dates those the same way.
+"$ITSFS" ln "$T/dt.dsk" 'TEST;DATED TXT' 'TEST;DATED LINK' >/dev/null 2>&1
+out=$("$ITSFS" ls -l "$T/dt.dsk" TEST 2>&1 | grep -a -- "->")
+has "ln dates a link too" "$out" "$yr"
+
+out=$("$ITSFS" check "$T/dt.dsk" 2>&1); rc=$?
+chk "...and the pack still checks clean" "$rc" "0"
+
+# --- scavenge.  What a delete on ITS actually destroys, and what it does not.
+#
+# The name is gone: QSQSH shifts the entries below the removed one up and zeroes
+# the slot that falls vacant.  The descriptor is gone: QDEL3 writes zeros over
+# it.  THE DATA IS NOT TOUCHED -- `del` marks the blocks free and nothing else --
+# so contents are recoverable and names are not, and this checks both halves of
+# that rather than only the useful one.
+
+"$ITSFS" mkfs "$T/sc.dsk" SCPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/sc.dsk" TEST >/dev/null 2>&1
+printf 'SCAVENGEME this is the deleted content\r\n' > "$T/sc.txt"
+"$ITSFS" put "$T/sc.dsk" 'TEST;VICTIM TXT' "$T/sc.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" scavenge "$T/sc.dsk" 2>&1)
+has "nothing to scavenge before anything is deleted" "$out" "in 0 runs"
+
+"$ITSFS" del "$T/sc.dsk" 'TEST;VICTIM TXT' >/dev/null 2>&1
+
+# THE NAME MUST BE GONE.  `ls` not showing it is not the check -- the check is
+# that it is nowhere in the directory block at all.
+blkout=$("$ITSFS" dump "$T/sc.dsk" 498 2>/dev/null)
+hasnt "a deleted name is gone from the directory block" "$blkout" "VICTIM"
+
+out=$("$ITSFS" scavenge "$T/sc.dsk" 2>&1)
+has "scavenge finds the block the deleted file held" "$out" "in 1 run"
+has "...and previews what is in it" "$out" "SCAVENGEME"
+has "...calling it text" "$out" "text"
+has "...and says a name cannot be recovered" "$out" "NAME CANNOT BE RECOVERED"
+
+rm -rf "$T/scx" && mkdir -p "$T/scx"
+out=$("$ITSFS" scavenge -x "$T/scx" "$T/sc.dsk" 2>&1); rc=$?
+chk "scavenge -x writes the run out" "$rc" "0"
+
+n=$(ls "$T/scx" | wc -l | tr -d ' ')
+chk "...one file for the one run" "$n" "1"
+
+# The recovered bytes must be the file's bytes.  A block is padded out with NULs
+# past the end of the file, so the comparison is of what was written, not of the
+# whole block.
+if head -c "$(wc -c < "$T/sc.txt")" "$T/scx"/* | cmp -s - "$T/sc.txt"; then
+	ok "...and its contents are the deleted file's contents"
+else
+	no "...and its contents are the deleted file's contents"
+fi
+
+out=$("$ITSFS" scavenge -t "$T/sc.dsk" 2>&1)
+has "-t keeps a run that looks like text" "$out" "SCAVENGEME"
+
 # --- labelit.  `mkfs` wrote QPAKID and QPKNUM and nothing else ever touched
 # them, which made a pack's label the one thing on it that could not be
 # corrected without rebuilding the file system.  It is also the only write here

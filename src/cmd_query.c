@@ -385,3 +385,305 @@ usage:
 			"       ITS has two levels and no nesting, so a directory IS a subtree\n");
 	return 2;
 }
+
+/* -------------------------------------------------------------- scavenge */
+
+/*
+ * `itsfs scavenge [-p packing] [-d drive] [-x DIR] [-t] image`
+ *
+ * What is left of deleted files.
+ *
+ * WHAT A DELETE ON ITS ACTUALLY DESTROYS, measured rather than assumed:
+ *
+ *   the name        GONE.  QSQSH shifts the entries below the removed one up by
+ *                   one name block and zeroes the slot that falls vacant, so
+ *                   nothing of the name survives anywhere in the directory --
+ *                   deleting a file called VICTIM TXT and searching the whole
+ *                   directory block for it finds nothing.
+ *   the descriptor  GONE.  QDEL3 walks the description writing zeros, so the
+ *                   list of which blocks the file held goes with it.
+ *   the data        INTACT, until something else is written over it.  `del`
+ *                   marks the blocks free in the allocation table and does not
+ *                   touch their contents.
+ *
+ * So this recovers CONTENTS and cannot recover names, and saying so is the
+ * point: a scavenger that implied otherwise would be worse than none.  On the
+ * reference pack about 1,965 of the 6,719 free blocks hold non-zero data and
+ * roughly a third of those decode as ITS text, so there is a good deal there.
+ *
+ * IT GROUPS CONSECUTIVE BLOCKS, because a file was probably contiguous: 5,431
+ * of the 5,650 files on the reference pack are a single run. A run of free
+ * blocks holding data is therefore the best guess at one deleted file, and it is
+ * a guess -- two files deleted next to each other are indistinguishable from one.
+ *
+ * AND A RUN BELOW QSWAPA IS NOT A FILE AT ALL.  The blocks under the swapping
+ * area held paged-out program memory, and the allocation table calls them free
+ * because no file has them -- not because a file was deleted.  On the reference
+ * pack the first ten runs are all down there, all one block, all beginning with
+ * the same `@`, which is what tipped this off.  They are reported as `swap` so
+ * that nobody reads a page of somebody's core image as a recovered file.
+ */
+#define SC_PREVIEW 58
+
+/* Does this block decode as ITS text?  The same test `tar` and `mount` use. */
+static int
+block_is_text(const uint64_t *w, size_t n)
+{
+	size_t printable = 0, total = 0;
+
+	for (size_t i = 0; i < n; i++) {
+		if (w[i] & 1)
+			return 0;
+
+		for (unsigned k = 0; k < 5; k++) {
+			unsigned c = (unsigned)((w[i] >> (29 - 7 * k)) & 0177u);
+
+			total++;
+
+			if ((c >= 040 && c <= 0176) || c == 0 || c == 003 || c == 011 ||
+			    c == 012 || c == 013 || c == 014 || c == 015)
+				printable++;
+		}
+	}
+
+	/* Not "every character", as tar demands of a whole file: this is one
+	 * block out of the middle of something, and a run boundary can land
+	 * anywhere.  A block that is 98% text is text. */
+	return total > 0 && printable * 100 >= total * 98;
+}
+
+static void
+preview(const uint64_t *w, size_t n, char *out, size_t sz)
+{
+	size_t o = 0;
+
+	for (size_t i = 0; i < n && o + 1 < sz; i++)
+		for (unsigned k = 0; k < 5 && o + 1 < sz; k++) {
+			unsigned c = (unsigned)((w[i] >> (29 - 7 * k)) & 0177u);
+
+			if (c == 015 || c == 012) {
+				if (o > 0) {
+					out[o] = '\0';
+					return;
+				}
+
+				continue;
+			}
+
+			if (c >= 040 && c <= 0176)
+				out[o++] = (char)c;
+			else if (c != 0 && c != 003)
+				out[o++] = '.';
+		}
+
+	out[o] = '\0';
+}
+
+/* One run of free-but-not-empty blocks, written out if -x asked. */
+static int
+carve(its_image *im, uint64_t start, uint64_t nblk, const char *xdir, int text, unsigned wpb)
+{
+	char path[1024];
+	FILE *f;
+	uint64_t *w;
+	int rc = -1;
+
+	if (snprintf(path, sizeof path, "%s/free-%llu.%s", xdir, (unsigned long long)start,
+		     text ? "txt" : "words") >= (int)sizeof path) {
+		fprintf(stderr, "itsfs: extraction path is too long\n");
+		return -1;
+	}
+
+	w = calloc(wpb, sizeof *w);
+
+	if (w == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		return -1;
+	}
+
+	f = fopen(path, "wb");
+
+	if (f == NULL) {
+		perror(path);
+		free(w);
+		return -1;
+	}
+
+	for (uint64_t b = 0; b < nblk; b++) {
+		if (img_read_block(im, start + b, w, wpb) != 0)
+			goto out;
+
+		if (!text) {
+			if (its_write_words(f, w, wpb, path) != 0)
+				goto out;
+
+			continue;
+		}
+
+		for (unsigned i = 0; i < wpb; i++)
+			for (unsigned k = 0; k < 5; k++) {
+				int c = (int)((w[i] >> (29 - 7 * k)) & 0177u);
+
+				if (c != 0)
+					fputc(c, f);
+			}
+	}
+
+	rc = 0;
+out:
+	if (fclose(f) != 0 && rc == 0) {
+		perror(path);
+		rc = -1;
+	}
+
+	free(w);
+	return rc;
+}
+
+int
+cmd_scavenge(int argc, char **argv)
+{
+	const its_pack *pk = its_pack_for(ITS_PACK_LE64);
+	const its_drive *drv = NULL;
+	const char *xdir = NULL;
+	its_image im;
+	its_tut t;
+	uint64_t *w = NULL;
+	uint64_t runstart = 0, runlen = 0, nfree = 0, ndata = 0, nruns = 0, nwritten = 0;
+	uint64_t nswap = 0;
+	int c, textonly = 0, runtext = 0, runswap = 0, rc = 2;
+	char pv[SC_PREVIEW + 1];
+
+	while ((c = getopt(argc, argv, "p:d:x:t")) != -1) {
+		switch (c) {
+		case 'p':
+			if ((pk = opt_pack(optarg)) == NULL)
+				return 2;
+			break;
+		case 'd':
+			if ((drv = opt_drive(optarg)) == NULL)
+				return 2;
+			break;
+		case 'x':
+			xdir = optarg;
+			break;
+		case 't':
+			textonly = 1;
+			break;
+		default:
+			goto usage;
+		}
+	}
+
+	if (optind != argc - 1)
+		goto usage;
+
+	if (img_open(&im, argv[optind], pk, drv, 0) != 0)
+		return 2;
+
+	if (im.drv == NULL) {
+		fprintf(stderr, "itsfs: %s: no drive geometry -- name one with -d\n", im.path);
+		img_close(&im);
+		return 2;
+	}
+
+	if (its_tut_read(&im, &t) != 0) {
+		img_close(&im);
+		return 2;
+	}
+
+	w = calloc(im.drv->secblk * ITS_WORDS_PER_SECTOR, sizeof *w);
+
+	if (w == NULL) {
+		fprintf(stderr, "itsfs: out of memory\n");
+		goto out;
+	}
+
+	printf("%8s %6s  %-4s  %s\n", "block", "blocks", "kind", "first line");
+
+	/*
+	 * One pass, closing a run whenever the next block is not free, holds
+	 * nothing, or is not adjacent.
+	 */
+	for (uint64_t b = t.first; b <= t.last; b++) {
+		int isfree = b < t.last && its_tut_entry(&t, b) == 0;
+		int hasdata = 0;
+		unsigned wpb = im.drv->secblk * ITS_WORDS_PER_SECTOR;
+
+		if (isfree) {
+			nfree++;
+
+			if (img_read_block(&im, b, w, wpb) == 0)
+				for (unsigned i = 0; i < wpb && !hasdata; i++)
+					hasdata = w[i] != 0;
+
+			if (hasdata)
+				ndata++;
+		}
+
+		if (isfree && hasdata) {
+			if (runlen == 0) {
+				runstart = b;
+				runtext = block_is_text(w, wpb);
+				runswap = b < t.swapa;
+				preview(w, wpb, pv, sizeof pv);
+			}
+
+			runlen++;
+			continue;
+		}
+
+		if (runlen == 0)
+			continue;
+
+		if (!textonly || runtext) {
+			nruns++;
+
+			if (runswap)
+				nswap++;
+
+			printf("%8llu %6llu  %-4s  %s\n", (unsigned long long)runstart,
+			       (unsigned long long)runlen,
+			       runswap ? "swap" : (runtext ? "text" : "bin"),
+			       runtext ? pv : "");
+
+			if (xdir != NULL) {
+				if (carve(&im, runstart, runlen, xdir, runtext,
+					  im.drv->secblk * ITS_WORDS_PER_SECTOR) != 0)
+					goto out;
+
+				nwritten++;
+			}
+		}
+
+		runlen = 0;
+	}
+
+	printf("\n%llu free blocks, %llu of them holding data, in %llu run%s%s\n",
+	       (unsigned long long)nfree, (unsigned long long)ndata, (unsigned long long)nruns,
+	       nruns == 1 ? "" : "s", textonly ? " that look like text" : "");
+
+	if (xdir != NULL)
+		printf("%llu written to %s\n", (unsigned long long)nwritten, xdir);
+
+	if (nswap)
+		printf("%llu of those runs are below QSWAPA (block %llu) -- paged-out memory,\n"
+		       "free because no file holds them rather than because one was deleted.\n",
+		       (unsigned long long)nswap, (unsigned long long)t.swapa);
+
+	printf("A NAME CANNOT BE RECOVERED: `del` zeroes the entry and the descriptor,\n"
+	       "and leaves only the data.  See cmd_query.c.\n");
+	rc = 0;
+out:
+	free(w);
+	its_tut_free(&t);
+	img_close(&im);
+	return rc;
+
+usage:
+	fprintf(stderr, "usage: itsfs scavenge [-p packing] [-d drive] [-x DIR] [-t] image\n"
+			"       runs of free blocks that still hold data -- what is left of\n"
+			"       deleted files.  -x writes each run out; -t only the ones that\n"
+			"       look like text.  NAMES CANNOT BE RECOVERED, only contents.\n");
+	return 2;
+}

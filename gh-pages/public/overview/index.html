@@ -149,6 +149,10 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <td>blocks and words per directory</td>
 </tr>
 <tr>
+<td><code>itsfs scavenge</code></td>
+<td>what is left of deleted files</td>
+</tr>
+<tr>
 <td><code>itsfs shell</code></td>
 <td>interactive explorer — <code>cd</code>, <code>ls</code>, <code>type</code>, <code>blocks</code>, <code>stat</code></td>
 </tr>
@@ -183,6 +187,10 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 <tr>
 <td><code>itsfs mkfs</code></td>
 <td>create a file system from nothing — <strong>destructive</strong></td>
+</tr>
+<tr>
+<td><code>itsfs labelit</code></td>
+<td>read or set the pack ID and number</td>
 </tr>
 <tr>
 <td><code>itsfs tar</code></td>
@@ -273,6 +281,21 @@ its files, because the two disagreeing is worth seeing.</p>
 <pre><code class="language-console">$ itsfs du rp0.dsk | tail -1
    30940 28497505  5657   399  total, in 247 directories
 </code></pre>
+<p><code>scavenge</code> is what is left of deleted files. A delete on ITS destroys the name — <code>QSQSH</code>
+shifts the entries below it up and zeroes the vacated slot — and the descriptor, which
+<code>QDEL3</code> writes zeros over. It does <strong>not</strong> touch the data: the blocks are marked free and
+nothing else. So contents are recoverable and <strong>names are not</strong>, which the command says
+every time it runs.</p>
+<pre><code class="language-console">$ itsfs scavenge rp0.dsk | tail -5
+6719 free blocks, 1853 of them holding data, in 296 runs
+39 of those runs are below QSWAPA (block 1551) -- paged-out memory,
+free because no file holds them rather than because one was deleted.
+A NAME CANNOT BE RECOVERED: `del` zeroes the entry and the descriptor,
+and leaves only the data.  See cmd_query.c.
+</code></pre>
+<p>Runs below <code>QSWAPA</code> are labelled <code>swap</code> for that reason: they held paged-out program
+memory, and are free because no file has them rather than because one was deleted. <code>-x</code>
+writes each run out; <code>-t</code> keeps only the ones that decode as text.</p>
 <p><code>check</code> walks the pack independently of the reader and reconciles what the files claim
 against what the table says:</p>
 <pre><code class="language-console">$ itsfs check rp0.dsk

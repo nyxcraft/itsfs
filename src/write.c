@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <errno.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -426,6 +427,39 @@ name_slot(const its_ufd *u, uint64_t n1, uint64_t n2, int *exists)
 	return slot;
 }
 
+/*
+ * NOW, in ITS's own encoding: UNYRB (year less 1900), UNMON, UNDAY and UNTIM
+ * (half-seconds since midnight -- see its.h, where the monitor is quoted).
+ *
+ * WHY WRITE ONE AT ALL.  `put` left UNDATE zero, which listed as `0/0/1900
+ * 00:00:00` on a live ITS and made a file this wrote visibly unlike one ITS
+ * wrote.  ITS itself never leaves it: `disk.1228`'s ADSKUP sets UNDATE from
+ * QDATE and TIMOFF on every single write.  Exactly one entry of the reference
+ * pack's 6,056 carries a null date, so writing one was very nearly unique.
+ *
+ * The clock is the host's, in local time, because that is the only clock there
+ * is here -- and a file's date on ITS was the local time of a machine in
+ * Cambridge, not UTC.
+ */
+static uint64_t
+its_now(void)
+{
+	time_t now = time(NULL);
+	struct tm *tm = localtime(&now);
+	uint64_t w = 0;
+
+	if (tm == NULL || tm->tm_year < 0 || tm->tm_year > 127 + 0)
+		return 0;
+
+	w |= ((uint64_t)(tm->tm_year) & 0177u) << ITS_UN_YRB_P;
+	w |= ((uint64_t)(tm->tm_mon + 1) & 017u) << ITS_UN_MON_P;
+	w |= ((uint64_t)tm->tm_mday & 037u) << ITS_UN_DAY_P;
+	w |= ((uint64_t)(tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec) * 2) &
+	     ((1u << ITS_UN_TIM_S) - 1);
+
+	return w;
+}
+
 /* ------------------------------------------------------------------- put */
 
 int
@@ -602,7 +636,7 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 		/* UNWRDC is the last block's word count MOD 2000 octal, so a
 		 * last block that is exactly full records zero. */
 		u.w[at + ITS_UN_RNDM] = ((uint64_t)lastwc << ITS_UN_WRDC_P) | descoff;
-		u.w[at + ITS_UN_DATE] = 0;
+		u.w[at + ITS_UN_DATE] = its_now();
 		/* UNAUTH all ones is "no author".  Six entries on the reference
 		 * pack DO name one -- see cmd_shell.c, where that settled which
 		 * way the field indexes -- but this project has no directory to
@@ -1519,7 +1553,7 @@ itsw_link(its_writer *w, const char *dir, const char *fn1, const char *fn2, cons
 		/* UNLNKB says what this is; UNWRDC is meaningless for a link and
 		 * every link on the reference pack carries zero there. */
 		u.w[at + ITS_UN_RNDM] = ((uint64_t)1 << ITS_UN_LNK_P) | descoff;
-		u.w[at + ITS_UN_DATE] = 0;
+		u.w[at + ITS_UN_DATE] = its_now();
 		u.w[at + ITS_UN_REF] = (uint64_t)0777 << ITS_UN_AUTH_P;
 	}
 

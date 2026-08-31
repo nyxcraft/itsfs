@@ -83,6 +83,7 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 | `itsfs verify` | diff a pack against a manifest |
 | `itsfs ncheck` | which file claims a block — the inverse of a descriptor |
 | `itsfs du` | blocks and words per directory |
+| `itsfs scavenge` | what is left of deleted files |
 | `itsfs shell` | interactive explorer — `cd`, `ls`, `type`, `blocks`, `stat` |
 | `itsfs put` | write a host file into a directory — **destructive** |
 | `itsfs del` | remove a file — `rm` is the same command — **destructive** |
@@ -92,6 +93,7 @@ $ itsfs check rp0.dsk                      # is the pack sound?
 | `itsfs mkdir` | make a directory — **destructive** |
 | `itsfs rmdir` | remove an empty directory — **destructive** |
 | `itsfs mkfs` | create a file system from nothing — **destructive** |
+| `itsfs labelit` | read or set the pack ID and number |
 | `itsfs tar` | a pack in and out of an ordinary Unix tar archive |
 | `itsfs mount` | mount a pack on a directory, read-only (`make FUSE=1`) |
 | `itsfs umount` | unmount one |
@@ -165,6 +167,25 @@ its files, because the two disagreeing is worth seeing.
 $ itsfs du rp0.dsk | tail -1
    30940 28497505  5657   399  total, in 247 directories
 ```
+
+`scavenge` is what is left of deleted files. A delete on ITS destroys the name — `QSQSH`
+shifts the entries below it up and zeroes the vacated slot — and the descriptor, which
+`QDEL3` writes zeros over. It does **not** touch the data: the blocks are marked free and
+nothing else. So contents are recoverable and **names are not**, which the command says
+every time it runs.
+
+```console
+$ itsfs scavenge rp0.dsk | tail -5
+6719 free blocks, 1853 of them holding data, in 296 runs
+39 of those runs are below QSWAPA (block 1551) -- paged-out memory,
+free because no file holds them rather than because one was deleted.
+A NAME CANNOT BE RECOVERED: `del` zeroes the entry and the descriptor,
+and leaves only the data.  See cmd_query.c.
+```
+
+Runs below `QSWAPA` are labelled `swap` for that reason: they held paged-out program
+memory, and are free because no file has them rather than because one was deleted. `-x`
+writes each run out; `-t` keeps only the ones that decode as text.
 
 `check` walks the pack independently of the reader and reconciles what the files claim
 against what the table says:

@@ -63,6 +63,7 @@ static const struct subcmd {
 	{ "verify",   cmd_verify,   "diff a pack against a manifest"            },
 	{ "ncheck",   cmd_ncheck,   "which file claims a block"                 },
 	{ "du",       cmd_du,       "blocks and words per directory"            },
+	{ "scavenge", cmd_scavenge, "what is left of deleted files"             },
 	{ "shell",    cmd_shell,    "interactive explorer (read-only)"          },
 	{ "put",      cmd_put,      "write a host file into a directory (destructive)" },
 	{ "del",      cmd_del,      "remove a file (destructive)"               },

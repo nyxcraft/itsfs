@@ -24,6 +24,7 @@ int cmd_manifest(int argc, char **argv);
 int cmd_verify(int argc, char **argv);
 int cmd_ncheck(int argc, char **argv);
 int cmd_du(int argc, char **argv);
+int cmd_scavenge(int argc, char **argv);
 int cmd_shell(int argc, char **argv);
 int cmd_put(int argc, char **argv);
 int cmd_del(int argc, char **argv);
