@@ -460,11 +460,51 @@ its_now(void)
 	return w;
 }
 
+/*
+ * Zero a description in place, as QDEL3 does.  The area is not compacted, so
+ * this leaves a hole -- which is what ITS leaves too, and what UDESCP bounds.
+ *
+ * Shared by `del` and by an overwriting `put`, because getting the load-address
+ * case wrong in two places is twice the chance of getting it wrong once.
+ */
+static void
+desc_zero(its_ufd *u, unsigned off, int is_link)
+{
+	unsigned steps = u->wpb * ITS_UFDBPW;
+	unsigned c;
+
+	while (steps-- > 0) {
+		unsigned word = ITS_UD_DESC + off / ITS_UFDBPW;
+
+		if (word >= u->wpb)
+			break;
+
+		c = its_byte6(u->w[word], off % ITS_UFDBPW);
+
+		if (desc_put(u->w, u->wpb, off++, 0) != 0)
+			break;
+
+		if (c == 0)
+			break;
+
+		/* A load address is three bytes and the two after it may be
+		 * anything, including zero -- so they are consumed rather than
+		 * tested.  Each is bounded on its own; see desc_put. */
+		if (c >= ITS_UD_LOADAD && !is_link) {
+			if (desc_put(u->w, u->wpb, off++, 0) != 0)
+				break;
+
+			if (desc_put(u->w, u->wpb, off++, 0) != 0)
+				break;
+		}
+	}
+}
+
 /* ------------------------------------------------------------------- put */
 
 int
 itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const uint64_t *words,
-	 uint64_t nwords)
+	 uint64_t nwords, int force)
 {
 	its_mfd m;
 	its_ufd u;
@@ -473,8 +513,10 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 	unsigned char desc[512];
 	size_t ndesc = 0;
 	long nblocks;
-	unsigned slot, descoff;
-	int exists = 0, rc = -1, have_ufd = 0;
+	uint64_t *oldblocks = NULL;
+	long oldnb = 0;
+	unsigned slot, descoff, oldword = 0, olddesc = 0;
+	int exists = 0, rc = -1, have_ufd = 0, oldlink = 0;
 	char have[ITS_NAME_MAX];
 
 	/* ---- 1. everything that can be refused, before anything is written */
@@ -519,10 +561,81 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 
 	slot = name_slot(&u, n1, n2, &exists);
 
-	if (exists) {
-		fprintf(stderr, "itsfs: '%s;%s %s' already exists -- delete it first\n", dir, fn1,
-			fn2 ? fn2 : "");
+	if (exists && !force) {
+		fprintf(stderr, "itsfs: '%s;%s %s' already exists -- delete it first, or -f\n", dir,
+			fn1, fn2 ? fn2 : "");
 		goto out;
+	}
+
+	/*
+	 * OVERWRITING REPLACES THE ENTRY IN PLACE rather than deleting and
+	 * writing again, and the difference is what a failure costs.
+	 *
+	 * `del` then `put` has a window in which the old file is gone and the
+	 * new one is not there yet: anything that stops the program in between
+	 * -- a full pack, a bad block, the machine losing power -- loses the
+	 * file outright.  This project's first rule is that a refusal leaves the
+	 * pack byte-identical, and a two-step overwrite cannot honour it.
+	 *
+	 * So the new data and the new descriptor go down FIRST, the entry is
+	 * pointed at them by a single directory-block write, and only then are
+	 * the old blocks freed.  Interrupted before that write, the old file is
+	 * whole; interrupted after it, the new one is.  Either way some blocks
+	 * may be left marked in use that nothing claims, which is a miscount
+	 * `check` reports by name and which loses nothing.
+	 *
+	 * The name does not move -- same name, same sorted position -- so there
+	 * is no memmove and no chance of disturbing the order the monitor
+	 * binary-searches.
+	 */
+	if (exists) {
+		unsigned idx = (unsigned)u.namp;
+		its_ent e;
+		const char *err = NULL;
+		int found = 0;
+
+		while (its_ufd_next(&u, &idx, &e))
+			if (strcmp(e.fn1, fn1) == 0 && strcmp(e.fn2, fn2 ? fn2 : "") == 0) {
+				found = 1;
+				break;
+			}
+
+		if (!found) {
+			fprintf(stderr, "itsfs: '%s;%s %s' is there and then is not -- refusing\n",
+				dir, fn1, fn2 ? fn2 : "");
+			goto out;
+		}
+
+		oldword = e.word;
+		olddesc = e.desc;
+		oldlink = e.is_link;
+
+		if (!e.is_link) {
+			oldnb = its_desc_blocks(&u, w->im.drv, e.desc, NULL, 0, &err);
+
+			if (oldnb < 0) {
+				fprintf(stderr,
+					"itsfs: '%s;%s %s': %s -- refusing to overwrite a file "
+					"whose blocks cannot be read\n",
+					dir, fn1, fn2 ? fn2 : "", err ? err : "bad descriptor");
+				goto out;
+			}
+
+			oldblocks = calloc((size_t)oldnb + 1, sizeof *oldblocks);
+
+			if (oldblocks == NULL) {
+				fprintf(stderr, "itsfs: out of memory\n");
+				goto out;
+			}
+
+			if (its_desc_blocks(&u, w->im.drv, e.desc, oldblocks, (size_t)oldnb,
+					    &err) != oldnb) {
+				fprintf(stderr, "itsfs: '%s;%s %s': the descriptor decoded "
+						"differently twice -- refusing\n",
+					dir, fn1, fn2 ? fn2 : "");
+				goto out;
+			}
+		}
 	}
 
 	nblocks = (long)((nwords + w->wpb - 1) / w->wpb);
@@ -624,11 +737,11 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 	 * insertion point move down by LUNBLK, and UDNAMP follows them -- the
 	 * mirror of QSQSH, which closes the gap on removal.
 	 */
-	memmove(&u.w[u.namp - ITS_LUNBLK], &u.w[u.namp],
-		(slot - u.namp) * sizeof *u.w);
+	if (!exists)
+		memmove(&u.w[u.namp - ITS_LUNBLK], &u.w[u.namp], (slot - u.namp) * sizeof *u.w);
 
 	{
-		unsigned at = slot - ITS_LUNBLK;
+		unsigned at = exists ? oldword : slot - ITS_LUNBLK;
 		unsigned lastwc = (unsigned)(nwords % w->wpb);
 
 		u.w[at + ITS_UN_FN1] = n1;
@@ -645,18 +758,29 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 		u.w[at + ITS_UN_REF] = (uint64_t)0777 << ITS_UN_AUTH_P;
 	}
 
-	u.w[ITS_UD_NAMP] = u.namp - ITS_LUNBLK;
+	if (!exists)
+		u.w[ITS_UD_NAMP] = u.namp - ITS_LUNBLK;
+	else
+		desc_zero(&u, olddesc, oldlink);
 
 	/* UDBLKS: the left half is space allocated and the right half is blocks
 	 * used.  Only the right half moves, and it is 18 bits. */
-	u.w[ITS_UD_BLKS] = (ITS_LH(u.w[ITS_UD_BLKS]) << 18) |
-			   ((ITS_RH(u.w[ITS_UD_BLKS]) + (uint64_t)nblocks) & 0777777);
+	u.w[ITS_UD_BLKS] =
+		(ITS_LH(u.w[ITS_UD_BLKS]) << 18) |
+		((ITS_RH(u.w[ITS_UD_BLKS]) + (uint64_t)nblocks - (uint64_t)oldnb) & 0777777);
 
+	/* THE ATOMIC POINT.  Before it the old file is whole, after it the new
+	 * one is, and there is no instant at which neither is. */
 	if (put_block(w, dirblk, u.w, u.wpb) != 0)
+		goto out;
+
+	/* Only now is the old space given back. */
+	if (oldnb > 0 && itsw_free(w, oldblocks, (uint64_t)oldnb) != 0)
 		goto out;
 
 	rc = 0;
 out:
+	free(oldblocks);
 	free(blocks);
 
 	if (have_ufd)
@@ -754,37 +878,7 @@ itsw_del(its_writer *w, const char *dir, const char *fn1, const char *fn2)
 	 * a hole; `check` does not mind, because UDESCP bounds what is live and
 	 * nothing points into the hole any more.
 	 */
-	{
-		unsigned off = e.desc;
-		unsigned steps = u.wpb * ITS_UFDBPW;
-		unsigned c;
-
-		while (steps-- > 0) {
-			unsigned word = ITS_UD_DESC + off / ITS_UFDBPW;
-
-			if (word >= u.wpb)
-				break;
-			c = its_byte6(u.w[word], off % ITS_UFDBPW);
-
-			if (desc_put(u.w, u.wpb, off++, 0) != 0)
-				break;
-
-			if (c == 0)
-				break;
-
-			/* A load address is three bytes and the two after it
-			 * may be anything, including zero -- so they are
-			 * consumed rather than tested.  Each is bounded on its
-			 * own; see desc_put. */
-			if (c >= ITS_UD_LOADAD && !e.is_link) {
-				if (desc_put(u.w, u.wpb, off++, 0) != 0)
-					break;
-
-				if (desc_put(u.w, u.wpb, off++, 0) != 0)
-					break;
-			}
-		}
-	}
+	desc_zero(&u, e.desc, e.is_link);
 
 	/* Close the gap: entries below the removed one shift up, and UDNAMP
 	 * follows.  This is QSQSH. */

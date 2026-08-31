@@ -103,8 +103,16 @@ int itsw_desc_encode(const uint64_t *blocks, long nblocks, unsigned char *bytes,
  *
  * Returns 0, or -1 with a message.
  */
+/*
+ * Write a file.  `force` overwrites one that is already there.
+ *
+ * An overwrite REPLACES THE ENTRY IN PLACE -- new data and descriptor first, one
+ * directory-block write to point the entry at them, old blocks freed last -- so
+ * there is no instant at which neither the old file nor the new one exists.
+ * `del` then `put` has exactly that window, which is why this is not that.
+ */
 int itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2,
-	     const uint64_t *words, uint64_t nwords);
+	     const uint64_t *words, uint64_t nwords, int force);
 
 /* Remove a file: free its blocks, zero its descriptor, close the name gap. */
 int itsw_del(its_writer *w, const char *dir, const char *fn1, const char *fn2);

@@ -1641,6 +1641,81 @@ case $out in
 	no "...and zero reads as midnight rather than as raw (got: $(echo "$out" | grep -a UNTIM))" ;;
 esac
 
+# --- put -f, an overwrite.
+#
+# Asked for by another session staging a world onto a live ITS, where the
+# delete-then-put dance is the common case.  It is NOT implemented as a delete
+# followed by a put: that has a window in which the old file is gone and the new
+# one is not there yet, and anything stopping the program in between loses the
+# file.  The entry is replaced IN PLACE -- new data and descriptor first, one
+# directory-block write, old blocks freed last.
+
+"$ITSFS" mkfs "$T/ov.dsk" OVPACK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/ov.dsk" TEST >/dev/null 2>&1
+printf 'version one\r\n' > "$T/ov1.txt"
+printf 'two\r\n' > "$T/ov2.txt"
+"$ITSFS" put "$T/ov.dsk" 'TEST;F TXT' "$T/ov1.txt" >/dev/null 2>&1
+
+out=$("$ITSFS" put "$T/ov.dsk" 'TEST;F TXT' "$T/ov2.txt" 2>&1); rc=$?
+chk "put still refuses an existing file without -f" "$rc" "1"
+has "...and now says what would allow it" "$out" "or -f"
+
+out=$("$ITSFS" put -f "$T/ov.dsk" 'TEST;F TXT' "$T/ov2.txt" 2>&1); rc=$?
+chk "put -f overwrites it" "$rc" "0"
+
+"$ITSFS" cat "$T/ov.dsk" 'TEST;F TXT' > "$T/ovback.txt" 2>/dev/null
+
+if cmp -s "$T/ov2.txt" "$T/ovback.txt"; then
+	ok "...with the new contents"
+else
+	no "...with the new contents"
+fi
+
+out=$("$ITSFS" ls "$T/ov.dsk" TEST 2>&1 | grep -ac "^F")
+chk "...and exactly one entry, not two" "$out" "1"
+
+out=$("$ITSFS" check "$T/ov.dsk" 2>&1); rc=$?
+chk "...and the pack checks clean" "$rc" "0"
+
+# THE OLD BLOCKS MUST COME BACK.  A big file overwritten by a small one has to
+# return the difference, or every overwrite leaks the space of what it replaced.
+"$ITSFS" mkdir "$T/ov.dsk" BIG >/dev/null 2>&1
+
+# A block is 1024 words, five characters to a word, so this is several of them.
+i=0
+: > "$T/ovbig.txt"
+while [ "$i" -lt 400 ]; do
+	printf 'a line of text long enough to matter, number %d\r\n' "$i" >> "$T/ovbig.txt"
+	i=$((i + 1))
+done
+
+before=$("$ITSFS" free "$T/ov.dsk" 2>/dev/null | sed -n 's/^free  *\([0-9]*\) blocks.*/\1/p')
+"$ITSFS" put "$T/ov.dsk" 'BIG;M TXT' "$T/ovbig.txt" >/dev/null 2>&1
+mid=$("$ITSFS" free "$T/ov.dsk" 2>/dev/null | sed -n 's/^free  *\([0-9]*\) blocks.*/\1/p')
+"$ITSFS" put -f "$T/ov.dsk" 'BIG;M TXT' "$T/ov2.txt" >/dev/null 2>&1
+after=$("$ITSFS" free "$T/ov.dsk" 2>/dev/null | sed -n 's/^free  *\([0-9]*\) blocks.*/\1/p')
+
+[ "$mid" -lt "$before" ] && ok "a multi-block file takes the space" ||
+	no "a multi-block file takes the space ($before -> $mid)"
+[ "$after" -gt "$mid" ] && ok "...and overwriting it gives the difference back" ||
+	no "...and overwriting it gives the difference back ($mid -> $after)"
+
+out=$("$ITSFS" check "$T/ov.dsk" 2>&1); rc=$?
+chk "...leaving no block claimed by nothing" "$rc" "0"
+
+# The name must not move: it is the same name in the same sorted position, and
+# the monitor binary-searches that order.
+for n in AAA MMM ZZZ; do
+	printf '%s\r\n' "$n" > "$T/ovn.txt"
+	"$ITSFS" put "$T/ov.dsk" "TEST;$n TXT" "$T/ovn.txt" >/dev/null 2>&1
+done
+"$ITSFS" put -f "$T/ov.dsk" 'TEST;MMM TXT' "$T/ov1.txt" >/dev/null 2>&1
+out=$("$ITSFS" ls "$T/ov.dsk" TEST 2>&1 | grep -a '^[A-Z]' | awk '{print $1}' | tr '\n' ' ')
+chk "an overwrite leaves the name area sorted" "$out" "AAA F MMM ZZZ "
+
+out=$("$ITSFS" put -f "$T/ov.dsk" 'TEST;NOSUCH TXT' "$T/ov1.txt" 2>&1); rc=$?
+chk "-f on a file that is not there just writes it" "$rc" "0"
+
 # --- the date a write leaves behind.
 #
 # `put` wrote UNDATE as zero, which a live ITS lists as `0/0/1900 00:00:00` --

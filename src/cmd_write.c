@@ -1,7 +1,7 @@
 /*
  * cmd_write.c -- `itsfs put` and `itsfs del`, the destructive commands.
  *
- *   itsfs put [-p packing] [-d drive] [-w] image 'DIR;FN1 FN2' hostfile
+ *   itsfs put [-p packing] [-d drive] [-w] [-f] image 'DIR;FN1 FN2' hostfile
  *   itsfs del [-p packing] [-d drive] image 'DIR;FN1 FN2'
  *
  * These are front ends and nothing else: every word they change goes through
@@ -160,9 +160,9 @@ run(int argc, char **argv, int is_del)
 	its_path p;
 	uint64_t *words = NULL;
 	long nwords = 0;
-	int c, raw = 0, rc = 2, nargs;
+	int c, raw = 0, force = 0, rc = 2, nargs;
 
-	while ((c = getopt(argc, argv, is_del ? "p:d:" : "p:d:w")) != -1) {
+	while ((c = getopt(argc, argv, is_del ? "p:d:" : "p:d:wf")) != -1) {
 		switch (c) {
 		case 'p':
 			if ((pk = opt_pack(optarg)) == NULL)
@@ -171,6 +171,9 @@ run(int argc, char **argv, int is_del)
 		case 'd':
 			if ((drv = opt_drive(optarg)) == NULL)
 				return 2;
+			break;
+		case 'f':
+			force = 1;
 			break;
 		case 'w':
 			raw = 1;
@@ -200,7 +203,7 @@ run(int argc, char **argv, int is_del)
 	if (is_del)
 		rc = itsw_del(&w, p.dir, p.fn1, p.fn2) == 0 ? 0 : 1;
 	else
-		rc = itsw_put(&w, p.dir, p.fn1, p.fn2, words, (uint64_t)nwords) == 0 ? 0 : 1;
+		rc = itsw_put(&w, p.dir, p.fn1, p.fn2, words, (uint64_t)nwords, force) == 0 ? 0 : 1;
 
 	if (itsw_close(&w) != 0)
 		rc = 1;
@@ -217,10 +220,14 @@ usage:
 		fprintf(stderr, "usage: itsfs del [-p packing] [-d drive] image 'DIR;FN1 FN2'\n"
 				"       DESTRUCTIVE.  Work on a copy.\n");
 	else
-		fprintf(stderr, "usage: itsfs put [-p packing] [-d drive] [-w] image "
+		fprintf(stderr, "usage: itsfs put [-p packing] [-d drive] [-w] [-f] image "
 				"'DIR;FN1 FN2' hostfile\n"
 				"       -w   the host file already holds 36-bit words (what "
 				"`get -w` writes)\n"
+				"       -f   overwrite a file that is already there.  The entry is\n"
+				"            replaced in place -- new data first, then one\n"
+				"            directory write -- so there is no moment at which\n"
+				"            neither the old file nor the new one exists\n"
 				"       DESTRUCTIVE.  Work on a copy.\n");
 	return 2;
 }
@@ -810,7 +817,7 @@ cmd_cp(int argc, char **argv)
 	its_ufd_free(&u);
 	have_ufd = 0;
 
-	rc = itsw_put(&w, to.dir, to.fn1, to.fn2, words, nwords) == 0 ? 0 : 1;
+	rc = itsw_put(&w, to.dir, to.fn1, to.fn2, words, nwords, 0) == 0 ? 0 : 1;
 
 	if (rc == 0)
 		fprintf(stderr, "%s;%s %s -> %s;%s %s (%llu words)\n", from.dir, from.fn1,

@@ -199,6 +199,11 @@ WRITE_COMMANDS = [
     ["put", "@", "TEST;FUZZ TXT", "HOSTFILE"],
     # Into the EMPTY one, which is the case a reader refused for four phases.
     ["put", "@", "EMPTY;FUZZ TXT", "HOSTFILE"],
+    # -f READS THE OLD DESCRIPTOR AND FREES WHAT IT DECODES, on a pack whose
+    # descriptors are the damaged thing -- so it reaches the decoder and the
+    # allocator in one command, which no other writer does.
+    ["put", "-f", "@", "TEST;HELLO TXT", "HOSTFILE"],
+    ["put", "-f", "@", "TEST;A LINK", "HOSTFILE"],
     # Removal reads a descriptor and then WRITES OVER IT, in place, at offsets
     # it computed from the disk.  This is the path the review was about.
     ["del", "@", "TEST;HELLO TXT"],

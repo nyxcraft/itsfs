@@ -1253,7 +1253,7 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 			continue; /* data already consumed */
 		}
 
-		if (itsw_put(&wr, dir, fn1, fn2, w, nw) != 0)
+		if (itsw_put(&wr, dir, fn1, fn2, w, nw, 0) != 0)
 			nskip++;
 		else {
 			nf++;

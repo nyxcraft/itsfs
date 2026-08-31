@@ -211,6 +211,13 @@ $ itsfs del work.dsk 'KSHACK;HELLO TXT'
 deleted KSHACK;HELLO TXT
 ```
 
+`put -f` overwrites a file that is already there. It is **not** a delete followed by a
+write: that has a window in which the old file is gone and the new one is not there yet,
+and anything stopping the program in between loses it. The entry is replaced in place —
+new data and descriptor first, then a single directory-block write to point the entry at
+them, and only then are the old blocks freed. Interrupted before that write the old file
+is whole; interrupted after it the new one is; there is no instant at which neither is.
+
 **These change the pack. Work on a copy.** `itsfs` refuses to write an image another
 process has open — an emulator with the pack attached is writing to it too, and there is
 no lock to take — comparing by device and inode, overridable with `ITSFS_IGNORE_INUSE=1`.
