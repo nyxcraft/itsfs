@@ -1932,11 +1932,20 @@ marketing:
 struck through by work rather than by editing. What is left is what is still
 true.*
 
-- **`NSALV` was asked about two kinds of damage.** A cleared TUT word at two
-  sites, and a miscount found by accident after an abrupt halt. It has not been
-  shown a broken descriptor, a damaged directory header or a corrupt MFD — all of
-  which `itsfs check` reports and none of which has been put to ITS for a second
-  opinion.
+- ~~`NSALV` was asked about two kinds of damage, and not a broken descriptor, a
+  damaged directory header or a corrupt MFD~~ — it has been shown all three
+  since, and agrees about each: a zeroed directory block (`make nsalv` stage 5),
+  where it names the same block `check` does; a cleared `MDCHK` (stage 6), where
+  it says *"MFD check word garbaged?"* and `check` says the same word by the same
+  name; and one block claimed by two files (stage 7), where it says *"Tracking
+  down shared blocks"* and names the same two files. Seven stages, 22 assertions.
+
+  **This entry was stale for weeks, and that is worth a line of its own.** The
+  suite refuses to let a documented *number* drift — `tests/run.sh` fails if this
+  file's check count is not the count of the run — but nothing checks a
+  documented *claim*, and this one said work had not been done that had been done
+  and tested. A stale limitation is a smaller error than a stale success, and it
+  is the same error.
 - **A pack `mkfs` builds does not boot.** Nothing writes a boot area; the graders
   are booted from tape instead. ITS comes up on packs this project has *written
   files to*, which is a weaker statement than it first sounds.

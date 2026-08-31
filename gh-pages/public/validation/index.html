@@ -1949,11 +1949,19 @@ struck through by work rather than by editing. What is left is what is still
 true.</em></p>
 <ul>
 <li>
-<p><strong><code>NSALV</code> was asked about two kinds of damage.</strong> A cleared TUT word at two
-sites, and a miscount found by accident after an abrupt halt. It has not been
-shown a broken descriptor, a damaged directory header or a corrupt MFD — all of
-which <code>itsfs check</code> reports and none of which has been put to ITS for a second
-opinion.</p>
+<p><s><code>NSALV</code> was asked about two kinds of damage, and not a broken descriptor, a
+damaged directory header or a corrupt MFD</s> — it has been shown all three
+since, and agrees about each: a zeroed directory block (<code>make nsalv</code> stage 5),
+where it names the same block <code>check</code> does; a cleared <code>MDCHK</code> (stage 6), where
+it says <em>&quot;MFD check word garbaged?&quot;</em> and <code>check</code> says the same word by the same
+name; and one block claimed by two files (stage 7), where it says <em>&quot;Tracking
+down shared blocks&quot;</em> and names the same two files. Seven stages, 22 assertions.</p>
+<p><strong>This entry was stale for weeks, and that is worth a line of its own.</strong> The
+suite refuses to let a documented <em>number</em> drift — <code>tests/run.sh</code> fails if this
+file's check count is not the count of the run — but nothing checks a
+documented <em>claim</em>, and this one said work had not been done that had been done
+and tested. A stale limitation is a smaller error than a stale success, and it
+is the same error.</p>
 </li>
 <li>
 <p><strong>A pack <code>mkfs</code> builds does not boot.</strong> Nothing writes a boot area; the graders
