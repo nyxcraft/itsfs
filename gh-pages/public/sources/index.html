@@ -120,7 +120,7 @@ ITS's own code instead now, and say so.</p>
 <tbody>
 <tr>
 <td><code>src/system/disk.1228</code></td>
-<td>that a &quot;track&quot; is a block (line 48); <code>QFL2</code>, the MFD-slot arithmetic; that <code>UNDATE</code>'s right half <em>is</em> <code>TIMOFF</code> (<code>HRR TT,TIMOFF</code>, lines 190 and 505)</td>
+<td>that a &quot;track&quot; is a block (line 48); <code>QFL2</code>, the MFD-slot arithmetic; that <code>UNDATE</code>'s right half <em>is</em> <code>TIMOFF</code> (<code>HRR TT,TIMOFF</code>, lines 190 and 505) ; and that <code>QLGLK</code>'s name comparison is UNSIGNED — it complements bit 0 with <code>TLC A,(SETZ)</code> before a signed <code>CAML</code>, which is the standard unsigned-compare idiom (line 2381 on)</td>
 </tr>
 <tr>
 <td><code>src/system/time.953</code></td>

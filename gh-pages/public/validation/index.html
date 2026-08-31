@@ -830,6 +830,10 @@ something that could contradict it:</p>
 <td>6,056 entries, none out of order — and the search would fail if they were</td>
 </tr>
 <tr>
+<td>that search's comparison is <strong>unsigned</strong></td>
+<td><code>TLC A,(SETZ)</code> before a signed <code>CAML</code>, in the monitor — not inferred from the pack's order</td>
+</tr>
+<tr>
 <td><strong><code>QFL1</code> stops at an empty slot</strong></td>
 <td><strong>nothing — and it was wrong</strong></td>
 </tr>

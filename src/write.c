@@ -385,9 +385,28 @@ desc_put(uint64_t *u, unsigned wpb, unsigned off, unsigned val)
  * there.  Returns the word index of the first entry that is not less than the
  * one wanted -- the insertion point -- and sets *exists.
  *
- * The comparison is on the raw SIXBIT words, which is what makes it agree with
- * ITS: SIXBIT's collating order is ASCII's minus 040, so it sorts `-READ-`
- * before `1PROC` before `AINOTE`, which is what the reference pack does.
+ * THE COMPARISON IS UNSIGNED, and the monitor says so rather than the pack
+ * implying it.  This used to rest on the reference pack's observed order --
+ * `-READ-` before `1PROC` before `AINOTE` -- which is the right answer but not
+ * a citation, and the distinction matters: a SIXBIT character is ASCII minus
+ * 040, so any name beginning with a LETTER has bit 0 set and is NEGATIVE as a
+ * 36-bit signed integer.  Signed and unsigned orders therefore disagree about
+ * most of a real directory.
+ *
+ * QLGLK settles it in its first two instructions (disk.1228):
+ *
+ *      TLC A,(SETZ)            ;flip bit 0 of the name being sought
+ *      TLC B,(SETZ)
+ *      ...
+ *      MOVE D,UNFN1(J)
+ *      TLC D,(SETZ)            ;and of the name it is compared against
+ *      CAMN A,D
+ *      CAML A,D                ;a SIGNED compare
+ *
+ * Complementing the sign bit before a signed compare is the standard way to get
+ * an unsigned one on a machine whose compares are signed, so ITS's order is
+ * unsigned -- which is what comparing the raw words as uint64_t does here.
+ * Found while diffing two files for another project; see docs/sources.md.
  *
  * THE DUPLICATE SEARCH DOES NOT STOP EARLY, and the insertion point does.  On a
  * sorted area those are the same scan and the distinction is invisible; on an

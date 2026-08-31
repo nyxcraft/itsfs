@@ -668,6 +668,7 @@ something that could contradict it:
 | `FESET` writes `HOM` at word 0, address at `0103` | the bytes on the reference pack |
 | `UNAUTH` all-ones means "none" | every file on the pack has `777` there |
 | `QLGLK` binary-searches the name area | 6,056 entries, none out of order — and the search would fail if they were |
+| that search's comparison is **unsigned** | `TLC A,(SETZ)` before a signed `CAML`, in the monitor — not inferred from the pack's order |
 | **`QFL1` stops at an empty slot** | **nothing — and it was wrong** |
 
 The one claim with no measurement behind it is the one that failed. That is not
