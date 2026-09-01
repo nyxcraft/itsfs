@@ -144,6 +144,34 @@ read_host(const char *path, int raw, uint64_t **out)
 
 			w[i / ITS_ASCII_CHARS] |= (uint64_t)c << (29 - 7 * (i % ITS_ASCII_CHARS));
 		}
+
+		/*
+		 * PAD THE LAST WORD WITH ^C, WHICH IS WHAT ITS DOES.
+		 *
+		 * A file's length is kept in WORDS, so a file whose character
+		 * count is not a multiple of five leaves character slots at the
+		 * end of the last word with nothing to put in them.  This wrote
+		 * zeros there.  ITS writes 003.
+		 *
+		 * Measured on the reference pack rather than assumed: of 131
+		 * text files sampled, 100 pad with 003 and 2 with 000; the rest
+		 * end exactly on a word boundary and pad with nothing.  A reader
+		 * that stops at ^C -- and MDL's does -- runs off the end of a
+		 * NUL-padded file and keeps going, which is how this was found:
+		 * an init file this wrote was opened and never evaluated.
+		 *
+		 * The convention was already written down HERE, in
+		 * tests/crosscheck.sh, which compensates for it when comparing
+		 * extracted files against host originals.  The knowledge was in
+		 * the repository and the writer did not follow it.
+		 */
+		{
+			long tail = nbytes % ITS_ASCII_CHARS;
+
+			if (tail != 0)
+				for (long i = tail; i < ITS_ASCII_CHARS; i++)
+					w[nwords - 1] |= (uint64_t)03 << (29 - 7 * i);
+		}
 	}
 
 	free(buf);

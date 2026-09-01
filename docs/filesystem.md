@@ -255,6 +255,15 @@ flags in that word sit. Not implemented, and not guessed at.
 is not stated anywhere; six bits is what the values need and does not collide
 with `UNWRDC` above them. Deduced, and marked as deduced.
 
+**Padding in the last word is `^C`.** A file's length is kept in words, so a
+character count that is not a multiple of five leaves slots at the end of the
+last word. ITS fills them with 003, not with NUL — 100 of 131 text files sampled
+on the reference pack pad that way, 2 with NUL, and the rest end exactly on a
+word boundary and pad with nothing. It matters because *a reader stops at* `^C`:
+MDL opens a NUL-padded file, prints its name and never evaluates it. `put` writes
+`^C`; `cat` and `get` pass whatever is there through, since translating an
+extraction is how an extraction tool lies.
+
 **`UNAUTH`, the author.** "MFD index of author, all 1 => no directory" — and
 the phrase "MFD index" is the ambiguity, because a directory has both a slot in
 the MFD name area and a block its UFD occupies. **It is the block.** 6,050 of the

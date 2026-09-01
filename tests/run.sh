@@ -49,6 +49,24 @@ hasnt() { case "$2" in *"$3"*) no "$1 (output contained '$3')";; *) ok "$1";; es
 # sanitizer abort is a failure even though both are "non-zero".
 died() { [ "$1" -gt 128 ] || [ "$1" -eq 124 ]; }
 
+# Does what came back off the pack hold the content that went in?
+#
+# NOT a plain `cmp`, because a text file's last word is PADDED.  A file's length
+# is kept in words, so a character count that is not a multiple of five leaves
+# slots at the end of the last word, and ITS fills them with ^C -- measured at
+# 100 of 131 text files on the reference pack, against 2 with NUL.  `put` does
+# the same, so a source of 33 characters comes back as 35.
+#
+# The content is what these checks are about; the padding is how the format
+# marks the end of a partial word.  tests/crosscheck.sh does exactly this when
+# comparing extracted files against host originals, and has since before the
+# writer got it right.
+same_content() {
+	_n=$(wc -c < "$1" | tr -d " ")
+	dd if="$2" of="$T/_trunc" bs=1 count="$_n" 2>/dev/null
+	cmp -s "$1" "$T/_trunc"
+}
+
 # ------------------------------------------------------------------ fixtures
 
 # rp06: 19 surfaces, 20 sectors, 8 sectors per block, so 47 blocks per cylinder
@@ -857,7 +875,7 @@ out=$("$ITSFS" check "$T/w1.dsk" 2>&1); rc=$?
 chk "...and the pack still checks clean" "$rc" "0"
 
 "$ITSFS" cat "$T/w1.dsk" 'TEST;NEW FILE' > "$T/back.txt" 2>/dev/null
-if cmp -s "$T/put.txt" "$T/back.txt"; then
+if same_content "$T/put.txt" "$T/back.txt"; then
 	ok "...and it reads back byte-identical to what went in"
 else
 	no "...and it reads back byte-identical to what went in"
@@ -946,7 +964,7 @@ out=$("$ITSFS" put "$T/m1.dsk" 'NEWDIR;FIRST FILE' "$T/put.txt" 2>&1); rc=$?
 chk "a file can be put into a directory we made" "$rc" "0"
 "$ITSFS" cat "$T/m1.dsk" 'NEWDIR;FIRST FILE' > "$T/mback.txt" 2>/dev/null
 
-if cmp -s "$T/put.txt" "$T/mback.txt"; then
+if same_content "$T/put.txt" "$T/mback.txt"; then
 	ok "...and reads back byte-identical"
 else
 	no "...and reads back byte-identical"
@@ -1017,7 +1035,7 @@ has "mkfs writes the pack ID into the table" "$out" "NEWPAK"
 "$ITSFS" put "$T/f1.dsk" 'SYS;HELLO TXT' "$T/put.txt" >/dev/null 2>&1
 "$ITSFS" cat "$T/f1.dsk" 'SYS;HELLO TXT' > "$T/fback.txt" 2>/dev/null
 
-if cmp -s "$T/put.txt" "$T/fback.txt"; then
+if same_content "$T/put.txt" "$T/fback.txt"; then
 	ok "a directory and a file can be made on it, and read back"
 else
 	no "a directory and a file can be made on it, and read back"
@@ -1203,7 +1221,7 @@ chk "...leaving the name area sorted" "$out" "AAA BBB ZZZ "
 # but the two name words.
 "$ITSFS" cat "$T/mv.dsk" 'KSHACK;BBB TXT' > "$T/mvback.txt" 2>/dev/null
 
-if cmp -s "$T/mv1.txt" "$T/mvback.txt"; then
+if same_content "$T/mv1.txt" "$T/mvback.txt"; then
 	ok "...and the file's contents with it"
 else
 	no "...and the file's contents with it"
@@ -1641,6 +1659,59 @@ case $out in
 	no "...and zero reads as midnight rather than as raw (got: $(echo "$out" | grep -a UNTIM))" ;;
 esac
 
+# --- THE PADDING IN THE LAST WORD IS ^C, NOT NUL.
+#
+# A file's length is kept in words, so a character count that is not a multiple
+# of five leaves slots at the end of the last word.  `put` filled them with zero
+# and ITS fills them with 003 -- measured at 100 of 131 text files on the
+# reference pack, against 2 with NUL, the rest ending on a word boundary.
+#
+# It matters because a reader stops at ^C.  MDL's does: an init file this wrote
+# was opened, its name printed, and then never evaluated, spinning at 100% CPU
+# on the NULs past the end.  Reported by another session, which found it by
+# dumping the raw words of files ITS itself had written -- `get` and `cat` could
+# not see it, because both use the same convention that wrote it.
+#
+# 33 characters is 7 words with 2 slots to fill.
+printf '<PRINC "INIT-WAS-READ">\r\n<CRLF>\r\n' > "$T/pad.txt"
+n=$(wc -c < "$T/pad.txt" | tr -d ' ')
+chk "the fixture is not a whole number of words" "$((n % 5))" "3"
+
+"$ITSFS" mkfs "$T/pad.dsk" PADPK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/pad.dsk" MARC >/dev/null 2>&1
+"$ITSFS" put "$T/pad.dsk" 'MARC;MUDDLE INIT' "$T/pad.txt" >/dev/null 2>&1
+"$ITSFS" get -w "$T/pad.dsk" 'MARC;MUDDLE INIT' "$T/pad.w" >/dev/null 2>&1
+
+# The last word, as five 7-bit characters.  `dump` prints words in octal; the
+# last two characters of the last one must be 003.
+last=$(printf 'cd MARC\nstat MUDDLE INIT\nquit\n' | "$ITSFS" shell "$T/pad.dsk" 2>/dev/null |
+	sed -n 's/^length *\([0-9]*\) words.*/\1/p')
+chk "33 characters is 7 words" "$last" "7"
+
+if command -v od >/dev/null 2>&1; then
+	# Read the file back as text and look at what follows the content.
+	"$ITSFS" cat "$T/pad.dsk" 'MARC;MUDDLE INIT' > "$T/pad.back" 2>/dev/null
+	m=$(wc -c < "$T/pad.back" | tr -d ' ')
+	chk "...and comes back padded to the word: $m characters" "$m" "35"
+
+	tailbytes=$(dd if="$T/pad.back" bs=1 skip="$n" 2>/dev/null | od -An -tu1 | tr -s ' ')
+	case $tailbytes in
+	*" 3 3"*) ok "...the padding is ^C, as ITS writes it" ;;
+	*) no "...the padding is ^C, as ITS writes it (got:$tailbytes)" ;;
+	esac
+else
+	skip "...and comes back padded to the word (no od)"
+	skip "...the padding is ^C, as ITS writes it (no od)"
+fi
+
+# A file that IS a whole number of words gets no padding at all, which is what
+# the reference pack shows for files ending on a boundary.
+printf '12345' > "$T/pad5.txt"
+"$ITSFS" put "$T/pad.dsk" 'MARC;EXACT TXT' "$T/pad5.txt" >/dev/null 2>&1
+"$ITSFS" cat "$T/pad.dsk" 'MARC;EXACT TXT' > "$T/pad5.back" 2>/dev/null
+chk "a file that fills its last word is padded with nothing" \
+	"$(wc -c < "$T/pad5.back" | tr -d ' ')" "5"
+
 # --- A FRAGMENTED FILE, which is what the descriptor bound is actually about.
 #
 # `itsw_put` held the encoded block list in a 512-byte buffer, and 512 is not a
@@ -1698,7 +1769,7 @@ hasnt "...not refused for a buffer size" "$out" "descriptor bytes"
 
 "$ITSFS" cat "$T/frag.dsk" 'F;BIG X' > "$T/fragback.txt" 2>/dev/null
 
-if cmp -s "$T/fragbig.txt" "$T/fragback.txt"; then
+if same_content "$T/fragbig.txt" "$T/fragback.txt"; then
 	ok "...and it reads back identical"
 else
 	no "...and it reads back identical"
@@ -1738,7 +1809,7 @@ chk "put -f overwrites it" "$rc" "0"
 
 "$ITSFS" cat "$T/ov.dsk" 'TEST;F TXT' > "$T/ovback.txt" 2>/dev/null
 
-if cmp -s "$T/ov2.txt" "$T/ovback.txt"; then
+if same_content "$T/ov2.txt" "$T/ovback.txt"; then
 	ok "...with the new contents"
 else
 	no "...with the new contents"
@@ -1918,7 +1989,7 @@ chk "cp copies a file across directories" "$rc" "0"
 
 "$ITSFS" get "$T/cp.dsk" 'DST;B TXT' "$T/cpb.txt" >/dev/null 2>&1
 
-if cmp -s "$T/cp.txt" "$T/cpb.txt"; then
+if same_content "$T/cp.txt" "$T/cpb.txt"; then
 	ok "...with the same contents"
 else
 	no "...with the same contents"
@@ -2024,7 +2095,9 @@ if command -v tar >/dev/null 2>&1; then
 	out=$(tar xf "$T/a1.tar" -C "$T/tx" 2>&1); rc=$?
 	chk "...and extracts it without complaint" "$rc" "0"
 
-	if cmp -s "$T/t1.txt" "$T/tx/KSHACK/ONE TXT"; then
+	# Same padding allowance: `tar c` carries the file's words, padding and
+	# all, so the member is longer than the host file that was put.
+	if same_content "$T/t1.txt" "$T/tx/KSHACK/ONE TXT"; then
 		ok "...to the bytes the file was put from"
 	else
 		no "...to the bytes the file was put from"

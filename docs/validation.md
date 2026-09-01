@@ -65,9 +65,10 @@ This is the index.
 | `UNTIM` is half-seconds since midnight — the monitor says so twice, and 6,019 entries fit the bound | level 3 | by hand, see `its.h` |
 | the descriptor bound is ITS's, not a buffer size — `CAIL Q,2000*UFDBPW` in `QFREFA` | level 3 | by hand, see `write.c` |
 | `NSALV` accepts a pack holding a **1,904-block file in 120 runs** that this project wrote — the widest descriptor it can now produce | level 2 | `make nsalv` |
+| the last word of a text file is padded with `^C` | 100 of 131 text files on the pack, against 2 with NUL | `make test` |
 | a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical | level 3 | by hand |
 | a pack read through the kernel gives the bytes `get` gives | level 3 | `make mount-test` |
-| 423 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
+| 428 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
 | the same, under ASan and UBSan | level 3 | `make test-san` |
 | 7,000 commands over damaged packs, tapes and tar archives | level 3 | `make fuzz` |
 | every constant cited is in the `FSDEFS` it claims | level 3 | `make version-diff` |
@@ -1091,7 +1092,7 @@ rather than assumed.
 The reader's whole job is parsing a file nobody here wrote, most of whose fields
 bound a loop or index an array.
 
-**423 checks** in `tests/run.sh`, of which about a third feed the reader or the
+**428 checks** in `tests/run.sh`, of which about a third feed the reader or the
 checker a pack damaged on purpose: an MFD without its check word, an `MDNAMP` outside the block,
 a UFD whose `UDNAMP` is zero, a descriptor that takes blocks before loading an
 address, one that names a block past the end of the drive, one with no

@@ -347,6 +347,14 @@ flags in that word sit. Not implemented, and not guessed at.</p>
 <code>UNCDEL</code> are given as values relative to the bit <code>UNLNKB</code> addresses. Their width
 is not stated anywhere; six bits is what the values need and does not collide
 with <code>UNWRDC</code> above them. Deduced, and marked as deduced.</p>
+<p><strong>Padding in the last word is <code>^C</code>.</strong> A file's length is kept in words, so a
+character count that is not a multiple of five leaves slots at the end of the
+last word. ITS fills them with 003, not with NUL — 100 of 131 text files sampled
+on the reference pack pad that way, 2 with NUL, and the rest end exactly on a
+word boundary and pad with nothing. It matters because <em>a reader stops at</em> <code>^C</code>:
+MDL opens a NUL-padded file, prints its name and never evaluates it. <code>put</code> writes
+<code>^C</code>; <code>cat</code> and <code>get</code> pass whatever is there through, since translating an
+extraction is how an extraction tool lies.</p>
 <p><strong><code>UNAUTH</code>, the author.</strong> &quot;MFD index of author, all 1 =&gt; no directory&quot; — and
 the phrase &quot;MFD index&quot; is the ambiguity, because a directory has both a slot in
 the MFD name area and a block its UFD occupies. <strong>It is the block.</strong> 6,050 of the
