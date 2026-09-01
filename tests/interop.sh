@@ -84,7 +84,7 @@ emu_cleanup() {
 		kill "$_p" 2>/dev/null || true
 	done
 }
-trap emu_cleanup EXIT INT TERM
+trap emu_cleanup EXIT INT TERM HUP PIPE
 
 
 DIR=${DIR:-KSHACK}

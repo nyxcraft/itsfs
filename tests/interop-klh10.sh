@@ -68,7 +68,7 @@ emu_cleanup() {
 		kill "$_p" 2>/dev/null || true
 	done
 }
-trap emu_cleanup EXIT INT TERM
+trap emu_cleanup EXIT INT TERM HUP PIPE
 
 
 # The loader and DDT come from the ITS tree, not from the KLH10 build: they are

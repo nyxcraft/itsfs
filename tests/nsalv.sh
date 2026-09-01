@@ -65,6 +65,12 @@ T=${5:-/tmp/itsfs-nsalv}
 # them were found running two and three days after the runs that started them,
 # ~96%% CPU each, and nothing in this suite would ever have noticed.
 #
+# TRAPPED ON PIPE AND HUP AS WELL AS EXIT, which is not belt and braces: piping
+# a harness into `head` closes the pipe early, the shell dies of SIGPIPE, and a
+# trap that lists only EXIT INT TERM never runs.  That is exactly how a stray
+# survived a run of this file -- found by `make emu-clean` two minutes later,
+# which is the sweep that exists because traps get missed.
+#
 # Matched on the BINARY and on this run's own directory, so it cannot touch an
 # emulator somebody else is using -- and by walking `ps` rather than
 # `pkill -f "$T"`, which would also match this script's own command line when the
@@ -75,7 +81,7 @@ emu_cleanup() {
 		kill "$_p" 2>/dev/null || true
 	done
 }
-trap emu_cleanup EXIT INT TERM
+trap emu_cleanup EXIT INT TERM HUP PIPE
 
 
 # Which TUT word to clear.  Any word covering blocks that files hold will do;
@@ -236,6 +242,41 @@ for f in "KSHACK;ITSFS TXT" "SYSENG;ITSFS 2"; do
 done
 
 [ "$wrote" -eq 2 ] && ok "itsfs put wrote $wrote files"
+
+# AND A HEAVILY FRAGMENTED ONE, which is the case the descriptor bound is about.
+#
+# `put` held the encoded block list in a 512-byte buffer until this was written,
+# and 512 is not a number the format knows: ITS's own bound is `CAIL Q,2000*
+# UFDBPW` in disk.1228's QFREFA, one block of six-bit bytes.  Raising it was
+# checked against this project's own reader and its own checker, and that is
+# exactly the kind of agreement docs/validation.md warns about -- two things
+# that share a header agreeing about a mistake in it.
+#
+# So the widest descriptor this can now write is put to ITS.  The file is taken
+# off the pack rather than invented, so it is a real one, and it lands in many
+# runs because the pack's free space is scattered.
+if "$ITSFS" get -w "$IMAGE" 'MUDSAV;SAV FILE' "$T/big.w" >/dev/null 2>&1; then
+	"$ITSFS" mkdir "$T/wrote.dsk" FRAG >/dev/null 2>&1
+
+	if "$ITSFS" put -w "$T/wrote.dsk" 'FRAG;BIG FILE' "$T/big.w" >/dev/null 2>&1; then
+		runs=$(printf 'cd FRAG\nblocks BIG FILE\nquit\n' |
+			"$ITSFS" shell "$T/wrote.dsk" 2>/dev/null |
+			sed -n 's/^  \([0-9]*\) runs*$/\1/p')
+		blks=$(printf 'cd FRAG\nblocks BIG FILE\nquit\n' |
+			"$ITSFS" shell "$T/wrote.dsk" 2>/dev/null |
+			sed -n 's/^FRAG;BIG FILE: \([0-9]*\) blocks.*/\1/p')
+
+		if [ -n "$runs" ] && [ "$runs" -gt 20 ]; then
+			ok "...and a $blks-block file in $runs runs, far past the old 512-byte buffer"
+		else
+			fail "the big file landed in $runs run(s) -- this stage proves nothing"
+		fi
+	else
+		fail "itsfs put -w of a large fragmented file failed"
+	fi
+else
+	echo "  (no MUDSAV;SAV FILE on this pack -- skipping the fragmented case)"
+fi
 
 # READ THEM BACK BEFORE ASKING ANYBODY ELSE.  A pack that passes a salvager and
 # does not return the file is not a success.

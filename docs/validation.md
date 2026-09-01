@@ -64,6 +64,7 @@ This is the index.
 | `UNAUTH` resolves to a directory whose identity fits the file, on all six entries that carry one | level 3 | by hand, see `cmd_shell.c` |
 | `UNTIM` is half-seconds since midnight — the monitor says so twice, and 6,019 entries fit the bound | level 3 | by hand, see `its.h` |
 | the descriptor bound is ITS's, not a buffer size — `CAIL Q,2000*UFDBPW` in `QFREFA` | level 3 | by hand, see `write.c` |
+| `NSALV` accepts a pack holding a **1,904-block file in 120 runs** that this project wrote — the widest descriptor it can now produce | level 2 | `make nsalv` |
 | a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical | level 3 | by hand |
 | a pack read through the kernel gives the bytes `get` gives | level 3 | `make mount-test` |
 | 423 checks, a third of them on packs damaged on purpose | level 3 | `make test` |
