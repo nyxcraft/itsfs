@@ -90,7 +90,11 @@ grep -aq "^ONE TXT$" "$T/ls.out" && ok "ITS DIR;FN1 FN2 is DIR/FN1 FN2" ||
 	no "ITS DIR;FN1 FN2 is DIR/FN1 FN2"
 
 # THE CHECK THAT MATTERS: the kernel's bytes against `get`'s bytes.
-if cmp -s "$T/one.txt" "$M/KSHACK/ONE TXT"; then
+# Truncated to the source length, because the last word of a text file is
+# PADDED -- `put` fills the slots after the content with ^C, as ITS does, so a
+# 16-character file occupies 4 words and reads back as 20.  The padding is on
+# the pack and the mount is right to return it; the content is what is checked.
+if head -c "$(wc -c < "$T/one.txt")" "$M/KSHACK/ONE TXT" | cmp -s - "$T/one.txt"; then
 	ok "a file read through the mount is the file that was put"
 else
 	no "a file read through the mount is the file that was put"
@@ -104,8 +108,11 @@ else
 	no "...and is byte-identical to what \`get\` writes"
 fi
 
-# stat has to agree with read, or every tool that trusts st_size is wrong.
-a=$(wc -c < "$T/one.txt" | tr -d ' ')
+# stat has to agree with READ, or every tool that trusts st_size is wrong -- and
+# that is the question, so both sides come from the mount.  This used to compare
+# st_size against the HOST file's length, which asks a different thing and
+# stopped being true the day `put` started padding the last word with ^C.
+a=$(wc -c < "$M/KSHACK/ONE TXT" | tr -d ' ')
 b=$(stat -c %s "$M/KSHACK/ONE TXT" 2>/dev/null || stat -f %z "$M/KSHACK/ONE TXT")
 [ "$a" = "$b" ] && ok "st_size is the number of bytes read() returns: $b" ||
 	no "st_size is $b, read() gives $a"
