@@ -274,11 +274,16 @@ Square collection holds real ITS backup tapes, but its published output is
   real strengthening of the one layer with no check word — it is the only drive
   where blocks-per-cylinder truncates differently (18 from 18.75, against the
   RP06's 47 from 47.5).
-- **The front-end file system.** The last thing between `mkfs` and a bootable
-  pack, and it is not this format: a separate layout for the KS10's 8080 console,
-  which `kshack/ksfedr.146` manipulates. The home block that points at it is
-  fully specified and would take an afternoon; on its own it would produce a pack
-  that lies about being bootable. See
+- **The front-end file system** — and it *is* this format, which is a correction
+  to what this entry used to say. `.;.FEFS. PK0000` is an ordinary ITS file, 9
+  blocks in the directory named `.`, and `get -w`/`put -w` move it already. The
+  emulator supplies the bootstrap, so the console path is not in the way: SIMH's
+  ROM reads the home block, follows word `0103` to a page of the FE file, follows
+  word 4 of that to another, and jumps into it — a chain traced end to end on the
+  reference pack. The home block is quoted from `NSALV`'s `FESET`. What is not
+  known is the FE file's *interior*: its pointers are absolute disk addresses, so
+  a copy that lands on different blocks needs them rewritten, and nothing here
+  knows how many there are. See
   [validation](validation.md#what-is-not-established).
 
 ## What closed, and what it took

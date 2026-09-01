@@ -1964,40 +1964,37 @@ and tested. A stale limitation is a smaller error than a stale success, and it
 is the same error.</p>
 </li>
 <li>
-<p><strong>A pack <code>mkfs</code> builds does not boot.</strong> Nothing writes a boot area; the graders
-are booted from tape instead. ITS comes up on packs this project has <em>written
-files to</em>, which is a weaker statement than it first sounds.</p>
-<p>That was a vague limitation until it was looked at, and it is worth scoping
-precisely, because most of it is not a file-system problem at all. A KS10 boots
-in two steps, and <code>mkfs</code> writes neither:</p>
-<p><strong>The home block</strong>, in blocks 0 and 1, which is entirely specified and would
-take an afternoon. It is written by <code>NSALV</code>'s own <code>FESET</code> command
-(<code>kshack/nsalv.261</code>), and the code is short enough to quote whole:</p>
-<pre><code>	SETZM FDBUF
-	MOVE TT,[FDBUF,,FDBUF+1]
-	BLT TT,FDBUF+177	; one 128-word sector, zeroed
-	MOVSI TT,(SIXBIT /HOM/)
-	MOVEM TT,FDBUF+0	; word 0
-	MOVEM A,FDBUF+103	; word 0103 -- the FE directory address
-	MOVE TT,[FDBUF,,FDBUF+200]
-	BLT TT,FDBUF+1777	; that sector, replicated across the block
-	MOVEI J,0 ... CALL WRITE
-	MOVEI J,1 ... CALL WRITE
-</code></pre>
-<p>The reference pack matches it exactly: <code>HOM</code> at word 0 and <code>007700,,000004</code> at
-word 67 (= 0103), repeating every 128 words through blocks 0 and 1. Sixteen
-copies, because the sector is replicated eight times per block and the block is
-written twice. It also explains a constant the writer already had: <code>mkdir</code>'s
-floor is block 2, and blocks 0 and 1 are why.</p>
-<p><strong>The front-end file system it points at</strong>, which is the actual work. The
-address in word 0103 is not a bootstrap — it locates a separate file system for
-the KS10's 8080 console, with its own format, manipulated by <code>KSFEDR</code>
-(<code>kshack/ksfedr.146</code>, about a thousand lines). The programs the console loads live in
-<em>that</em>, not in the ITS file system.</p>
-<p>So writing the home block alone would produce a pack that <em>claims</em> to be
-bootable and is not — a worse artifact than one that makes no claim. The gap is
-the FE file system, and it is a different format that happens to share a disk
-with this one.</p>
+<p><strong>A pack <code>mkfs</code> builds does not boot</strong> — still true, but the gap is far
+smaller than this entry used to claim, and the claim was wrong about where the
+boundary is.</p>
+<p>It said the last obstacle was &quot;the front-end file system … a separate layout
+for the KS10's 8080 console&quot;. <strong>It is not a separate layout. It is an ordinary
+ITS file</strong>: <code>.;.FEFS. PK0000</code>, 9,216 words in 9 blocks, sitting in the
+directory named <code>.</code> alongside <code>@ ITS</code> and <code>@ DDT</code>, and <code>itsfs</code> reads and writes
+it like any other file today.</p>
+<p>What actually boots, traced end to end on the reference pack, is a three-step
+pointer chain — and <strong>the emulator supplies the bootstrap</strong>, so the real
+hardware's console path is not in it at all. SIMH's <code>rp_boot</code> loads its own
+<code>boot_rom_its</code> into memory (<code>PDP10/pdp10_rp.c</code>) and that ROM:</p>
+<ol>
+<li>reads <strong>sector 1</strong>, and checks <code>MOVS</code> of word 0 against <code>SIXBIT /HOM/</code>. The
+home block is replicated every 128 words precisely so any sector answers;</li>
+<li>takes <strong>word <code>0103</code></strong> of it as a disk address — on the reference pack
+<code>007700,,000004</code>, which is cylinder 63, track 0, sector 4 — and reads that;</li>
+<li>takes <strong>word 4</strong> of <em>that</em> page as a second address — <code>007700,,001020</code>,
+cylinder 63, track 2, sector 16 — reads it, and <code>JRST 1000</code> into it.</li>
+</ol>
+<p>Both of those sectors are ITS blocks 2961 and 2968, and <code>itsfs ncheck</code> says who
+owns them: <code>.;.FEFS. PK0000</code>, the same file, twice. They sit below <code>QTUTP</code>
+(3102), so the allocator never hands them out.</p>
+<p>So the parts are: a home block, which is fully specified and quoted below from
+<code>NSALV</code>'s own <code>FESET</code>; a copy of <code>.FEFS. PK0000</code>, which <code>get -w</code> and <code>put -w</code>
+already move; and a monitor for it to load. <strong>What is genuinely not known is the
+file's interior</strong>: its word 4 is an <em>absolute</em> disk address, so a copy placed
+anywhere but its original blocks needs its internal pointers rewritten, and
+nothing here knows how many there are or where. Writing a home block without
+that would produce a pack that lies about being bootable, which is why this is
+not done rather than not attempted.</p>
 </li>
 <li>
 <p><strong>One pack, one drive, one era.</strong> Everything ITS has graded is an RP06 built
