@@ -529,7 +529,24 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 	its_ufd u;
 	uint64_t dirblk = 0, n1 = 0, n2 = 0;
 	uint64_t *blocks = NULL;
-	unsigned char desc[512];
+	/*
+	 * THE DESCRIPTOR BUFFER IS ITS'S BOUND, NOT A ROUND NUMBER.  It was 512
+	 * bytes, which is not a limit the format has: it refused a 1,904-block
+	 * file on a pack with fragmented free space, and the refusal was read
+	 * elsewhere as "ITS cannot hold such a file", which is not true and was
+	 * never checked against the monitor.
+	 *
+	 * `disk.1228` says what the real bound is, in QFREFA:
+	 *
+	 *      SKIPL Q,UDESCP(TT)
+	 *       CAIL Q,2000*UFDBPW
+	 *        BUG            ;FREE DESC POINTER OUT OF RANGE
+	 *
+	 * so a descriptor offset is at most one block's worth of six-bit bytes,
+	 * 1024*6 = 6144.  The per-directory limit is tighter and is checked
+	 * below, against the same margin ITS uses.
+	 */
+	unsigned char desc[ITS_WORDS_PER_SECTOR * 8 * ITS_UFDBPW];
 	size_t ndesc = 0;
 	long nblocks;
 	uint64_t *oldblocks = NULL;
@@ -694,11 +711,24 @@ itsw_put(its_writer *w, const char *dir, const char *fn1, const char *fn2, const
 
 	{
 		uint64_t desc_end = ITS_UD_DESC + (descoff + ndesc + ITS_UFDBPW - 1) / ITS_UFDBPW;
-		uint64_t name_start = u.namp - ITS_LUNBLK;
 
-		if (desc_end > name_start) {
+		/*
+		 * THE MARGIN IS ITS'S.  QFREFA garbage-collects the descriptor
+		 * area rather than proceeding when
+		 *
+		 *      UDESCP/UFDBPW >= UDNAMP - UDDESC - 7 - LUNBLK
+		 *
+		 * so the descriptor must end more than 7+LUNBLK words below the
+		 * name area, not merely below it.  This used to leave only
+		 * LUNBLK, which would have written a directory ITS considers
+		 * out of room -- not corrupt, but a state it would immediately
+		 * garbage-collect, and not one to hand it deliberately.
+		 */
+		uint64_t name_start = u.namp - 7 - ITS_LUNBLK;
+
+		if (u.namp < 7 + ITS_LUNBLK || desc_end > name_start) {
 			fprintf(stderr, "itsfs: directory '%s' is full: the descriptor area would "
-					"reach word %llu and the names start at %llu\n",
+					"reach word %llu and ITS wants it below %llu\n",
 				dir, (unsigned long long)desc_end, (unsigned long long)name_start);
 			itsw_free(w, blocks, (uint64_t)nblocks);
 			goto out;

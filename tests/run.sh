@@ -1641,6 +1641,79 @@ case $out in
 	no "...and zero reads as midnight rather than as raw (got: $(echo "$out" | grep -a UNTIM))" ;;
 esac
 
+# --- A FRAGMENTED FILE, which is what the descriptor bound is actually about.
+#
+# `itsw_put` held the encoded block list in a 512-byte buffer, and 512 is not a
+# number the format knows: a file whose blocks are scattered needs more
+# descriptor bytes than a contiguous one of the same size, so `put` refused
+# multi-megabyte files on a USED pack while writing them happily to a fresh one.
+# Two other sessions hit it, and one wrote the refusal down as a fact about ITS.
+#
+# ITS's own bound is in disk.1228's QFREFA -- `CAIL Q,2000*UFDBPW`, one block's
+# worth of six-bit bytes -- with a per-directory margin of 7+LUNBLK words below
+# the name area, past which ITS garbage-collects rather than refusing.
+#
+# The fixture fragments free space on purpose: write files, delete alternate
+# ones, then write something that has to thread the holes.
+"$ITSFS" mkfs "$T/frag.dsk" FRAGPK >/dev/null 2>&1
+"$ITSFS" mkdir "$T/frag.dsk" F >/dev/null 2>&1
+
+# Its own filler, rather than one built later in this file: a section that
+# depends on a fixture created below it silently tests nothing, which is what
+# the first version of this did -- it read an empty file and landed contiguous.
+: > "$T/fragunit.txt"
+i=0
+while [ "$i" -lt 400 ]; do
+	printf 'a line of text long enough to matter, number %d\r\n' "$i" >> "$T/fragunit.txt"
+	i=$((i + 1))
+done
+
+i=0
+while [ "$i" -lt 40 ]; do
+	"$ITSFS" put "$T/frag.dsk" "F;P$i X" "$T/fragunit.txt" >/dev/null 2>&1
+	i=$((i + 1))
+done
+
+i=0
+while [ "$i" -lt 40 ]; do
+	"$ITSFS" del "$T/frag.dsk" "F;P$i X" >/dev/null 2>&1
+	i=$((i + 2))
+done
+
+# Now the free list is holes.  A file bigger than any one hole must be described
+# as many runs, which is exactly what the old buffer could not hold.  Built by
+# concatenation into a NEW file -- appending a file to itself reads what it is
+# still writing, which is how the first version of this fixture produced
+# something contiguous and proved nothing.
+: > "$T/fragbig.txt"
+i=0
+while [ "$i" -lt 8 ]; do
+	cat "$T/fragunit.txt" >> "$T/fragbig.txt"
+	i=$((i + 1))
+done
+
+out=$("$ITSFS" put "$T/frag.dsk" 'F;BIG X' "$T/fragbig.txt" 2>&1); rc=$?
+chk "a file written into fragmented free space" "$rc" "0"
+hasnt "...not refused for a buffer size" "$out" "descriptor bytes"
+
+"$ITSFS" cat "$T/frag.dsk" 'F;BIG X' > "$T/fragback.txt" 2>/dev/null
+
+if cmp -s "$T/fragbig.txt" "$T/fragback.txt"; then
+	ok "...and it reads back identical"
+else
+	no "...and it reads back identical"
+fi
+
+# It must actually BE fragmented, or this fixture proves nothing.
+runs=$(printf 'cd F\nblocks BIG X\nquit\n' | "$ITSFS" shell "$T/frag.dsk" 2>/dev/null |
+	sed -n 's/^  \([0-9]*\) runs*$/\1/p')
+[ -n "$runs" ] && [ "$runs" -gt 1 ] &&
+	ok "...in $runs runs, so the descriptor really was the long kind" ||
+	no "...but it landed contiguous, so this proves nothing (runs=$runs)"
+
+out=$("$ITSFS" check "$T/frag.dsk" 2>&1); rc=$?
+chk "...and the pack checks clean" "$rc" "0"
+
 # --- put -f, an overwrite.
 #
 # Asked for by another session staging a world onto a live ITS, where the
