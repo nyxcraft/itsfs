@@ -313,6 +313,17 @@ KSHACK/AINOTE 8             13408 bytes  words
 37 files (27 text, 10 words), 2 links, 1 directories
 ```
 
+**A host directory tree becomes a pack**, with no separate command for it: `tar x` reads
+any ustar archive whose members are `DIR/FN1 FN2`, and the system tar writes exactly that
+from a directory. So s5fs's `mktree` is this, through a pipe:
+
+```console
+$ mkdir -p KSHACK && cp hello.txt 'KSHACK/HELLO TXT'
+$ itsfs mkfs new.dsk TREEPK
+$ tar cf - KSHACK | itsfs tar x -m text - new.dsk
+1 files, 0 links, 1 directories
+```
+
 Two details worth knowing. **Names get percent-encoded where they have to be** — SIXBIT
 holds `/`, `.`, `%` and the space, and the reference pack has a directory named `.`
 holding the monitor, so it appears as `%2E/`. **Links to `>` dangle**: `>` is ITS's

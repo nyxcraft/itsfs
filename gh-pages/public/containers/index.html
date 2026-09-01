@@ -153,6 +153,13 @@ does not find, also as tar does.</li>
 A tar <em>hard</em> link is refused: ITS has no such thing, an entry names blocks or
 it names another entry.</li>
 </ul>
+<p><strong>A host tree in is the same operation as an archive in.</strong> <code>tar x</code> accepts any ustar
+archive whose members are <code>DIR/FN1 FN2</code>, so the system tar pointed at a directory
+builds a pack — <code>tar cf - KSHACK | itsfs tar x -m text - new.dsk</code> — and no separate
+<code>mktree</code> is needed. The pipe form is worth stating because it is the form that was
+broken: stepping over a member's data was one <code>fseeko</code>, which is correct on a file and
+impossible on a pipe, so piping failed at the first member while the file form had
+worked all along. It reads and discards now.</p>
 <p><strong>Dates.</strong> An ITS date is a <em>day</em> — <code>UNDATE</code> holds year, month and day, and the
 time beside it is in a unit this project has not established. So an mtime here is
 <strong>noon UTC</strong> on the day the disk records. Not midnight: an mtime is an instant and

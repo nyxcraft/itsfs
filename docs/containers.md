@@ -70,6 +70,14 @@ comes out is readable by every tar there is.
   A tar *hard* link is refused: ITS has no such thing, an entry names blocks or
   it names another entry.
 
+**A host tree in is the same operation as an archive in.** `tar x` accepts any ustar
+archive whose members are `DIR/FN1 FN2`, so the system tar pointed at a directory
+builds a pack — `tar cf - KSHACK | itsfs tar x -m text - new.dsk` — and no separate
+`mktree` is needed. The pipe form is worth stating because it is the form that was
+broken: stepping over a member's data was one `fseeko`, which is correct on a file and
+impossible on a pipe, so piping failed at the first member while the file form had
+worked all along. It reads and discards now.
+
 **Dates.** An ITS date is a *day* — `UNDATE` holds year, month and day, and the
 time beside it is in a unit this project has not established. So an mtime here is
 **noon UTC** on the day the disk records. Not midnight: an mtime is an instant and

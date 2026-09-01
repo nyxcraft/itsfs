@@ -1999,6 +1999,56 @@ out=$("$ITSFS" tar x "$T/a3.tar" "$T/tar2.dsk" 2>&1); rc=$?
 chk "tar x refuses to guess text or words" "$rc" "2"
 has "...and says which to ask for" "$out" "-m text"
 
+# --- A HOST DIRECTORY TREE INTO A PACK, which is s5fs's `mktree` and needed no
+# command of its own: `tar x` reads any ustar archive whose members are
+# DIR/FN1 FN2, and the system tar writes exactly that from a directory.
+#
+# The pipe form is the one that matters and the one that was broken.  `tar x`
+# stepped over a member's data with a single fseeko -- correct on a file,
+# impossible on a pipe -- so `tar cf - dir | itsfs tar x - pack` failed at the
+# first member having read nothing, while the file form worked all along.  Found
+# by testing whether this claim was true rather than by asserting it.
+if command -v tar >/dev/null 2>&1; then
+	rm -rf "$T/tree" && mkdir -p "$T/tree/KSHACK" "$T/tree/SYS"
+	printf 'from the host\r\n' > "$T/tree/KSHACK/HELLO TXT"
+	printf 'another one\r\n' > "$T/tree/SYS/THIRD TXT"
+	(cd "$T/tree" && tar cf "$T/tree.tar" KSHACK SYS) 2>/dev/null
+
+	"$ITSFS" mkfs "$T/tree1.dsk" TREE1 >/dev/null 2>&1
+	out=$("$ITSFS" tar x -m text "$T/tree.tar" "$T/tree1.dsk" 2>&1); rc=$?
+	chk "a host tree archived by the system tar builds a pack" "$rc" "0"
+	has "...with both directories" "$out" "2 directories"
+
+	"$ITSFS" get "$T/tree1.dsk" 'KSHACK;HELLO TXT' "$T/tree.back" >/dev/null 2>&1
+
+	if cmp -s "$T/tree/KSHACK/HELLO TXT" "$T/tree.back"; then
+		ok "...and a file identical to the host's"
+	else
+		no "...and a file identical to the host's"
+	fi
+
+	out=$("$ITSFS" check "$T/tree1.dsk" 2>&1); rc=$?
+	chk "...and the pack checks clean" "$rc" "0"
+
+	# THE PIPE, with no intermediate file: this is the form that failed.
+	"$ITSFS" mkfs "$T/tree2.dsk" TREE2 >/dev/null 2>&1
+	out=$( (cd "$T/tree" && tar cf - KSHACK SYS) 2>/dev/null |
+		"$ITSFS" tar x -m text - "$T/tree2.dsk" 2>&1 ); rc=$?
+	chk "the same through a pipe, which cannot be seeked" "$rc" "0"
+	has "...reading every member rather than stopping at the first" "$out" "2 files"
+
+	out=$("$ITSFS" check "$T/tree2.dsk" 2>&1); rc=$?
+	chk "...and that pack checks clean too" "$rc" "0"
+else
+	skip "a host tree archived by the system tar builds a pack (no tar(1))"
+	skip "...with both directories (no tar(1))"
+	skip "...and a file identical to the host's (no tar(1))"
+	skip "...and the pack checks clean (no tar(1))"
+	skip "the same through a pipe, which cannot be seeked (no tar(1))"
+	skip "...reading every member rather than stopping at the first (no tar(1))"
+	skip "...and that pack checks clean too (no tar(1))"
+fi
+
 # --- a link, and a directory the archive does not contain.
 #
 # `tar x` cannot create an ITS link -- nothing here writes one -- so it must SAY

@@ -887,12 +887,34 @@ read_header(FILE *f, struct member *mem)
 	return 1;
 }
 
+/*
+ * Step over a member's data, INCLUDING ON A PIPE.
+ *
+ * This used to be one `fseeko`, which is correct on a file and impossible on a
+ * pipe -- and `tar x -` reads standard input, so `tar cf - dir | itsfs tar x -
+ * pack.dsk` failed at the first member with "truncated", having read nothing.
+ * Found by testing whether a host directory tree could be turned into a pack
+ * that way; the file form had worked all along, which is why nothing noticed.
+ *
+ * Reading and discarding works on both, and a tar reader is not the place to be
+ * clever about which one it has.
+ */
 static int
 skip_data(FILE *f, uint64_t size)
 {
 	uint64_t n = (size + TAR_BLK - 1) / TAR_BLK * TAR_BLK;
+	char buf[TAR_BLK];
 
-	return fseeko(f, (off_t)n, SEEK_CUR) == 0 ? 0 : -1;
+	while (n > 0) {
+		size_t want = n < sizeof buf ? (size_t)n : sizeof buf;
+
+		if (fread(buf, 1, want, f) != want)
+			return -1;
+
+		n -= want;
+	}
+
+	return 0;
 }
 
 static int
@@ -1238,11 +1260,18 @@ tar_extract(int argc, char **argv, const its_pack *pk, const its_drive *drv, int
 			goto done;
 		}
 
+		/* The padding after the data, read rather than sought past, for
+		 * the same reason as skip_data. */
 		pad = (size_t)(mem.size % TAR_BLK);
 
-		if (pad != 0 && fseeko(f, (off_t)(TAR_BLK - pad), SEEK_CUR) != 0) {
-			free(buf);
-			goto done;
+		if (pad != 0) {
+			char pbuf[TAR_BLK];
+			size_t want = TAR_BLK - pad;
+
+			if (fread(pbuf, 1, want, f) != want) {
+				free(buf);
+				goto done;
+			}
 		}
 
 		w = bytes_to_words(buf, (size_t)mem.size, mode == MODE_TEXT, &nw);
