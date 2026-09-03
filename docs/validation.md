@@ -65,6 +65,7 @@ This is the index.
 | `UNTIM` is half-seconds since midnight — the monitor says so twice, and 6,019 entries fit the bound | level 3 | by hand, see `its.h` |
 | the descriptor bound is ITS's, not a buffer size — `CAIL Q,2000*UFDBPW` in `QFREFA` | level 3 | by hand, see `write.c` |
 | `NSALV` accepts a pack holding a **1,904-block file in 120 runs** that this project wrote — the widest descriptor it can now produce | level 2 | `make nsalv` |
+| ITS's own program loader follows a **link `itsfs ln` wrote**: `^K` refuses `MUDSAV;TS MUD54` on the stock pack and loads it once a `SYS1;TS MUD54` link is added, with nothing else changed | level 2 | by hand, under SIMH |
 | another project staged an 11 MB file — 2,208,775 words, 2,158 blocks — onto the fragmented distribution pack and read it back word for word | level 3, and not ours | reported by `pdp10-xdev` |
 | the last word of a text file is padded with `^C` | 100 of 131 text files on the pack, against 2 with NUL — found by another project, whose MDL hung on our NUL padding | `make test` |
 | a real pack's 6,303 entries round-trip through a tar archive, contents and block accounting identical | level 3 | by hand |
